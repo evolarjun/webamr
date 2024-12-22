@@ -23,4 +23,4 @@ python -m flask --app main run -p 9003
 In another shell
 ```
 curl -X POST -F "file=@test_dna.fa" http://localhost:9002/analyze
-git pu```
+```
