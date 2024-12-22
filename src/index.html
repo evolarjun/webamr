@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hello World</title>
+  </head>
+
+  <body>
+    <h1>Hello World</h1>
+    <h1>Upload Your File</h1>
+    <form id="upload-form" action="/analyze" method="POST" enctype="multipart/form-data">
+      <input type="file" name="file"> <br><br>
+      <label for="parameters">Parameters (optional):</label> <br>
+      <input type="text" name="parameters" id="parameters"> <br><br>
+      <input type="submit" value="Analyze">
+    </form>
+    <div id="results">
+    </div>
+
+  <script>
+    const form = document.getElementById('upload-form');
+    const resultsDiv = document.getElementById('results');
+
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+
+      const file = form.elements['file'].files[0];
+      const parameters = form.elements['parameters'].value;
+
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('parameters', parameters);
+
+      // Show a "waiting" message
+      resultsDiv.innerHTML = '<p>Analyzing... Please wait.</p>';
+
+      fetch('/analyze', {
+        method: 'POST',
+        body: formData
+      })
+      .then(response => {
+        if (response.headers.get('Content-Type')?.startsWith('application/json')) {
+          return response.json();
+        } else {
+          return response.text();
+        }
+      })
+      .then(data => {
+     // Display the results
+     if (typeof data === 'string') {
+        resultsDiv.innerHTML = `<p>Results: ${data}</p>`;
+    } else {
+        resultsDiv.innerHTML = `<p>Results: ${data.results}</p>`;
+    }
+  })
+  .catch(error => {
+    console.error('Error:', error);
+    resultsDiv.innerHTML = '<p>An error occurred.</p>';
+  });
+});
+ </script>
+
+  </body>
+</html>

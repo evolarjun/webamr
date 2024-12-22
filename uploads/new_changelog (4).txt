@@ -1,0 +1,191 @@
+----------------------------------------------------------------------
+Changes included in 2024-12-18.1
+----------------------------------------------------------------------
+
+Overview:
+- The common E. coli fosfomycin resistance mutation glpT_E448K was removed
+  because of recent published evidence (PMID:32847131) describing the lack of
+  correlation between this mutation and fosfomycin resistance. Curators
+  confirmed this conclusion by examining submitted sequence and AST data
+  available in Pathogen Detection.
+- Update product_name, subclass, and reference fields for some beta-lactamases to reflect new phenotype data
+- New Staph aureus rpoB and rpoC cefidericol point mutations added
+- Updates of PMID references for new phenotypes
+- The guides for the SAUTE guided assembler used for the pathogen detection pipeline (amr_targets.fa) now include entire stx operons as baits instead of coding sequences.
+
+Summary:
+   Total proteins: 8549
+        Core proteins: 7278
+        Plus proteins: 1268
+   AMR proteins: 7328
+   STRESS proteins: 257
+   VIRULENCE proteins: 964
+   PubMed references: 5238
+   Point mutations: 1404
+   Point mutation reference sequences: 251
+   Point mutation organism groups: 
+       Acinetobacter_baumannii, Burkholderia_cepacia, Burkholderia_pseudomallei,
+       Campylobacter, Citrobacter_freundii, Clostridioides_difficile, Corynebacterium_diphtheriae,
+       Enterobacter_asburiae, Enterobacter_cloacae, Enterococcus_faecalis,
+       Enterococcus_faecium, Escherichia, Haemophilus_influenzae, Klebsiella_oxytoca,
+       Klebsiella_pneumoniae, Neisseria_gonorrhoeae, Neisseria_meningitidis,
+       Pseudomonas_aeruginosa, Salmonella, Serratia_marcescens, Staphylococcus_aureus,
+       Staphylococcus_pseudintermedius, Streptococcus_agalactiae, Streptococcus_pneumoniae,
+       Streptococcus_pyogenes, Vibrio_cholerae, Vibrio_parahaemolyticus,
+       Vibrio_vulnificus
+   HMMs: 752
+
+Updates since release 2024-10-22.1:
+   Proteins added: 29
+       Core proteins added: 29
+       Plus proteins added: 0
+   AMR proteins added: 29
+   Alleles added: 29
+   PubMed references added: 38
+   PubMed references removed: 2
+   Point mutations added: 14
+   Point mutations removed 1
+   Reference Gene Catalog entries changed: 30
+   Hierarchy nodes added: 2
+   Hierarchy nodes changed: 1
+
+Added proteins
+    core AMR AMR
+        blaBIM-2         NG_244118.1 WP_408906769.1     subclass B1 metallo-beta-lactamase BIM-2
+        blaIMP-106       NG_244120.1 WP_408906770.1     subclass B1 metallo-beta-lactamase IMP-106
+        blaKPC-243       NG_244121.1 WP_408906771.1     carbapenem-hydrolyzing class A beta-lactamase KPC-243
+        blaKPC-244       NG_244122.1 WP_408906772.1     carbapenem-hydrolyzing class A beta-lactamase KPC-244
+        blaKPC-245       NG_244123.1 WP_405259240.1     carbapenem-hydrolyzing class A beta-lactamase KPC-245
+        blaNDM-75        NG_244124.1 WP_408906773.1     subclass B1 metallo-beta-lactamase NDM-75
+        blaNDM-76        NG_244125.1 WP_408906774.1     subclass B1 metallo-beta-lactamase NDM-76
+        blaNDM-77        NG_244126.1 WP_408906775.1     subclass B1 metallo-beta-lactamase NDM-77
+        blaNDM-78        NG_244127.1 WP_408906776.1     subclass B1 metallo-beta-lactamase NDM-78
+        blaOXA-1054      NG_244128.1 WP_408906777.1     OXA-372 family carbapenem-hydrolyzing class D beta-lactamase OXA-1054
+        blaOXA-1310      NG_244129.1 WP_170247747.1     OXA-213 family carbapenem-hydrolyzing class D beta-lactamase OXA-1310
+        blaOXA-1311      NG_244130.1 WP_408906778.1     OXA-213 family carbapenem-hydrolyzing class D beta-lactamase OXA-1311
+        blaOXA-1312      NG_244131.1 WP_408906779.1     OXA-213 family carbapenem-hydrolyzing class D beta-lactamase OXA-1312
+        blaOXA-1313      NG_244132.1 WP_408906780.1     OXA-213 family carbapenem-hydrolyzing class D beta-lactamase OXA-1313
+        blaOXA-1314      NG_244133.1 WP_408906781.1     OXA-213 family carbapenem-hydrolyzing class D beta-lactamase OXA-1314
+        blaOXA-1315      NG_244134.1 WP_408906782.1     OXA-213 family carbapenem-hydrolyzing class D beta-lactamase OXA-1315
+        blaOXA-1316      NG_244135.1 WP_408906783.1     OXA-213 family carbapenem-hydrolyzing class D beta-lactamase OXA-1316
+        blaOXA-1317      NG_244136.1 WP_408906784.1     OXA-213 family carbapenem-hydrolyzing class D beta-lactamase OXA-1317
+        blaOXA-1318      NG_244137.1 WP_408906785.1     OXA-213 family carbapenem-hydrolyzing class D beta-lactamase OXA-1318
+        blaOXA-1319      NG_244138.1 WP_408906786.1     OXA-213 family carbapenem-hydrolyzing class D beta-lactamase OXA-1319
+        blaOXA-1320      NG_244139.1 WP_057106444.1     OXA-213 family carbapenem-hydrolyzing class D beta-lactamase OXA-1320
+        blaOXA-1321      NG_244140.1 WP_031948142.1     OXA-213 family carbapenem-hydrolyzing class D beta-lactamase OXA-1321
+        blaOXA-1322      NG_244141.1 WP_408906787.1     OXA-24 family carbapenem-hydrolyzing class D beta-lactamase OXA-1322
+        blaOXA-1325      NG_244142.1 WP_104039209.1     OXA-23 family carbapenem-hydrolyzing class D beta-lactamase OXA-1325
+        blaOXA-1327      NG_244143.1 WP_077564355.1     class D beta-lactamase OXA-1327
+        blaPAC-2         NG_244144.1 WP_408906788.1     inhibitior-resistant extended spectrum class C beta-lactamase PAC-2
+        blaVIM-92        NG_244145.1 WP_395149790.1     subclass B1 metallo-beta-lactamase VIM-92
+        cfiA32           NG_244146.1 WP_408906789.1     subclass B1 metallo-beta-lactamase CfiA32
+        cfiA33           NG_244147.1 WP_408906790.1     subclass B1 metallo-beta-lactamase CfiA33
+Added point mutations
+    core AMR POINT
+        rpoB_D949H       BETA-LACTAM Staphylococcus_aureus 
+        rpoB_G1139D      BETA-LACTAM Staphylococcus_aureus 
+        rpoB_G639C       BETA-LACTAM Staphylococcus_aureus 
+        rpoB_H929Q       BETA-LACTAM Staphylococcus_aureus 
+        rpoB_N967I       BETA-LACTAM Staphylococcus_aureus 
+        rpoB_Q643P       BETA-LACTAM Staphylococcus_aureus 
+        rpoB_R644H       BETA-LACTAM Staphylococcus_aureus 
+        rpoC_A738T       BETA-LACTAM Staphylococcus_aureus 
+        rpoC_E933Q       BETA-LACTAM Staphylococcus_aureus 
+        rpoC_G740R       BETA-LACTAM Staphylococcus_aureus 
+        rpoC_G950R       BETA-LACTAM Staphylococcus_aureus 
+        rpoC_I1084F      BETA-LACTAM Staphylococcus_aureus 
+        rpoC_R739S       BETA-LACTAM Staphylococcus_aureus 
+        rpoC_S852Y       BETA-LACTAM Staphylococcus_aureus 
+Removed proteins
+Removed point mutations
+    core AMR POINT
+        glpT_E448K       FOSFOMYCIN Escherichia         
+Changed reference gene catalog records
+    aac(6')-Iy AAF03531.1                                
+        pubmed_reference: <empty> -> 10542165            
+    blaCMY-178 WP_256875600.1                                
+        product_name:    class C beta-lactamase CMY-178 -> inhbitor-resistant extended spectrum class C beta-lactamase CMY-178 
+        pubmed_reference: <empty> -> 39470201            
+    blaCMY-185 WP_274293082.1                                
+        product_name:    class C beta-lactamase CMY-185 -> inhbitor-resistant extended spectrum class C beta-lactamase CMY-185 
+        pubmed_reference: <empty> -> 39470201            
+    blaCMY-192 WP_392713123.1                                
+        product_name:    class C beta-lactamase CMY-192 -> inhbitor-resistant extended spectrum class C beta-lactamase CMY-192 
+        pubmed_reference: <empty> -> 39470201            
+    blaGES-4 WP_063860518.1                                
+        product_name:    carbapenem-hydrolyzing class A beta-lactamase GES-4 -> inhibitor-resistant carbapenem-hydrolyzing class A beta-lactamase GES-4 
+    blaGES-61 WP_323579967.1                                
+        product_name:    class A beta-lactamase GES-61 -> carbapenem-hydrolyzing class A beta-lactamase GES-61 
+        subclass:        CEPHALOSPORIN -> CARBAPENEM    
+    blaGES-66 WP_368780598.1                                
+        genbank_nucleotide_accession: JBFSES010000053.1 -> CP173044.1 
+        genbank_protein_accession: MEX5467441.1 -> XLJ41066.1     
+        genbank_start:   185 -> 15761                   
+        genbank_stop:    1048 -> 16624                  
+    blaKPC-189 WP_311033311.1                                
+        product_name:    extended-spectrum class A beta-lactamase KPC-189 -> inhibitor-resistant extended-spectrum class A beta-lactamase KPC-189 
+        pubmed_reference: <empty> -> 39287378            
+    blaKPC-216 WP_338424110.1                                
+        pubmed_reference: <empty> -> 38927174            
+    blaKPC-31 WP_073668892.1                                
+        pubmed_reference: 33915286,34339281,36964710 -> 33915286,34339281,36964710,39287983 
+    blaKPC-35 WP_111273852.1                                
+        pubmed_reference: 30753572 -> 30753572,39287983  
+        subclass:        CEPHALOSPORIN -> CEFIDEROCOL/CEPHALOSPORIN 
+    blaOXA-15 WP_063861048.1                                
+        pubmed_reference: 9087490 -> 9087490,39287983    
+        subclass:        CEPHALOSPORIN -> CEFIDEROCOL/CEPHALOSPORIN 
+    blaPAC-1 WP_034051940.1                                
+        product_name:    inhibitior-resistant cephalosporin-hydrolyzing class C beta-lactamase PAC-1 -> inhibitior-resistant extended spectrum class C beta-lactamase PAC-1 
+    blaPDC-219 WP_088245224.1                                
+        pubmed_reference: <empty> -> 39287983            
+        subclass:        CEPHALOSPORIN -> CEFIDEROCOL/CEPHALOSPORIN 
+    blaPDC-221 WP_100931731.1                                
+        pubmed_reference: 26248364,29149337,34930034 -> 26248364,29149337,34930034,39287983 
+        subclass:        CEPHALOSPORIN -> CEFIDEROCOL/CEPHALOSPORIN 
+    blaPDC-223 WP_100931733.1                                
+        pubmed_reference: 29149337,34930034 -> 29149337,34930034,39287983 
+    blaPDC-245 WP_100831609.1                                
+        pubmed_reference: 31636072,32660987 -> 31636072,32660987,39287983 
+    blaPDC-523 WP_256875631.1                                
+        product_name:    class C beta-lactamase PDC-523 -> inhibitor-resistant extended-spectrum class C beta-lactamase PDC-523 
+    blaPDC-558 WP_304487011.1                                
+        product_name:    class C beta-lactamase PDC-558 -> inhibitor-resistant extended-spectrum class C beta-lactamase PDC-558 
+        pubmed_reference: <empty> -> 39287983            
+        subclass:        CEPHALOSPORIN -> CEFIDEROCOL/CEPHALOSPORIN 
+    blaPDC-577 WP_328703068.1                                
+        pubmed_reference: <empty> -> 39287983            
+    blaSHV-115 WP_156404661.1                                
+        pubmed_reference: 27656166 -> 27656166,39432416  
+    blaSHV-12 WP_002904004.1                                
+        pubmed_reference: 9145849,37255469 -> 9145849,37255469,39287983 
+        subclass:        CEPHALOSPORIN -> CEFIDEROCOL/CEPHALOSPORIN 
+    blaSHV-129 WP_032494802.1                                
+        product_name:    inhibitor-resistant extended-spectrum class A beta-lactamase SHV-129 -> extended-spectrum class A beta-lactamase SHV-129 
+    blaSHV-187 WP_021440083.1                                
+        pubmed_reference: 34248878 -> 34248878,39432416  
+    blaSHV-203 WP_099156054.1                                
+        product_name:    inhibitor-resistant extended-spectrum class A beta-lactamase SHV-203 -> inhibitor-resistant broad-spectrum class A beta-lactamase SHV-203 
+        pubmed_reference: 32284385,32351477 -> 32284385,32351477,39432416 
+    blaSHV-230 WP_268871888.1                                
+        pubmed_reference: <empty> -> 39432416            
+    blaSHV-26 WP_023280043.1                                
+        pubmed_reference: 11502506,36358219 -> 11502506,36358219,39432416 
+    blaSHV-65 WP_063864699.1                                
+        pubmed_reference: 17288792,26029910 -> 17288792,26029910,39432416 
+    blaVEB-1 WP_000706731.1                                
+        product_name:    extended-spectrum class A beta-lactamase VEB-1 -> inhibitor-resistant extended-spectrum class A beta-lactamase VEB-1 
+        pubmed_reference: 10049269,37255469 -> 10049269,37255469,39287983 
+    rpoB_A477V WP_000918664.1                                
+        class:           RIFAMYCIN -> BETA-LACTAM/RIFAMYCIN 
+        pubmed_reference: 12384339 -> 12384339,26324273  
+        subclass:        RIFAMPIN -> BETA-LACTAM/RIFAMPIN 
+
+Hierarchy nodes Added
+    core AMR AMR
+        blaOXA-1327_fam  blaOXA NF047782.1              OXA-1327 family class D beta-lactamase
+        blaSPI           blaSPI NF047753.1              SPI family subclass B1 metallo-beta-lactamase
+Hierarchy nodes Removed
+Changed Hierarchy Nodes
+    blaPAC           PAC family class C beta-lactamase 
+        subclass:        BETA-LACTAM -> CEPHALOSPORIN   
