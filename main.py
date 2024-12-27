@@ -4,6 +4,7 @@ import shutil
 from flask import Flask, send_file, request, jsonify, render_template
 import logging
 import sys
+import re
 
 UPLOAD_FOLDER = 'uploads'
 app_dir = os.path.dirname(os.path.abspath(__file__))
@@ -22,12 +23,12 @@ def read_file(filename):
   Returns:
     The contents of the file as a string.
   """
-  try:
-    with open(filename, 'r') as file:  # 'r' mode for reading
-      contents = file.read()
-    return contents
-  except FileNotFoundError:
-    return "File not found."
+#   try:
+  with open(filename, 'r') as file:  # 'r' mode for reading
+    contents = file.read()
+  return contents
+#   except FileNotFoundError:
+#     return "File not found."
 
 def tabulize(tab_delimited):
     """Converts a tab-delimited string into an HTML table.
@@ -59,9 +60,10 @@ def organism_select():
     Returns:
         A string containing the HTML select element.
     """
-    taxgroup_file = read_file("src/data/taxgroup.tab")
+    taxgroup_file = read_file("bin/data/latest/taxgroup.tsv")
     lines = taxgroup_file.strip().split('\n')
-    options = [f'<option value="{line.split()[0]}">{line.split()[1]}</option>' for line in lines[1:]]
+    #print(lines)
+    options = [f'<option value="{line.split()[0]}">{line.split()[0]}</option>' for line in lines[1:]]
     return '\n'.join(options)
 
 
@@ -69,9 +71,10 @@ def organism_select():
 #@app.route("/", methods=["post"])
 def index():
     #organism_select = organism_select()
+
     organism_select_options = organism_select()
-    print(organism_select_options + "\n\n")
-    return render_template('index.html', organism_select=organsim_select_options)
+    print("options: " + organism_select_options + "\n\n")
+    return render_template('index.html', organism_select=organism_select_options, hello="world")
 
 @app.errorhandler(404)
 def page_not_found(error):
@@ -80,6 +83,7 @@ def page_not_found(error):
 @app.route('/analyze', methods=['POST'])
 def analyze_file():
     
+
     if 'nuc_file' not in request.files:
         return jsonify({'error': 'No file part'}), 400
     
@@ -87,7 +91,21 @@ def analyze_file():
     
     if nuc_file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
-    
+
+    command = [amrfinder_path, "-o", "uploads/output"]  # Basic command structure
+
+    # Check for organism value
+    if 'organism' in request.form:
+        organism_value = request.form['organism']
+        if organism_value != 'None':  
+            organism_value = re.sub(r'[^A-Za-z0-9_]', '', organism_value)
+            print(f"Organism selected: {organism_value}")
+            command.extend(["-t", organism_value])  # Add -t option if organism is selected
+        else:
+            print("No organism selected.")
+    else:
+        print("Organism not found in form data.")
+
     if nuc_file:
         os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
         sys.stderr.write(f"Directory created: {app.config['UPLOAD_FOLDER']}")  # New print statement
@@ -95,8 +113,8 @@ def analyze_file():
         nuc_file.save(os.path.join(app.config['UPLOAD_FOLDER'], nuc_file.filename))
         print("got here")
         # Execute amrfinder command
-        command = [amrfinder_path, "-n", filepath, "-o", "uploads/output"]
-        print(f"Executing command: {command}")  # Print the full command
+        command.extend(["-n", filepath])
+        print(f"Executing command: {' '.join(command)}")  # Print the full command
         print(f"File path: {filepath}")  # Print the file path
         try:
             result = subprocess.run(command, capture_output=True, text=True, check=True)

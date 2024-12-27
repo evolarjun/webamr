@@ -17,13 +17,12 @@
       <label for="file">Select a GFF file:</label> 
       <input type="file" name="gff_file"> <br>
       -->
-      <label for="organism">Organism group (-o option):</label>
+      <label for="organism">Organism group (optional):</label>
 
       <select id="organism" name="organism">
-        {{ organism_select_options }}
-      </select>
-
-      </select>
+        <option value="">None</option>
+{{ organism_select | safe }}
+      </select> <br />
       <label for="parameters">Parameters (optional):</label> <br>
       <input type="text" name="parameters" id="parameters"> <br><br>
       <input type="submit" value="Run AMRFinderPlus">
@@ -31,48 +30,57 @@
     <div id="results">
     </div>
 
-  <script>
-    const form = document.getElementById('upload-form');
-    const resultsDiv = document.getElementById('results');
+    <script>
+      const form = document.getElementById('upload-form');
+      const resultsDiv = document.getElementById('results');
+      let timerInterval;
+      let elapsedTime = 0;
 
-    form.addEventListener('submit', (event) => {
-      event.preventDefault();
+      form.addEventListener('submit', (event) => {
+        event.preventDefault();
 
-      const file = form.elements['nuc_file'].files[0];
-      const parameters = form.elements['parameters'].value;
+        const file = form.elements['nuc_file'].files[0];
+        const parameters = form.elements['parameters'].value;
 
-      const formData = new FormData();
-      formData.append('nuc_file', file);
-      formData.append('parameters', parameters);
+        const formData = new FormData();
+        formData.append('nuc_file', file);
+        formData.append('parameters', parameters);
 
-      // Show a "waiting" message
-      resultsDiv.innerHTML = '<p>Analyzing with AMRFinderPlus... Please wait.</p>';
+        // Start the timer
+        elapsedTime = 0;
+        timerInterval = setInterval(() => {
+          elapsedTime++;
+          resultsDiv.innerHTML = `<p>Analyzing with AMRFinderPlus... Please wait. Elapsed time: ${elapsedTime} seconds</p>`; 
+        }, 1000);
 
-      fetch('/analyze', {
-        method: 'POST',
-        body: formData
-      })
-      .then(response => {
-        if (response.headers.get('Content-Type')?.startsWith('application/json')) {
-          return response.json();
-        } else {
-          return response.text();
-        }
-      })
-      .then(data => {
-     // Display the results
-     if (typeof data === 'string') {
-        resultsDiv.innerHTML = `<p>Result: ${data}</p>`;
-    } else {
-        resultsDiv.innerHTML = `<p>Result: ${data.results}</p>`;
-    }
-  })
-  .catch(error => {
-    console.error('Error:', error);
-    resultsDiv.innerHTML = '<p>An error occurred.</p>';
-  });
-});
- </script>
+        fetch('/analyze', {
+          method: 'POST',
+          body: formData
+        })
+        .then(response => {
+          // Stop the timer
+          clearInterval(timerInterval); 
+
+          if (response.headers.get('Content-Type')?.startsWith('application/json')) {
+            return response.json();
+          } else {
+            return response.text();
+          }
+        })
+        .then(data => {
+          // Display the results
+          if (typeof data === 'string') {
+            resultsDiv.innerHTML = `<p>Elapsed time: ${elapsedTime} seconds</p><p>Result: ${data}</p>`;
+          } else {
+            resultsDiv.innerHTML = `<p>Elapsed time: ${elapsedTime} seconds</p><p>Result: ${data.results}</p>`;
+          }
+        })
+        .catch(error => {
+          console.error('Error:', error);
+          resultsDiv.innerHTML = '<p>An error occurred.</p>';
+        });
+      });
+    </script>
 
   </body>
 </html>
