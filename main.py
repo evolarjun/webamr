@@ -53,12 +53,25 @@ def tabulize(tab_delimited):
     html += '</tbody></table>'
     return html
    
+def organism_select():
+    """Reads the file src/data/taxgroup.tab and returns select element text of the first column from this file
+
+    Returns:
+        A string containing the HTML select element.
+    """
+    taxgroup_file = read_file("src/data/taxgroup.tab")
+    lines = taxgroup_file.strip().split('\n')
+    options = [f'<option value="{line.split()[0]}">{line.split()[1]}</option>' for line in lines[1:]]
+    return '\n'.join(options)
 
 
 @app.route("/")
 #@app.route("/", methods=["post"])
 def index():
-    return send_file('src/index.html')
+    #organism_select = organism_select()
+    organism_select_options = organism_select()
+    print(organism_select_options + "\n\n")
+    return render_template('index.html', organism_select=organsim_select_options)
 
 @app.errorhandler(404)
 def page_not_found(error):
