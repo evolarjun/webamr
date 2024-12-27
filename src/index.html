@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="style.css" />
     <title>Hello World</title>
   </head>
 
@@ -33,7 +34,7 @@
       formData.append('parameters', parameters);
 
       // Show a "waiting" message
-      resultsDiv.innerHTML = '<p>Analyzing... Please wait.</p>';
+      resultsDiv.innerHTML = '<p>Analyzing with AMRFinderPlus... Please wait.</p>';
 
       fetch('/analyze', {
         method: 'POST',
@@ -49,9 +50,9 @@
       .then(data => {
      // Display the results
      if (typeof data === 'string') {
-        resultsDiv.innerHTML = `<p>Results: ${data}</p>`;
+        resultsDiv.innerHTML = `<p>1. Results: ${data}</p>`;
     } else {
-        resultsDiv.innerHTML = `<p>Results: ${data.results}</p>`;
+        resultsDiv.innerHTML = `<p>2. Results: ${data.results}</p>`;
     }
   })
   .catch(error => {
