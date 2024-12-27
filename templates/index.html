@@ -49,8 +49,11 @@
         // Start the timer
         elapsedTime = 0;
         timerInterval = setInterval(() => {
-          elapsedTime++;
-          resultsDiv.innerHTML = `<p>Analyzing with AMRFinderPlus... Please wait. Elapsed time: ${elapsedTime} seconds</p>`; 
+          elapsedTime += 1000;  
+          let minutes = Math.floor(elapsedTime / 60000);
+          let seconds = Math.floor((elapsedTime % 60000) / 1000);
+          let formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+          resultsDiv.innerHTML = `<p>Analyzing with AMRFinderPlus, usually takes 5-10 minutes for a whole genome... <br />Elapsed time: ${formattedTime}</p>`;
         }, 1000);
 
         fetch('/analyze', {
@@ -69,10 +72,13 @@
         })
         .then(data => {
           // Display the results
+          let minutes = Math.floor(elapsedTime / 60000);
+          let seconds = Math.floor((elapsedTime % 60000) / 1000);
+          let formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
           if (typeof data === 'string') {
-            resultsDiv.innerHTML = `<p>Elapsed time: ${elapsedTime} seconds</p><p>Result: ${data}</p>`;
+            resultsDiv.innerHTML = `<p>Elapsed time: ${formattedTime}</p><p>Result: ${data}</p>`;
           } else {
-            resultsDiv.innerHTML = `<p>Elapsed time: ${elapsedTime} seconds</p><p>Result: ${data.results}</p>`;
+            resultsDiv.innerHTML = `<p>Elapsed time: ${formattedTime}</p><p>Result: ${data.results}</p>`;
           }
         })
         .catch(error => {
