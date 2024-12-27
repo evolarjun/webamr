@@ -3,6 +3,7 @@ import subprocess
 import shutil
 from flask import Flask, send_file, request, jsonify, render_template
 import logging
+import sys
 
 UPLOAD_FOLDER = 'uploads'
 app_dir = os.path.dirname(os.path.abspath(__file__))
@@ -66,19 +67,19 @@ def page_not_found(error):
 @app.route('/analyze', methods=['POST'])
 def analyze_file():
     
-    if 'file' not in request.files:
+    if 'nuc_file' not in request.files:
         return jsonify({'error': 'No file part'}), 400
     
-    file = request.files['file']
+    nuc_file = request.files['nuc_file']
     
-    if file.filename == '':
+    if nuc_file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
     
-    if file:
+    if nuc_file:
         os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-        app.logger.info(f"Directory created: {app.config['UPLOAD_FOLDER']}")  # New print statement
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
-        file.save(os.path.join(app.config['UPLOAD_FOLDER'], file.filename))
+        sys.stderr.write(f"Directory created: {app.config['UPLOAD_FOLDER']}")  # New print statement
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], nuc_file.filename)
+        nuc_file.save(os.path.join(app.config['UPLOAD_FOLDER'], nuc_file.filename))
         print("got here")
         # Execute amrfinder command
         command = [amrfinder_path, "-n", filepath, "-o", "uploads/output"]
@@ -89,15 +90,17 @@ def analyze_file():
         except subprocess.CalledProcessError as e:
             error_message = f"amrfinder execution failed with return code {e.returncode}: {e.stderr}"
             print(error_message)  # Print error to console
-            return jsonify({'error': error_message}), 500
+            #return jsonify({'error': error_message}), 500
+            return "error: " + error_message, 500
         
         #shutil.rmtree(filepath, ignore_errors=True) 
         #return jsonify({'message': 'File uploaded successfully'})
-        message = "File analyzed successfully<br />"
+        message = "File " + nuc_file.filename + " analyzed successfully<br />"
         message += tabulize(read_file("uploads/output"))
         return message
 
 def main():
+    app.debug = True
     app.run(port=int(os.environ.get('PORT', 80)))
 
 if __name__ == "__main__":
