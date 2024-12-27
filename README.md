@@ -13,10 +13,13 @@ Previews should run automatically when starting a workspace.
 # Installing AMRFinderPlus
 
 ```
+cd /
 git clone https://github.com/ncbi/amr.git
 cd amr
 git submodule update --init
 make -j -O
+make install INSTALL_DIR=~/webamr/bin
+cd ~/webamr/bin
 ./amrfinder -u
 ```
 
