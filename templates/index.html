@@ -75,6 +75,22 @@
           resultsDiv.innerHTML = `<p>Analyzing with AMRFinderPlus, on this slow cheap VM it usually takes 5-10 minutes for a whole genome... <br />Elapsed time: ${formattedTime}</p>`;
         }, 1000);
 
+        function downloadResults(userId) {
+          fetch('/output/' + userId)
+            .then(response => response.blob())
+            .then(blob => {
+              const url = window.URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.style.display = 'none';
+              a.href = url;
+              a.download = 'amr_results.txt';
+              document.body.appendChild(a);
+              a.click();
+              window.URL.revokeObjectURL(url);
+            })
+            .catch(error => console.error('Error downloading results:', error));
+        }
+
         fetch('/analyze', {
           method: 'POST',
           body: formData
@@ -102,11 +118,12 @@
             resultsDiv.innerHTML = `<p>Elapsed time: ${formattedTime}</p><p>Result: ${data.result}</p>`;
           }
 
-          // Add download button          
-          const downloadButton = document.createElement('a');
-          downloadButton.href = '/output/' + data.user_id;
-          downloadButton.download = 'amr_results.txt';
+          // Add download button
+          const downloadButton = document.createElement('button');
           downloadButton.textContent = 'Download Results';
+          downloadButton.addEventListener('click', () => {
+            downloadResults(data.user_id);
+          });
           resultsDiv.appendChild(downloadButton);
 
         })
