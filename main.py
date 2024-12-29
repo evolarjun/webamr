@@ -9,7 +9,7 @@ import uuid
 import time
 from datetime import datetime, timedelta
 
-UPLOAD_FOLDER_BASE = 'uploads'
+UPLOAD_FOLDER_BASE = os.environ.get('UPLOAD_FOLDER_BASE', 'uploads')
 app_dir = os.path.dirname(os.path.abspath(__file__))
 amrfinder_path = os.path.join(app_dir, 'bin', 'amrfinder')
 
