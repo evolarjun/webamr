@@ -28,7 +28,7 @@ echo "Running docker build..."
 docker build --build-arg VERSION=${VERSION} --build-arg DB_VERSION=${DB_VERSION} \
     --build-arg SOFTWARE_VERSION=${SOFTWARE_VERSION} \
     --build-arg BINARY_URL=${BINARY_URL} \
-    -t $IMAGE . \
-    && docker tag $IMAGE:$VERSION_TAG $IMAGE:latest
+    -t $IMAGE .
 
-echo $VERSION_TAG > version_tag.txt
+# Run some tests of AMRFinderPlus
+

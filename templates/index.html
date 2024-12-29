@@ -22,8 +22,9 @@
 {{ organism_select | safe }}
       </select> <br />
       <!-- label for="parameters">Parameters (optional):</label> <br> 
-      <input type="text" name="parameters" id="parameters"> <br><br> -->
-      <button type="submit">Run AMRFinderPlus</button> 
+      <input type="text" name="parameters" id="parameters"> <br><br>-->
+      <button type="submit">Run AMRFinderPlus</button>
+      <button type="reset">Reset</button>
     </form>
     <div id="results">
     </div>
@@ -98,12 +99,7 @@
         .then(response => {
           // Stop the timer
           clearInterval(timerInterval); 
-
-          if (response.headers.get('Content-Type')?.startsWith('application/json')) {
-            return response.json();
-          } else {
-            return response.text();
-          }
+          return response.json();
         })
         .then(data => {
           // Display the results
@@ -128,8 +124,21 @@
 
         })
         .catch(error => {
+          // Stop the timer
+          clearInterval(timerInterval);
           console.error('Error:', error);
-          resultsDiv.innerHTML = '<p>An error occurred.</p>';
+          // Display the full error object in a <pre> tag
+          resultsDiv.innerHTML = `<p>ERROR:</p><pre>${JSON.stringify(error, null, 2)}</pre>`;
+
+          // Add a button to copy the error to the clipboard
+          const copyButton = document.createElement('button');
+          copyButton.textContent = 'Copy Error';
+          copyButton.addEventListener('click', () => {
+            navigator.clipboard.writeText(JSON.stringify(error, null, 2))
+              .then(() => alert('Error copied to clipboard!'))
+              .catch(err => console.error('Failed to copy error: ', err));
+          });
+          resultsDiv.appendChild(copyButton);
         });
       });
     </script>
