@@ -5,14 +5,20 @@ from flask import Flask, send_file, request, jsonify, render_template
 import logging
 import sys
 import re
+import uuid
+import time
+from datetime import datetime, timedelta
 
-UPLOAD_FOLDER = 'uploads'
+UPLOAD_FOLDER_BASE = 'uploads'
 app_dir = os.path.dirname(os.path.abspath(__file__))
 amrfinder_path = os.path.join(app_dir, 'bin', 'amrfinder')
 
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+app.config['UPLOAD_FOLDER_BASE'] = UPLOAD_FOLDER_BASE
 logging.basicConfig(level=logging.INFO)
+
+def generate_user_id():
+    return str(uuid.uuid4())
 
 def read_file(filename):
   """Reads the contents of a file.
@@ -83,14 +89,21 @@ def page_not_found(error):
 @app.route('/analyze', methods=['POST'])
 def analyze_file():
     if 'nuc_file' not in request.files and 'prot_file' not in request.files:
-        return jsonify({'error': 'No file part'}), 400
-    nuc_file = request.files['nuc_file']
-    prot_file = request.files['prot_file']
-    gff_file = request.files['gff_file']
-    if nuc_file.filename == '' or prot_file.filename == '':
-        return jsonify({'error': 'No selected file'}), 400
+        return jsonify({'error': 'No nucleotide or protein file provided.'}), 400
+    nuc_file = request.files.get('nuc_file')
+    prot_file = request.files.get('prot_file')
+    gff_file = request.files.get('gff_file')
 
-    command = [amrfinder_path, "-o", "uploads/output"]  # Basic command structure
+    user_id = generate_user_id()
+    upload_folder = os.path.join(app.config['UPLOAD_FOLDER_BASE'], user_id)
+    os.makedirs(upload_folder, exist_ok=True)
+
+    if nuc_file and nuc_file.filename == '':
+        return jsonify({'error': 'No nucleotide file selected'}), 400
+    if prot_file and prot_file.filename == '':
+        return jsonify({'error': 'No protein file selected'}), 400
+
+    command = [amrfinder_path, "-o", upload_folder + "/output.amrfinder"]  # Basic command structure
 
     # Check for organism value
     if 'organism' in request.form:
@@ -104,21 +117,20 @@ def analyze_file():
     else:
         print("Organism not found in form data.")
 
-    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-    sys.stderr.write(f"Directory created: {app.config['UPLOAD_FOLDER']}\n")  # New print statement
-    
+    sys.stderr.write(f"Directory created: {upload_folder}\n")  # New print statement
+
     # save files
     if nuc_file: 
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], nuc_file.filename)
-        nuc_file.save(os.path.join(app.config['UPLOAD_FOLDER'], nuc_file.filename))
+        filepath = os.path.join(upload_folder, nuc_file.filename)
+        nuc_file.save(filepath)
         command.extend(["-n", filepath])
     if prot_file:
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], prot_file.filename)
-        prot_file.save(os.path.join(app.config['UPLOAD_FOLDER'], prot_file.filename))
+        filepath = os.path.join(upload_folder, prot_file.filename)
+        prot_file.save(filepath)
         command.extend(["-p", filepath])
     if gff_file:
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], gff_file.filename)
-        gff_file.save(os.path.join(app.config['UPLOAD_FOLDER'], gff_file.filename))
+        filepath = os.path.join(upload_folder, gff_file.filename)
+        gff_file.save(filepath)
         command.extend(["-g", filepath])
 
     # Run the program (should have more error checking here)
@@ -127,7 +139,7 @@ def analyze_file():
         command.extend(['--plus'])
         # Execute amrfinder command
         print(f"Executing command: {' '.join(command)}")  # Print the full command
-        print(f"File path: {filepath}")  # Print the file path
+        print(f"File path: {upload_folder}/output.amrfinder")  # Print the file path
         try:
             result = subprocess.run(command, capture_output=True, text=True, check=True)
         except subprocess.CalledProcessError as e:
@@ -135,11 +147,39 @@ def analyze_file():
             print(error_message)  # Print error to console
             return "error: " + error_message, 500
         
-        #shutil.rmtree(filepath, ignore_errors=True) 
-        message = "Files analyzed successfully with command:" + ' '.join(command) + "<br />\n"
-#        message = "File " + nuc_file.filename + " analyzed successfully<br />"
-        message += tabulize(read_file("uploads/output"))
-        return message
+        message = "Files analyzed successfully with command:<br />\n<pre>" + ' '.join(command) + "</pre><br />\n"
+        output_filepath = os.path.join(upload_folder, "output.amrfinder")
+        message += tabulize(read_file(output_filepath))
+        #return jsonify({'message': message}), 200
+        return message, 200
+    else:
+        return jsonify({'error': 'Requires a nucleotide or protein file.'}), 400
+
+@app.route('/output/<user_id>')
+def output(user_id):
+    output_filepath = os.path.join(app.config['UPLOAD_FOLDER_BASE'], user_id, "output.amrfinder")
+    return send_file(output_filepath, as_attachment=True)
+    #shutil.rmtree(os.path.join(app.config['UPLOAD_FOLDER_BASE'], user_id), ignore_errors=True)  # Remove user directory
+
+# currently this does not run ever. Just for future reference.
+def cleanup_uploads():
+    """Deletes files and directories older than 24 hours from the uploads directory."""
+    now = datetime.now()
+    upload_dir = app.config['UPLOAD_FOLDER_BASE']
+    for filename in os.listdir(upload_dir):
+        filepath = os.path.join(upload_dir, filename)
+        if os.path.isdir(filepath):  # Check if it's a directory
+            try:
+                creation_time = datetime.fromtimestamp(os.path.getctime(filepath))
+                if now - creation_time > timedelta(hours=24):
+                    shutil.rmtree(filepath, ignore_errors=True)
+                    logging.info(f"Deleted directory: {filepath}")
+            except OSError as e:
+                logging.error(f"Error deleting directory {filepath}: {e}")
+        elif os.path.isfile(filepath):
+            # (Optional) Add file deletion logic if needed.
+            pass
+
 
 def main():
     app.debug = True
