@@ -25,6 +25,7 @@ cd ~/webamr/bin
 
 Testing from commandline
 ```
+python -m venv .venv && source .venv/bin/activate
 python -m flask --app main run -p 9003
 ```
 In another shell

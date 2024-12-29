@@ -73,7 +73,7 @@ def index():
     #organism_select = organism_select()
 
     organism_select_options = organism_select()
-    print("options: " + organism_select_options + "\n\n")
+    # print("options: " + organism_select_options + "\n\n")
     return render_template('index.html', organism_select=organism_select_options, hello="world")
 
 @app.errorhandler(404)
@@ -82,14 +82,12 @@ def page_not_found(error):
 
 @app.route('/analyze', methods=['POST'])
 def analyze_file():
-    
-
-    if 'nuc_file' not in request.files:
+    if 'nuc_file' not in request.files and 'prot_file' not in request.files:
         return jsonify({'error': 'No file part'}), 400
-    
     nuc_file = request.files['nuc_file']
-    
-    if nuc_file.filename == '':
+    prot_file = request.files['prot_file']
+    gff_file = request.files['gff_file']
+    if nuc_file.filename == '' or prot_file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
 
     command = [amrfinder_path, "-o", "uploads/output"]  # Basic command structure
@@ -97,36 +95,49 @@ def analyze_file():
     # Check for organism value
     if 'organism' in request.form:
         organism_value = request.form['organism']
-        if organism_value != 'None':  
+        if organism_value != "" and organism_value != 'None':  
             organism_value = re.sub(r'[^A-Za-z0-9_]', '', organism_value)
             print(f"Organism selected: {organism_value}")
-            command.extend(["-t", organism_value])  # Add -t option if organism is selected
+            command.extend(["--organism", organism_value])  # Add -t option if organism is selected
         else:
             print("No organism selected.")
     else:
         print("Organism not found in form data.")
 
-    if nuc_file:
-        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-        sys.stderr.write(f"Directory created: {app.config['UPLOAD_FOLDER']}")  # New print statement
+    os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+    sys.stderr.write(f"Directory created: {app.config['UPLOAD_FOLDER']}\n")  # New print statement
+    
+    # save files
+    if nuc_file: 
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], nuc_file.filename)
         nuc_file.save(os.path.join(app.config['UPLOAD_FOLDER'], nuc_file.filename))
-        print("got here")
-        # Execute amrfinder command
         command.extend(["-n", filepath])
+    if prot_file:
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], prot_file.filename)
+        prot_file.save(os.path.join(app.config['UPLOAD_FOLDER'], prot_file.filename))
+        command.extend(["-p", filepath])
+    if gff_file:
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], gff_file.filename)
+        gff_file.save(os.path.join(app.config['UPLOAD_FOLDER'], gff_file.filename))
+        command.extend(["-g", filepath])
+
+    # Run the program (should have more error checking here)
+    if nuc_file or prot_file:
+        print("got here")
+        command.extend(['--plus'])
+        # Execute amrfinder command
         print(f"Executing command: {' '.join(command)}")  # Print the full command
         print(f"File path: {filepath}")  # Print the file path
         try:
             result = subprocess.run(command, capture_output=True, text=True, check=True)
         except subprocess.CalledProcessError as e:
-            error_message = f"amrfinder execution failed with return code {e.returncode}: {e.stderr}"
+            error_message = f"amrfinder execution failed with return code {e.returncode}: \n{e.stderr}"
             print(error_message)  # Print error to console
-            #return jsonify({'error': error_message}), 500
             return "error: " + error_message, 500
         
         #shutil.rmtree(filepath, ignore_errors=True) 
-        #return jsonify({'message': 'File uploaded successfully'})
-        message = "File " + nuc_file.filename + " analyzed successfully<br />"
+        message = "Files analyzed successfully with command:" + ' '.join(command) + "<br />\n"
+#        message = "File " + nuc_file.filename + " analyzed successfully<br />"
         message += tabulize(read_file("uploads/output"))
         return message
 
