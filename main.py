@@ -145,15 +145,18 @@ def analyze_file():
         except subprocess.CalledProcessError as e:
             error_message = f"amrfinder execution failed with return code {e.returncode}: \n{e.stderr}"
             print(error_message)  # Print error to console
-            return "error: " + error_message, 500
+            return jsonify({'result': "error: " + error_message}), 500
+        except Exception as e:
+            error_message = f"An error occurred: {e}"
+            print(error_message)  # Print error to console
+            return jsonify({'result': "error: " + error_message}), 500
         
         message = "Files analyzed successfully with command:<br />\n<pre>" + ' '.join(command) + "</pre><br />\n"
         output_filepath = os.path.join(upload_folder, "output.amrfinder")
         message += tabulize(read_file(output_filepath))
-        #return jsonify({'message': message}), 200
-        return message, 200
+        return jsonify({'result': message, 'user_id': user_id}), 200  # Include user_id in response
     else:
-        return jsonify({'error': 'Requires a nucleotide or protein file.'}), 400
+        return jsonify({'result': 'error: Requires a nucleotide or protein file.', 'user_id': user_id}), 400 # Include user_id in response
 
 @app.route('/output/<user_id>')
 def output(user_id):

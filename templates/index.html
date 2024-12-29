@@ -72,7 +72,7 @@
           let minutes = Math.floor(elapsedTime / 60000);
           let seconds = Math.floor((elapsedTime % 60000) / 1000);
           let formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-          resultsDiv.innerHTML = `<p>Analyzing with AMRFinderPlus, on this slow, cheap VM it usually takes 5-10 minutes for a whole genome... <br />Elapsed time: ${formattedTime}</p>`;
+          resultsDiv.innerHTML = `<p>Analyzing with AMRFinderPlus, on this slow cheap VM it usually takes 5-10 minutes for a whole genome... <br />Elapsed time: ${formattedTime}</p>`;
         }, 1000);
 
         fetch('/analyze', {
@@ -94,11 +94,21 @@
           let minutes = Math.floor(elapsedTime / 60000);
           let seconds = Math.floor((elapsedTime % 60000) / 1000);
           let formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-          if (typeof data === 'string') {
-            resultsDiv.innerHTML = `<p>Elapsed time: ${formattedTime}</p><p>Result: ${data}</p>`;
+          // alert(JSON.stringify(data))
+          if (data.result.startsWith('error:')) {
+            const errorContent = data.result.substring(7); // Remove "error: " prefix
+            resultsDiv.innerHTML = `<p>Elapsed time: ${formattedTime}</p><p>ERROR:<br /><pre>\n${errorContent}\n</pre></p>`;
           } else {
-            resultsDiv.innerHTML = `<p>Elapsed time: ${formattedTime}</p><p>Result: ${data.results}</p>`;
+            resultsDiv.innerHTML = `<p>Elapsed time: ${formattedTime}</p><p>Result: ${data.result}</p>`;
           }
+
+          // Add download button          
+          const downloadButton = document.createElement('a');
+          downloadButton.href = '/output/' + data.user_id;
+          downloadButton.download = 'amr_results.txt';
+          downloadButton.textContent = 'Download Results';
+          resultsDiv.appendChild(downloadButton);
+
         })
         .catch(error => {
           console.error('Error:', error);
