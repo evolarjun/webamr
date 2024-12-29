@@ -4,7 +4,15 @@
   # Which nixpkgs channel to use.
   channel = "stable-24.05"; # or "unstable"
   # Use https://search.nixos.org/packages to find packages
-  packages = [ pkgs.python3 pkgs.libgcc pkgs.blast-bin pkgs.hmmer pkgs.curlFull.dev pkgs.python311Packages.pip pkgs.docker ];
+  packages = [ 
+    pkgs.python3 
+    pkgs.libgcc 
+    pkgs.blast-bin 
+    pkgs.hmmer 
+    pkgs.curlFull.dev 
+    pkgs.python311Packages.pip 
+  ];
+  services.docker.enable = true;
   idx = {
     # Search for the extensions you want on https://open-vsx.org/ and use "publisher.id"
     extensions = [ "ms-python.python" ];
