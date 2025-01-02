@@ -56,6 +56,6 @@ FROM python:3.11-slim-buster
 
     EXPOSE 8080
 # For debugging
-    CMD ["gunicorn", "--error-logfile", "-", "--bind", "0.0.0.0:8080", "main:app"]
+    CMD ["gunicorn", "--error-logfile", "-", "--timeout", "900", "--bind", "0.0.0.0:8080", "main:app"]
 
 # docker run -p 8080:8080 webamr

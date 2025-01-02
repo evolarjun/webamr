@@ -28,7 +28,10 @@ echo "Running docker build..."
 docker build --build-arg VERSION=${VERSION} --build-arg DB_VERSION=${DB_VERSION} \
     --build-arg SOFTWARE_VERSION=${SOFTWARE_VERSION} \
     --build-arg BINARY_URL=${BINARY_URL} \
-    -t $IMAGE .
+    -t $IMAGE \
+    -t gcr.io/webamr/webamr .
+
+docker push gcr.io/webamr/webamr
 
 # Run some tests of AMRFinderPlus
 
