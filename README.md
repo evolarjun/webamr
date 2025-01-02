@@ -32,6 +32,11 @@ In another shell
 ```
 curl -X POST -F "nuc_file=@test_dna.fa" http://localhost:9003/analyze
 ```
+## Docker 
+```
+./dockerbuild.sh &&  docker run -p 8080:8080 webamr
+```
+
 
 # For deployment (?)
 To deploy your application to Google Cloud Run, follow these steps:
