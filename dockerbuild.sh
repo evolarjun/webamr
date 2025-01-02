@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 # Increment this to build from base including dependencies
-VERSION=0.1
+VERSION=0.2
 
 get_tarball_url() {
     curl --silent "https://api.github.com/repos/$1/releases/latest" |
@@ -29,9 +29,10 @@ docker build --build-arg VERSION=${VERSION} --build-arg DB_VERSION=${DB_VERSION}
     --build-arg SOFTWARE_VERSION=${SOFTWARE_VERSION} \
     --build-arg BINARY_URL=${BINARY_URL} \
     -t $IMAGE \
-    -t gcr.io/webamr/webamr .
+    -t us-east1-docker.pkg.dev/amrfinder/webamr/$IMAGE:$VERSION \
+    .
 
-docker push gcr.io/webamr/webamr
+docker push us-east1-docker.pkg.dev/amrfinder/webamr/$IMAGE:$VERSION
 
 # Run some tests of AMRFinderPlus
 

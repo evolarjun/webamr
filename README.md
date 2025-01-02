@@ -37,6 +37,20 @@ curl -X POST -F "nuc_file=@test_dna.fa" http://localhost:9003/analyze
 ./dockerbuild.sh &&  docker run -p 8080:8080 webamr
 ```
 
+### Create container registry repository
+```
+gcloud artifacts repositories create webamr \
+    --repository-format=docker \
+    --location=us-east1 \
+    --description="AMRFinderPlus web interface experiments"
+```
+```
+gcloud auth configure-docker us-east1-docker.pkg.dev
+```
+
+
+### Push to conatiner registry
+
 
 # For deployment (?)
 To deploy your application to Google Cloud Run, follow these steps:
