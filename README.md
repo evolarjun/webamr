@@ -78,4 +78,4 @@ Still to do:
 4. Split the processing part out into 
     1. another Cloud Run service that monitors a cloud storage disk and runs AMRFinderPlus
     2. A cloud function flask app to upload files to that cloud storage disk and download results when they're done
- 
+5. Alter the page so it shows what version of AMRFinderPlus software and database are being run (or was run).
