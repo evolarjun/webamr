@@ -135,15 +135,15 @@ def analyze_file():
 
     # Run the program (should have more error checking here)
     if nuc_file or prot_file:
-        print("ready to run")
+        # print("ready to run")
         command.extend(['--plus'])
         # Execute amrfinder command
         print(f"Executing command: {' '.join(command)}")  # Print the full command
-        print(f"File path: {upload_folder}/output.amrfinder")  # Print the file path
+        # print(f"File path: {upload_folder}/output.amrfinder")  # Print the file path
         try:
             result = subprocess.run(command, capture_output=True, text=True, check=True)
-            print(result.stderr)
-            print(result.stdout) 
+            # print(result.stderr)
+            # print(result.stdout) 
         except subprocess.CalledProcessError as e:
             error_message = f"amrfinder execution failed with return code {e.returncode}: \n{e.stderr}"
             print(error_message)  # Print error to console
@@ -155,7 +155,7 @@ def analyze_file():
         
         message = "Files analyzed successfully with command:<br />\n<pre>" + ' '.join(command) + "</pre><br />\n"
         output_filepath = os.path.join(upload_folder, "output.amrfinder")
-        print(message)
+        # print(message)
         message += tabulize(read_file(output_filepath))
         return jsonify({'result': message, 'user_id': user_id}), 200  # Include user_id in response
     else:

@@ -34,7 +34,6 @@ FROM python:3.11-slim-buster
     COPY README.md /app
     COPY .venv /app/.venv
 
-
 #    COPY . /app
 #    RUN chmod +x /app/bin/amrfinder
 #    RUN chmod +x /app/bin/amrfinder_index
@@ -54,8 +53,9 @@ FROM python:3.11-slim-buster
 #    RUN ls -l .
 #    RUN /app/bin/amrfinder -h
 
-    EXPOSE 8080
-# For debugging
-    CMD ["gunicorn", "--error-logfile", "-", "--timeout", "900", "--bind", "0.0.0.0:8080", "main:app"]
-
+    # for deubgging
+    # EXPOSE 8080
+    EXPOSE 80
+    CMD ["gunicorn", "--error-logfile", "-", "--timeout", "900", "--bind", "0.0.0.0:80", "main:app"]
+    
 # docker run -p 8080:8080 webamr

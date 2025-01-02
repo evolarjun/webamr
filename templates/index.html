@@ -8,7 +8,8 @@
 
   <body>
     <h1>Upload your files to run <a href="https://github.com/ncbi/amr/wiki">AMRFinderPlus</a></h1>
-    This is designed to run a bacterial genome at a time. Larger submissions will probably fail.
+    This is designed to run a bacterial genome at a time. Larger submissions will probably fail. <br />
+    <span style="color: red;">This is experimental and likely to fail anyway.</span>
     <form id="upload-form" action="/analyze" method="POST" enctype="multipart/form-data">
       <label for="file">Select an assembled nucleotide file:</label> 
       <input type="file" name="nuc_file"> <br>
@@ -147,4 +148,5 @@
     </script>
 
   </body>
+
 </html>

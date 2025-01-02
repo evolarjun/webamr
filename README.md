@@ -50,77 +50,32 @@ gcloud auth configure-docker us-east1-docker.pkg.dev
 
 
 ### Push to conatiner registry
+```
+# done by dockerbuild.sh
+docker build --build-arg VERSION=${VERSION} --build-arg DB_VERSION=${DB_VERSION} \
+    --build-arg SOFTWARE_VERSION=${SOFTWARE_VERSION} \
+    --build-arg BINARY_URL=${BINARY_URL} \
+    -t $IMAGE \
+    -t us-east1-docker.pkg.dev/amrfinder/webamr/$IMAGE:$VERSION \
+    .
 
+docker push us-east1-docker.pkg.dev/amrfinder/webamr/$IMAGE:$VERSION
+```
 
-# For deployment (?)
-To deploy your application to Google Cloud Run, follow these steps:
+# Cloud run
 
-1. Project Setup: If you don't already have one, create a Google Cloud project and enable billing.
+I used the console to create a new cloud run service and added the domain amr.arjunp.net to it. I'm not sure how that's going to work in the longer run.
 
-Requirements File: Ensure you have a requirements.txt file in your project root directory. This file lists all the project's dependencies. If you don't have one, you can create it using:
+I also need to figure out how to deploy new versions from the commandline instead of going to the cloud run console, clicking the *webamr* service and *edit and deploy a new revision*. From there you select the most recent version in google artifact registry and click deploy.
 
-pip freeze > requirements.txt
+I haven't gotten the custom domain tested and working yet (I had to add a cname entry for amr.arjunp.net to squarespace to point to ghs.googlehosted.com.). 
 
+Still to do:
 
-
-2. Cloud Run Deployment (using gcloud):
-Authentication: Authenticate with your Google Cloud project using the gcloud command-line tool.
-gcloud auth application-default login
-
-
-
-3.   **Deployment:** Navigate to your project's root directory in the terminal and run:
-
-
-    gcloud run deploy webamr \
-            --image gcr.io/[PROJECT_ID]/webamr \
-            --region [REGION] \
-            --platform managed \
-            --allow-unauthenticated  \
-            --set-env-vars UPLOAD_FOLDER_BASE=/tmp/uploads
-
-
-
-    Replace the following:
-    *   `[PROJECT_ID]`: Your Google Cloud project ID.
-    *   `[REGION]`: Your preferred Google Cloud region.  Choose a region that's geographically close to your users for better performance.
-
-
-4. Dockerfile: While not strictly required for a simple Python application, creating a Dockerfile is recommended for better control over your deployment environment. Create a file named Dockerfile in your project's root directory with the following content:
-
-FROM python:3.11-slim-buster
-
-    WORKDIR /app
-
-    COPY requirements.txt .
-    RUN pip install --no-cache-dir -r requirements.txt
-
-    COPY . .
-
-    EXPOSE 8080
-
-    CMD ["gunicorn", "--bind", "0.0.0.0:8080", "main:app"]
-
-
-5.   Then build the container image and push it to Google Container Registry (GCR):
-
-
-    docker build -t gcr.io/[PROJECT_ID]/webamr .
-        docker push gcr.io/[PROJECT_ID]/webamr
-
-
-
-Environment Variables: The UPLOAD_FOLDER_BASE environment variable is crucial, so make sure it's correctly set. Cloud Run has a /tmp directory that is suitable for this purpose.
-After successful deployment, Cloud Run will provide you with a URL to access your application.
-
-Important Considerations:
-
-Scaling: Cloud Run automatically scales your application based on demand.
-Security: The --allow-unauthenticated flag is included for testing but should be removed for production. You should implement proper authentication and authorization mechanisms in your application and configure appropriate security rules in your Google Cloud project.
-Persistence: The /tmp directory is not persistent; data stored there will be lost if your container restarts. If you need persistent storage, consider using Cloud Storage or a Cloud SQL database.
-Let me know if you have any other questions.
-
-
-
-
-Enter a prompt or '/' for commands
+1. Add some safety checking for max size of uploaded files
+2. Sanity checking for the uploaded file name
+3. Monitor current disk space (?)
+4. Split the processing part out into 
+    1. another Cloud Run service that monitors a cloud storage disk and runs AMRFinderPlus
+    2. A cloud function flask app to upload files to that cloud storage disk and download results when they're done
+ 
