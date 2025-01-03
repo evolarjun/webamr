@@ -1,7 +1,7 @@
 import os
 import subprocess
 import shutil
-from flask import Flask, send_file, request, jsonify, render_template
+from flask import Flask, send_file, request, jsonify, render_template, send_from_directory
 import logging
 import sys
 import re
@@ -13,7 +13,7 @@ UPLOAD_FOLDER_BASE = os.environ.get('UPLOAD_FOLDER_BASE', 'uploads')
 app_dir = os.path.dirname(os.path.abspath(__file__))
 amrfinder_path = os.path.join(app_dir, 'bin', 'amrfinder')
 
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static')
 app.config['UPLOAD_FOLDER_BASE'] = UPLOAD_FOLDER_BASE
 logging.basicConfig(level=logging.INFO)
 
@@ -171,6 +171,10 @@ def output(user_id):
         return jsonify({'error': 'AMRFinderPlus output file is no longer available.'}), 404
     return send_file(output_filepath, as_attachment=True), 200
     #shutil.rmtree(os.path.join(app.config['UPLOAD_FOLDER_BASE'], user_id), ignore_errors=True)  # Remove user directory
+
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory(app.static_folder, 'favicon.ico', mimetype='image/vnd.microsoft.icon')
 
 # currently this does not run ever. Mostly created by AI and left for future reference.
 # may not work
