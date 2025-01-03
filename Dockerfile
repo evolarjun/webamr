@@ -20,6 +20,7 @@ FROM python:3.11-slim-buster
 
     RUN /app/bin/amrfinder -u
     RUN /app/bin/amrfinder -h
+    RUN /app/bin/amrfinder --database_version | grep -v 'directory: ' > /app/bin/amrfinder_version.txt
 
     WORKDIR /app
 
@@ -33,7 +34,7 @@ FROM python:3.11-slim-buster
     COPY main.py /app
     COPY README.md /app
     COPY .venv /app/.venv
-
+    
 #    COPY . /app
 #    RUN chmod +x /app/bin/amrfinder
 #    RUN chmod +x /app/bin/amrfinder_index

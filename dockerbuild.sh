@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 # Increment this to build from base including dependencies
-VERSION=0.3.2
+VERSION=0.3.4
 
 get_tarball_url() {
     curl --silent "https://api.github.com/repos/$1/releases/latest" |

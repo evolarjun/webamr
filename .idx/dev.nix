@@ -10,7 +10,8 @@
     pkgs.blast-bin 
     pkgs.hmmer 
     pkgs.curlFull.dev 
-    pkgs.python311Packages.pip 
+    pkgs.python311Packages.pip
+    pkgs.htop
   ];
   services.docker.enable = true;
   idx = {

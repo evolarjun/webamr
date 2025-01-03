@@ -21,6 +21,7 @@ make -j -O
 make install INSTALL_DIR=~/webamr/bin
 cd ~/webamr/bin
 ./amrfinder -u
+./amrfinder --database_version | grep -v 'directory: ' > amrfinder_version.txt
 ```
 
 Testing from commandline
@@ -34,7 +35,7 @@ curl -X POST -F "nuc_file=@test_dna.fa" http://localhost:9003/analyze
 ```
 ## Docker 
 ```
-./dockerbuild.sh &&  docker run -p 8080:8080 webamr
+./dockerbuild.sh && docker run -p 8080:80 webamr
 ```
 
 ### Create container registry repository

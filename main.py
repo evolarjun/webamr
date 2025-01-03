@@ -79,8 +79,10 @@ def index():
     #organism_select = organism_select()
 
     organism_select_options = organism_select()
+    amrfinder_version = read_file('bin/amrfinder_version.txt')
     # print("options: " + organism_select_options + "\n\n")
-    return render_template('index.html', organism_select=organism_select_options, hello="world")
+    return render_template('index.html', organism_select=organism_select_options, 
+        amrfinder_version = amrfinder_version)
 
 @app.errorhandler(404)
 def page_not_found(error):
@@ -164,7 +166,10 @@ def analyze_file():
 @app.route('/output/<user_id>')
 def output(user_id):
     output_filepath = os.path.join(app.config['UPLOAD_FOLDER_BASE'], user_id, "output.amrfinder")
-    return send_file(output_filepath, as_attachment=True)
+    # if the file doesn't exist return an error
+    if not os.path.exists(output_filepath):
+        return jsonify({'error': 'AMRFinderPlus output file is no longer available.'}), 404
+    return send_file(output_filepath, as_attachment=True), 200
     #shutil.rmtree(os.path.join(app.config['UPLOAD_FOLDER_BASE'], user_id), ignore_errors=True)  # Remove user directory
 
 # currently this does not run ever. Mostly created by AI and left for future reference.
