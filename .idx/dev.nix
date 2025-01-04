@@ -13,6 +13,7 @@
     pkgs.python311Packages.pip
     pkgs.python311Packages.google-cloud-storage
     pkgs.htop
+    pkgs.tree
   ];
   services.docker.enable = true;
   idx = {

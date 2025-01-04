@@ -1,27 +1,38 @@
-# Flask Web App Starter from idx.google.com
 
-A Flask starter template as per [these docs](https://flask.palletsprojects.com/en/3.0.x/quickstart/#a-minimal-application).
+# Current status
 
-Dev environment in https://idx.google.com/webamr-5534387
+- Front end uploads the files to cloud storage in `webamr/<userid>/`
+- Backend stub created by gemini in backend
+    - I haven't tried to get it working or figure out how to deploy
+- Need to create service accounts (one for both back-end and front-end) and give them the proper permissions to write to cloud storage
+- Need to create dockerfile for back-end
+- Need to figure out how to deploy front end as a cloud function instead of in a docker container
+- 
 
-See link in upper right of preview window to run in another browser. Can also change the port to 9003 in the URL to view the one running on the command-line (so you can see debugging output).
-
-## Getting Started
-
-Previews should run automatically when starting a workspace.
+# Revised project structure
+    
+    ├── backend/                    # backend service
+    ├── frontend
+    │   ├── bin	                    # Directory for AMRFinderPlus
+    │   │   ├── amrfinder
+    │   ├── dockerbuild.sh	     	# Script to build docker container
+    │   ├── Dockerfile			    # Dockerfile for flask app
+    │   ├── install_amrfinder.sh    # Script to install AMRFinderPlus
+    │   ├── main.py				    # flask app
+    │   ├── requirements.txt        # python requriements for flask app
+    │   ├── static
+    │   │   ├── css
+    │   │   │   └── style.css       # only CSS used in flask app
+    │   │   └── favicon.ico			
+    │   ├── templates
+    │   │   ├── 404.html
+    │   │   └── index.html          # web interface for flask app
+    ├── README.md                   # Docs
 
 # Installing AMRFinderPlus
 
 ```
-cd /
-git clone https://github.com/ncbi/amr.git
-cd amr
-git submodule update --init
-make -j -O
-make install INSTALL_DIR=~/webamr/bin
-cd ~/webamr/bin
-./amrfinder -u
-./amrfinder --database_version | grep -v 'directory: ' > amrfinder_version.txt
+./install_amrfinder.sh
 ```
 
 Testing from commandline
@@ -84,17 +95,18 @@ Still to do:
 
 
 -------------------------
-### Notes from Gemini on refactoring
+### Notes from Gemini on refactoring then modified
 
 Refactoring your application to use a separate Cloud Run worker for processing and Cloud Storage for data persistence is a good approach for scalability and efficiency. Here’s a breakdown of the refactoring process, along with recommendations:
 
 1. Cloud Storage Setup:
 
-Create a bucket: If you don't have one already, create a Google Cloud Storage bucket. Note down the bucket name—you'll need it in your code. Make sure you configure access control to allow your Cloud Run service and Flask app to interact with the bucket.
+Three buckets
 
-Folder structure: Decide on a folder structure within your bucket to organize input and output files. For example:
+    gs://webamr         # where the uploaded files go
+    gs://webamr-trigger # a new file appearing here triggers the back-end
+    gs://webamr-output  #  
 
-Bucket: `cloudamr`
 
 uploads/<user_id>/<filename>
 results/<usre_id>/<filename>
@@ -167,3 +179,17 @@ Security: Properly configure IAM permissions to restrict access to your Cloud St
 Scalability: Cloud Run scales automatically based on demand, so you don’t need to worry about managing server instances.
 Cost: Cloud Storage and Cloud Run have associated costs. Monitor your usage and billing.
 This refactoring will make your application more scalable, reliable, and cost-effective for handling large file uploads. Let me know if you'd like assistance implementing any of these steps.
+
+
+---------------------
+# Flask Web App Starter from idx.google.com
+
+A Flask starter template as per [these docs](https://flask.palletsprojects.com/en/3.0.x/quickstart/#a-minimal-application).
+
+Dev environment in https://idx.google.com/webamr-5534387
+
+See link in upper right of preview window to run in another browser. Can also change the port to 9003 in the URL to view the one running on the command-line (so you can see debugging output).
+
+## Getting Started
+
+Previews should run automatically when starting a workspace.
