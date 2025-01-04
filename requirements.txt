@@ -6,3 +6,4 @@ autopep8
 flask
 Werkzeug
 gunicorn
+google-cloud-storage

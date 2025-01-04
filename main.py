@@ -9,9 +9,15 @@ import uuid
 import time
 from datetime import datetime, timedelta
 
+from google.cloud import storage
+
 UPLOAD_FOLDER_BASE = os.environ.get('UPLOAD_FOLDER_BASE', 'uploads')
-app_dir = os.path.dirname(os.path.abspath(__file__))
-amrfinder_path = os.path.join(app_dir, 'bin', 'amrfinder')
+RESULTS_FOLDER_BASE = os.environ.get('RESULTS_FOLDER_BASE', 'results')
+BUCKET_NAME = os.environ.get('BUCKET_NAME', 'webamr') 
+
+#app_dir = os.path.dirname(os.path.abspath(__file__))
+#amrfinder_path = os.path.join(app_dir, 'bin', 'amrfinder')
+amrfinder_path = 'amrfinder'
 
 app = Flask(__name__, static_folder='static')
 app.config['UPLOAD_FOLDER_BASE'] = UPLOAD_FOLDER_BASE
@@ -71,6 +77,13 @@ def organism_select():
     #print(lines)
     options = [f'<option value="{line.split()[0]}">{line.split()[0]}</option>' for line in lines[1:]]
     return '\n'.join(options)
+
+def upload_to_gcs(bucket_name, source_file_name, destination_blob_name):
+    """Uploads a file to the bucket."""
+    storage_client = storage.Client()
+    bucket = storage_client.bucket(bucket_name)
+    blob = bucket.blob(destination_blob_name)
+    blob.upload_from_filename(source_file_name)
 
 
 @app.route("/")
@@ -135,32 +148,51 @@ def analyze_file():
         gff_file.save(filepath)
         command.extend(["-g", filepath])
 
-    # Run the program (should have more error checking here)
-    if nuc_file or prot_file:
-        # print("ready to run")
-        command.extend(['--plus'])
-        # Execute amrfinder command
-        print(f"Executing command: {' '.join(command)}")  # Print the full command
-        # print(f"File path: {upload_folder}/output.amrfinder")  # Print the file path
-        try:
-            result = subprocess.run(command, capture_output=True, text=True, check=True)
-            # print(result.stderr)
-            # print(result.stdout) 
-        except subprocess.CalledProcessError as e:
-            error_message = f"amrfinder execution failed with return code {e.returncode}: \n{e.stderr}"
-            print(error_message)  # Print error to console
-            return jsonify({'result': "error: " + error_message}), 500
-        except Exception as e:
-            error_message = f"An error occurred: {e}"
-            print(error_message)  # Print error to console
-            return jsonify({'result': "error: " + error_message}), 500
-        
+    # Write the command to a text file
+    command_file_path = os.path.join(upload_folder, "command.txt")
+    with open(command_file_path, "w") as command_file:
+        command_file.write(" ".join(command))
+
+    # Upload files and command to GCS
+    if BUCKET_NAME:  # Only upload if bucket name is defined
+        for filename in os.listdir(upload_folder):
+            source_path = os.path.join(upload_folder, filename)
+            destination_path = os.path.join(user_id, filename)  # Use user_id as prefix in GCS
+            upload_to_gcs(BUCKET_NAME, source_path, destination_path)
+            print(f"Uploaded {source_path} to gs://{BUCKET_NAME}/{destination_path}")
+
+        # Now you can trigger your analysis on GCS using the uploaded files
+        # and the command.txt file.
+    
+    # For local testing, you can still run amrfinder directly:
+    # if nuc_file or prot_file:
+    #    command.extend(['--plus'])
+    #   print(f"Executing command: {' '.join(command)}")
+    #    try:
+    #        result = subprocess.run(command, capture_output=True, text=True, check=True)
+    #    except subprocess.CalledProcessError as e:
+    #        error_message = f"amrfinder execution failed with return code {e.returncode}: \n{e.stderr}"
+    #        print(error_message)
+    #        return jsonify({'result': "error: " + error_message}), 500
+    #    except Exception as e:
+    #        error_message = f"An error occurred: {e}"
+    #        print(error_message)
+    #        return jsonify({'result': "error: " + error_message}), 500
+
+    # For now, return success and user_id
+    return jsonify({'result': "Files uploaded successfully. Analysis will begin shortly.", 'user_id': user_id}), 200
+
+
+def run_amrfinder(command):
+    """ Runs amrfinder and returns the output"""
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, check=True)
         message = "Files analyzed successfully with command:<br />\n<pre>" + ' '.join(command) + "</pre><br />\n"
         output_filepath = os.path.join(upload_folder, "output.amrfinder")
         # print(message)
         message += tabulize(read_file(output_filepath))
         return jsonify({'result': message, 'user_id': user_id}), 200  # Include user_id in response
-    else:
+    except:
         return jsonify({'result': 'error: Requires a nucleotide or protein file.', 'user_id': user_id}), 400 # Include user_id in response
 
 @app.route('/output/<user_id>')

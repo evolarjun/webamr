@@ -11,6 +11,7 @@
     pkgs.hmmer 
     pkgs.curlFull.dev 
     pkgs.python311Packages.pip
+    pkgs.python311Packages.google-cloud-storage
     pkgs.htop
   ];
   services.docker.enable = true;
