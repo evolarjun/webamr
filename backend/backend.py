@@ -5,7 +5,7 @@ import subprocess
 import shutil
 import tempfile
 
-# Configure logging
+# Configure logging (where does this go?)
 logging.basicConfig(level=logging.INFO)
 
 # Set environment variables (replace with your actual bucket names)
