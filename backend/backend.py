@@ -36,7 +36,7 @@ def main(event, context):
 
         # Initialize Google Cloud Storage client
         storage_client = storage.Client()
-        bucket = storage_client.bucket(bucket_name)
+        trigger_bucket = storage_client.bucket(bucket_name)
         blob = bucket.blob(file_name)
 
         # Create a temporary file to store the downloaded FASTA content
