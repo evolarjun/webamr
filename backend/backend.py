@@ -1,18 +1,24 @@
 import os
 import logging
 from google.cloud import storage
+import subprocess
+import shutil
+import tempfile
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 
 # Set environment variables (replace with your actual bucket names)
-INPUT_BUCKET_NAME = os.environ.get("INPUT_BUCKET_NAME", "webamr-trigger")
+TRIGGER_BUCKET_NAME = os.environ.get("TRIGGER_BUCKET_NAME", "webamr-trigger")
+INPUT_BUCKET_NAME = os.environ.get("INPUT_BUCKET_NAME", "webamr")
 OUTPUT_BUCKET_NAME = os.environ.get("OUTPUT_BUCKET_NAME", "webamr-output")
 
 
-def process_fasta(data):
+def process_file(filename):
     # Replace this with your actual FASTA processing logic
-    processed_data = f"Processed FASTA data:\n{data}"  
+    with open(filename, 'r') as file:
+        data = file.read()
+    processed_data = f"Processed the data from {filename}:\n{data}"
     return processed_data
 
 def main(event, context):
@@ -22,7 +28,7 @@ def main(event, context):
         file_name = file['name']
 
         # Check if the event is for a new file in the correct bucket.
-        if bucket_name != INPUT_BUCKET_NAME:
+        if bucket_name != TRIGGER_BUCKET_NAME:
             logging.info(f"Skipping file {file_name} in bucket {bucket_name} - not the input bucket.")
             return
 
@@ -33,11 +39,15 @@ def main(event, context):
         bucket = storage_client.bucket(bucket_name)
         blob = bucket.blob(file_name)
 
-        # Download FASTA file content
-        fasta_content = blob.download_as_string().decode("utf-8")
+        # Create a temporary file to store the downloaded FASTA content
+        with tempfile.NamedTemporaryFile(mode="w+b", delete=False) as temp_file:
+            # Download FASTA file to the temporary file
+            blob.download_to_filename(temp_file.name)
+            temp_file.flush()  # Ensure data is written to disk
+            temp_file_path = temp_file.name
 
-        # Process FASTA data
-        results = process_fasta(fasta_content)
+        # Process FASTA data (replace with your actual processing logic)
+        results = process_file(temp_file_path) # Pass the temporary file path
 
         # Write output to results bucket
         output_file_name = file_name.replace(".fa", "_results.txt") # Assume .fa
@@ -46,6 +56,9 @@ def main(event, context):
         output_blob.upload_from_string(results)
 
         logging.info(f"Results written to file {output_file_name} in bucket {OUTPUT_BUCKET_NAME}")
+        
+        # Remove temporary file
+        os.remove(temp_file_path)
 
     except Exception as e:
         logging.error(f"An error occurred: {e}")
