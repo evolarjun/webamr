@@ -35,6 +35,12 @@
 ./install_amrfinder.sh
 ```
 
+For command-line testing you need to create a virtualenv if you don't have one already
+```
+python3 -m venv .venv
+pip install -r requirements.txt
+```
+
 Testing from commandline
 ```
 python -m venv .venv && source .venv/bin/activate
@@ -44,6 +50,7 @@ In another shell
 ```
 curl -X POST -F "nuc_file=@test_dna.fa" http://localhost:9003/analyze
 ```
+
 ## Docker 
 ```
 ./dockerbuild.sh && docker run -p 8080:80 webamr
@@ -51,7 +58,7 @@ curl -X POST -F "nuc_file=@test_dna.fa" http://localhost:9003/analyze
 
 ### Create container registry repository
 ```
-gcloud artifacts repositories create webamr \
+gcloud artifacts repositories create webamr-backend \
     --repository-format=docker \
     --location=us-east1 \
     --description="AMRFinderPlus web interface experiments"
@@ -60,22 +67,57 @@ gcloud artifacts repositories create webamr \
 gcloud auth configure-docker us-east1-docker.pkg.dev
 ```
 
-
 ### Push to conatiner registry
+This is done in dockerbuild.sh
 ```
 # done by dockerbuild.sh
 docker build --build-arg VERSION=${VERSION} --build-arg DB_VERSION=${DB_VERSION} \
     --build-arg SOFTWARE_VERSION=${SOFTWARE_VERSION} \
     --build-arg BINARY_URL=${BINARY_URL} \
     -t $IMAGE \
-    -t us-east1-docker.pkg.dev/amrfinder/webamr/$IMAGE:$VERSION \
+    -t us-east1-docker.pkg.dev/amrfinder/webamr-backend/$IMAGE:$VERSION \
     .
 
-docker push us-east1-docker.pkg.dev/amrfinder/webamr/$IMAGE:$VERSION
+docker push us-east1-docker.pkg.dev/amrfinder/webamr-backend/$IMAGE:$VERSION
 ```
 
 # Cloud run
 
+## New way to deploy webamr-backend from command-line for version 0.4+
+
+```
+gcloud run deploy webamr-backend --image us-east1-docker.pkg.dev/amrfinder/webamr-backend/webamr-backend:0.4.1 --region=us-east1 --platform=managed
+```
+*   `gcloud run deploy`: This command creates a Cloud Run service.
+*   `--image`: Specifies the Docker image to use.
+*   `webamr-backend`: The image you pushed to Artifact Registry.
+*   `--region`: Choose a region. (us-east1 is an example).
+* `--platform=managed` : Specifies the platform.
+*   `--platform=managed`  : Specifies the platform.
+
+
+
+## Eventarc trigger
+This is what listens for a cloud storage event and triggers the cloud run
+
+```
+gcloud eventarc triggers create --destination-run-service=webamr-backend --event-type=google.cloud.storage.object.v1.finalized --location=us-central1 --trigger-provider=google.cloud.storage
+```
+*   `gcloud eventarc triggers create`: This command creates a trigger
+*   `--destination-run-service`: Specifies that Cloud Run is the target for the event.
+*   `webamr-backend`: The name of your cloud run service.
+*   `--event-type=google.cloud.storage.object.v1.finalized`: This specifies the trigger event type.
+*   `--location=us-east1`: Chose the location, as before.
+*   `--trigger-provider=google.cloud.storage`: Choose the cloud storage provider.
+
+
+
+
+
+
+
+
+# Old way for version 0.3
 I used the console to create a new cloud run service and added the domain amr.arjunp.net to it. I'm not sure how that's going to work in the longer run.
 
 I also need to figure out how to deploy new versions from the commandline instead of going to the cloud run console, clicking the *webamr* service and *edit and deploy a new revision*. From there you select the most recent version in google artifact registry and click deploy.

@@ -1,62 +1,55 @@
-FROM python:3.11-slim-buster
-#FROM python:3.11
+--- a/requirements.txt
++ gunicorn
+google-cloud-core
+google-cloud-logging
+google-cloud-storage
+requests
+python-dotenv
 
-    RUN apt-get update && apt-get install -y hmmer ncbi-blast+ libcurl4-openssl-dev curl
+--- a/Dockerfile
+++ b/Dockerfile
 
-    # For debugging
-    # RUN apt-get install -y python3.11 python3-pip
 
-# First Install AMRFinderPlus 
-    ARG SOFTWARE_VERSION
+    # Install system dependencies
+    RUN apt-get update && apt-get install -y \
+        hmmer \
+        ncbi-blast+ \
+        libcurl4-openssl-dev \
+        curl
 
+    # Set the working directory for AMRFinderPlus
     ARG BINARY_URL
-
-    # Install AMRFinderPlus
     WORKDIR /app/bin
     SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
+    # Download and extract AMRFinderPlus
     RUN curl --silent -L ${BINARY_URL} | tar xvfz -
 
-    ARG DB_VERSION
-
+    # Update the AMRFinderPlus database
     RUN /app/bin/amrfinder -u
     RUN /app/bin/amrfinder -h
     RUN /app/bin/amrfinder --database_version | grep -v 'directory: ' > /app/bin/amrfinder_version.txt
 
+    # Set working directory back to /app
     WORKDIR /app
 
+    # Copy requirements and install them
     COPY requirements.txt .
     RUN pip3 install --no-cache-dir -r requirements.txt
-    # For debugging
-#    RUN pip3 install --no-cache-dir -r requirements.txt
 
-    COPY static /app/static
-    COPY templates /app/templates
-    COPY main.py /app
-    COPY README.md /app
-    COPY .venv /app/.venv
-    
-#    COPY . /app
-#    RUN chmod +x /app/bin/amrfinder
-#    RUN chmod +x /app/bin/amrfinder_index
-#    RUN chmod +x /app/bin/amrfinder_update
-#    RUN chmod +x /app/bin/amr_report
-#    RUN chmod +x /app/bin/dna_mutation
-#    RUN chmod +x /app/bin/fasta_check
-#    RUN chmod +x /app/bin/fasta_extract
-#    RUN chmod +x /app/bin/fasta2parts
-#    RUN chmod +x /app/bin/gff_check
-#    RUN chmod +x /app/bin/mutate
-#    RUN chmod +x /app/bin/stxtyper
-#    RUN chmod +x /app/bin/stx/stxtyper
+    # Install Google Cloud Storage and other dependencies
+    RUN pip3 install --no-cache-dir \
+        google-cloud-storage \
+        google-cloud-core \
+        google-cloud-logging
 
- 
-#    RUN ls -l /app/bin  # Temporary debugging step
-#    RUN ls -l .
-#    RUN /app/bin/amrfinder -h
+    # Copy the backend script
+    COPY backend /app/backend
+    COPY backend/backend.py /app/backend/backend.py
+    COPY function.py /app
 
-    # for deubgging
-    # EXPOSE 8080
+    # Set the entrypoint to execute the backend
+    ENTRYPOINT ["python3", "/app/backend/backend.py"]
     EXPOSE 80
-    CMD ["gunicorn", "--error-logfile", "-", "--timeout", "900", "--bind", "0.0.0.0:80", "main:app"]
-    
-# docker run -p 8080:8080 webamr
+
+    CMD ["python3", "/app/backend/backend.py"]

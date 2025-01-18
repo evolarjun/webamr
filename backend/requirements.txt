@@ -1,0 +1,10 @@
+flask
+gunicorn
+google-cloud-core
+google-cloud-logging
+google-cloud-storage
+Werkzeug
+pip
+autopep8
+requests
+python-dotenv

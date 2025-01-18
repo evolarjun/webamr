@@ -14,6 +14,8 @@
     pkgs.python311Packages.google-cloud-storage
     pkgs.htop
     pkgs.tree
+    pkgs.perl
+    pkgs.gnumake
   ];
   services.docker.enable = true;
   idx = {
