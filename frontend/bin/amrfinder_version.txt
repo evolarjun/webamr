@@ -1,2 +1,0 @@
-Software version: 4.0.3
-Database version: 2024-12-18.1

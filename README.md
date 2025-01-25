@@ -249,7 +249,7 @@ How would I create a cloud run application triggered by a cloud pub/sub message 
 
 This app should copy the message from the subscription webamr-submitted --project=amrfinder to a file named for the message_id in the bucket gs://webamr-trigger
 
-2024-Jan-25
+2024-Jan-25 Back-end redo
 ===============
 
 Back-end redo, working on using pubsub message to trigger processing.
@@ -292,8 +292,14 @@ gcloud pubsub topics publish $RUN_TOPIC --message "Hello World!"
 # delete trigger
 gcloud eventarc triggers delete events-pubsub-trigger --location=us-east1
 ```
-
-
+### For debugging and testing
+```
+# version should be the last published version
+build_and_deploy.sh 4.0.17
+gcloud pubsub topics publish webamr-trigger --project amrfinder --message="hello
+ 
+# check in bucket webamr-trigger for log files / messages
+```
 ### Commandline pubsub
 ```
 gcloud pubsub topics publish webamr-trigger --project amrfinder --message="hello"
@@ -302,3 +308,10 @@ gcloud pubsub topics publish webamr-trigger --project amrfinder --message="hello
 gcloud pubsub subscriptions pull webamr-submitted --project=amrfinder --auto-ack
 ```
 
+2025-Jan-25 Front end
+========================
+Initial testing
+```
+python -m venv .venv && source .venv/bin/activate
+python -m flask --app main run -p 9003
+```

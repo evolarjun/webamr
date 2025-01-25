@@ -61,18 +61,7 @@ def hello_pubsub():
 
         data = base64.b64decode(data).decode('utf-8')
         log_message('data2', str(request.data) + "\n\ndecoded data=" + data)
-
-        message_id = pubsub_message.get('messageId', 'unknown_id')
-        bucket_name = 'webamr-trigger'
-        blob_name = message_id
-
-        storage_client = storage.Client()
-        bucket = storage_client.bucket(bucket_name)
-        blob = bucket.blob(blob_name)
-
-        blob.upload_from_string(data)
-
-        print(f'File {blob_name} uploaded to {bucket_name}.')
+        
         return ('', 204)
     except Exception as e:
         print(f"An error occurred: {e}")

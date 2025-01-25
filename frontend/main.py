@@ -8,8 +8,7 @@ import re
 import uuid
 import time
 from datetime import datetime, timedelta
-
-from google.cloud import storage
+from google.cloud import storage, pubsub_v1
 
 UPLOAD_FOLDER_BASE = os.environ.get('UPLOAD_FOLDER_BASE', 'uploads')
 RESULTS_FOLDER_BASE = os.environ.get('RESULTS_FOLDER_BASE', 'results')
@@ -67,12 +66,12 @@ def tabulize(tab_delimited):
     return html
    
 def organism_select():
-    """Reads the file src/data/taxgroup.tab and returns select element text of the first column from this file
+    """Reads the file taxgroup.tsv and returns select element text of the first column from this file
 
     Returns:
         A string containing the HTML select element.
     """
-    taxgroup_file = read_file("bin/data/latest/taxgroup.tsv")
+    taxgroup_file = read_file("taxgroup.tsv")
     lines = taxgroup_file.strip().split('\n')
     #print(lines)
     options = [f'<option value="{line.split()[0]}">{line.split()[0]}</option>' for line in lines[1:]]
@@ -80,22 +79,36 @@ def organism_select():
 
 def upload_to_gcs(bucket_name, source_file_name, destination_blob_name):
     """Uploads a file to the bucket."""
-    storage_client = storage.Client()
+    storage_client = storage.Client(project='amrfinder')
     bucket = storage_client.bucket(bucket_name)
     blob = bucket.blob(destination_blob_name)
     blob.upload_from_filename(source_file_name)
 
+def send_pubsub_message(message):
+    """Sends a message to the Pub/Sub topic 
+    .eventarc-us-east1-webamr-trigger-sub-529 """
+    project_id = 'amrfinder'
+#    topic_id = "projects/amrfinder/topics/eventarc-us-east1-webamr-trigger-838"
+    topic_id = 'eventarc-us-east1-webamr-trigger-838'
+
+    publisher = pubsub_v1.PublisherClient()
+    topic_path = publisher.topic_path(project_id, topic_id)
+
+    data = message.encode("utf-8")
+    future = publisher.publish(topic_path, data)
+    try:
+        print(f"Published message ID: {future.result()}")
+    except Exception as e:
+        print(f"Error publishing message: {e}")
 
 @app.route("/")
 #@app.route("/", methods=["post"])
 def index():
-    #organism_select = organism_select()
-
     organism_select_options = organism_select()
-    amrfinder_version = read_file('bin/amrfinder_version.txt')
+    database_version = read_file('database_version.txt')
     # print("options: " + organism_select_options + "\n\n")
     return render_template('index.html', organism_select=organism_select_options, 
-        amrfinder_version = amrfinder_version)
+        database_version = database_version)
 
 @app.errorhandler(404)
 def page_not_found(error):
@@ -118,7 +131,8 @@ def analyze_file():
     if prot_file and prot_file.filename == '':
         return jsonify({'error': 'No protein file selected'}), 400
 
-    command = [amrfinder_path, "-o", upload_folder + "/output.amrfinder"]  # Basic command structure
+    # Basic command structure
+    command = [amrfinder_path, "-o", upload_folder + "/output.amrfinder"]  
 
     # Check for organism value
     if 'organism' in request.form:
@@ -131,9 +145,7 @@ def analyze_file():
             print("No organism selected.")
     else:
         print("Organism not found in form data.")
-
-    sys.stderr.write(f"Directory created: {upload_folder}\n")  # New print statement
-
+    print("Now saving files")
     # save files
     if nuc_file: 
         filepath = os.path.join(upload_folder, nuc_file.filename)
@@ -152,32 +164,19 @@ def analyze_file():
     command_file_path = os.path.join(upload_folder, "command.txt")
     with open(command_file_path, "w") as command_file:
         command_file.write(" ".join(command))
-
+    print("Now uploading files to bucket")
     # Upload files and command to GCS
-    if BUCKET_NAME:  # Only upload if bucket name is defined
-        for filename in os.listdir(upload_folder):
-            source_path = os.path.join(upload_folder, filename)
-            destination_path = os.path.join(user_id, filename)  # Use user_id as prefix in GCS
-            upload_to_gcs(BUCKET_NAME, source_path, destination_path)
-            print(f"Uploaded {source_path} to gs://{BUCKET_NAME}/{destination_path}")
+    for filename in os.listdir(upload_folder):
+        source_path = os.path.join(upload_folder, filename)
+        destination_path = os.path.join(user_id, filename)  # Use user_id as prefix in GCS
+        upload_to_gcs(BUCKET_NAME, source_path, destination_path)
+        print(f"Uploaded {source_path} to gs://{BUCKET_NAME}/{destination_path}")
 
+    print ("Now sending pubsub message")
+    # Trigger analysis via pubsub message
+    send_pubsub_message("{'submission_id'='" + upload_folder + "'")
         # Now you can trigger your analysis on GCS using the uploaded files
         # and the command.txt file.
-    
-    # For local testing, you can still run amrfinder directly:
-    # if nuc_file or prot_file:
-    #    command.extend(['--plus'])
-    #   print(f"Executing command: {' '.join(command)}")
-    #    try:
-    #        result = subprocess.run(command, capture_output=True, text=True, check=True)
-    #    except subprocess.CalledProcessError as e:
-    #        error_message = f"amrfinder execution failed with return code {e.returncode}: \n{e.stderr}"
-    #        print(error_message)
-    #        return jsonify({'result': "error: " + error_message}), 500
-    #    except Exception as e:
-    #        error_message = f"An error occurred: {e}"
-    #        print(error_message)
-    #        return jsonify({'result': "error: " + error_message}), 500
 
     # For now, return success and user_id
     return jsonify({'result': "Files uploaded successfully. Analysis will begin shortly.", 'user_id': user_id}), 200
@@ -235,3 +234,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+# For testing:
+# python -m venv .venv && source .venv/bin/activate
+# python -m flask --app main run -p 9003

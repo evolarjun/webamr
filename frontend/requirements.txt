@@ -6,4 +6,7 @@ autopep8
 flask
 Werkzeug
 gunicorn
+google-cloud-core
+google-cloud-logging
 google-cloud-storage
+google-cloud-pubsub
