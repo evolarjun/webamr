@@ -174,7 +174,7 @@ def analyze_file():
 
     print ("Now sending pubsub message")
     # Trigger analysis via pubsub message
-    send_pubsub_message("{'submission_id'='" + upload_folder + "'")
+    send_pubsub_message("{'submission_id'='" + user_id + "'")
         # Now you can trigger your analysis on GCS using the uploaded files
         # and the command.txt file.
 
