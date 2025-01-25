@@ -86,7 +86,13 @@ docker push us-east1-docker.pkg.dev/amrfinder/webamr-backend/$IMAGE:$VERSION
 ## New way to deploy webamr-backend from command-line for version 0.4+
 
 ```
-gcloud run deploy webamr-backend --image us-east1-docker.pkg.dev/amrfinder/webamr-backend/webamr-backend:0.4.1 --region=us-east1 --platform=managed
+# gcloud run deploy webamr-backend --image us-east1-docker.pkg.dev/amrfinder/ webamr-backend/webamr-backend:0.4.1 --region=us-east1 --platform=managed\
+
+gcloud run deploy webamr-trigger \
+    --image gcr.io/amrfinder/webamr-backend \
+    --region us-east1 \
+    --allow-unauthenticated # Only for testing; remove in production
+    --set-env-vars PUBSUB_SUBSCRIPTION=webamr-submitted,PUBSUB_PROJECT=amrfinder
 ```
 *   `gcloud run deploy`: This command creates a Cloud Run service.
 *   `--image`: Specifies the Docker image to use.
@@ -235,3 +241,64 @@ See link in upper right of preview window to run in another browser. Can also ch
 ## Getting Started
 
 Previews should run automatically when starting a workspace.
+
+
+# Prompts used
+
+How would I create a cloud run application triggered by a cloud pub/sub message that creates a file on google cloud storage? This application should be run using Google Cloud Run and also have a Dockerfile.
+
+This app should copy the message from the subscription webamr-submitted --project=amrfinder to a file named for the message_id in the bucket gs://webamr-trigger
+
+2024-Jan-25
+===============
+
+Back-end redo, working on using pubsub message to trigger processing.
+
+Work in `backend/` done.
+
+### Deploy
+```
+VERSION=0.4.7
+docker build -t webamr-backend -t webamr-backend:$VERSION \
+    -t us-east1-docker.pkg.dev/amrfinder/webamr-backend/webamr-backend:$VERSION \
+    . 2>&1 | tee docker.out
+# --image us-east1-docker.pkg.dev/amrfinder/webamr-backend/webamr-backend:0.4.5 \
+docker push us-east1-docker.pkg.dev/amrfinder/webamr-backend/webamr-backend:$VERSION 
+gcloud run deploy webamr-backend \
+  --image us-east1-docker.pkg.dev/amrfinder/webamr-backend/webamr-backend:$VERSION \
+  --region=us-east1 --platform=managed --project=amrfinder \
+  --allow-unauthenticated 
+```
+Set up trigger (?)
+```
+# gcloud eventarc triggers create webamr-trigger --location=us-east1 --configuration=eventarc_trigger.yaml
+
+# Creates a trigger and pubsub topic
+gcloud eventarc triggers create webamr-trigger \
+    --destination-run-service=webamr-backend \
+    --destination-run-region=us-east1 \
+    --location=us-east1 \
+    --event-filters="type=google.cloud.pubsub.topic.v1.messagePublished"
+
+# list triggers
+gcloud eventarc triggers list --location=us-east1
+
+# get the pubsub topic for the trigger
+export RUN_TOPIC=$(gcloud eventarc triggers describe webamr-trigger \
+    --format='value(transport.pubsub.topic)' --location=us-east1)
+# send a message
+gcloud pubsub topics publish $RUN_TOPIC --message "Hello World!"
+
+# delete trigger
+gcloud eventarc triggers delete events-pubsub-trigger --location=us-east1
+```
+
+
+### Commandline pubsub
+```
+gcloud pubsub topics publish webamr-trigger --project amrfinder --message="hello"
+```
+```
+gcloud pubsub subscriptions pull webamr-submitted --project=amrfinder --auto-ack
+```
+

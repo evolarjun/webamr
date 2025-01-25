@@ -16,6 +16,7 @@
     pkgs.tree
     pkgs.perl
     pkgs.gnumake
+    pkgs.neovim
   ];
   services.docker.enable = true;
   idx = {
