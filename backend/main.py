@@ -28,7 +28,58 @@ def log_message(prefix, message):
     blob = bucket.blob(blob_name)
     blob.upload_from_string(message)
 
+def read_file(file_path):
+  """Reads the contents of a file into a variable.
 
+  Args:
+    file_path: The path to the file.
+
+  Returns:
+    The contents of the file as a string.
+  """
+  try:
+    with open(file_path, 'r') as file:
+      file_contents = file.read()
+    return file_contents
+  except FileNotFoundError:
+    print(f"File not found: {file_path}")
+    return None  # Or handle the error as needed
+
+
+def copy_from_gcs(userid):
+  """Copies files from a GCS bucket (webamr) to a local directory (data/)."""
+
+  client = storage.Client()
+  bucket_name = 'webamr'
+  source_blob_name = userid  # The folder in the bucket
+  destination_directory = f'uploads/{userid}'
+
+  bucket = client.bucket(bucket_name)
+  blobs = bucket.list_blobs(prefix=source_blob_name)  # Get all files in the folder
+
+  for blob in blobs:
+    destination_file_name = blob.name.replace(source_blob_name, destination_directory, 1) 
+    blob.download_to_filename(destination_file_name) 
+    print(f'Copied gs://{bucket_name}/{blob.name} to {destination_file_name}')
+
+
+def run_amrfinder(data):
+    """
+    Grabs data from gs://webamr/<userid>, runs amrfinder on that data, then
+    copies the output to gs://webamr-output/<userid>
+    """
+    # get userid
+    print(data)
+    data = json.loads(data)
+    userid = data.get("submission_id")
+    # make data directory if it doesn't exist
+    os.system(f'mkdir -p uploads/{userid}')
+    # copy from cloud storage to tmp directory
+    copy_from_gcs(userid)
+    # run AMRFinderPlus
+    command = read_file(f'uploads/{userid}/command.txt') + f' -o uploads/{userid}/results.amrfinder'
+    print(f'Run {command}')
+    
 @app.route('/', methods=['POST','GET'])
 def hello_pubsub():
     """
@@ -56,12 +107,10 @@ def hello_pubsub():
 
         pubsub_message = envelope['message']
         data = pubsub_message.get('data', '')
-#        log_message('data', str(request.data) + "\n\ndata=" + data
-#            + "\n\n" + str(base64.b64decode(data)))
-
         data = base64.b64decode(data).decode('utf-8')
-        log_message('data2', str(request.data) + "\n\ndecoded data=" + data)
-        
+        log_message('data', str(request.data) + "\n\ndecoded data=" + data)
+        run_amrfinder(data)
+
         return ('', 204)
     except Exception as e:
         print(f"An error occurred: {e}")

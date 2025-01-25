@@ -174,7 +174,7 @@ def analyze_file():
 
     print ("Now sending pubsub message")
     # Trigger analysis via pubsub message
-    send_pubsub_message("{'submission_id'='" + user_id + "'")
+    send_pubsub_message('{submission_id":"' + user_id + '"}')
         # Now you can trigger your analysis on GCS using the uploaded files
         # and the command.txt file.
 
@@ -230,7 +230,7 @@ def cleanup_uploads():
 
 def main():
     app.debug = True
-    app.run(port=int(os.environ.get('PORT', 80)))
+    app.run(port=int(os.environ.get('PORT', 8080)))
 
 if __name__ == "__main__":
     main()

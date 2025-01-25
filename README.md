@@ -313,5 +313,9 @@ gcloud pubsub subscriptions pull webamr-submitted --project=amrfinder --auto-ack
 Initial testing
 ```
 python -m venv .venv && source .venv/bin/activate
-python -m flask --app main run -p 9003
+python -m flask --app main run -p 8080
+
+# with docker
+docker run -p 8080:8080 webamr-backend
+curl -X POST -H "Content-type: application/json" -d @test.json http://localhost:8080
 ```
