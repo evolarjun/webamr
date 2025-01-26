@@ -4,12 +4,14 @@ import base64
 import datetime
 import random
 import string
-from google.cloud import storage
-
+import threading
+from google.cloud import storage, pubsub_v1
 from flask import Flask, request
 
 app = Flask(__name__)
 
+subscription_path = 'projects/amrfinder/topics/eventarc-us-east1-webamr-trigger-838'
+subscriber = pubsub_v1.SubscriberClient()
 
 def generate_random_string(length=5):
   """Generates a random string of specified length."""
@@ -138,9 +140,11 @@ def hello_pubsub():
         print("Got data from pubsub message")
         data = base64.b64decode(data).decode('utf-8')
         log_message('data', str(request.data) + "\n\ndecoded data=" + data)
-        run_amrfinder(data)
-        log_message('after-amr', "Ran AMRFinderPlus and returned from subroutine")
-
+        print(f'We spawn a new thread and return so the message gets acknowledged')
+        thread = threading.Thread(target=run_amrfinder, args=(data,))
+        thread.start()
+        #run_amrfinder(data)
+        log_message('after-amr', "Ran AMRFinderPlus in thread and returned from subroutine")
         return ('', 204)
     except Exception as e:
         print(f"An error occurred: {e}")

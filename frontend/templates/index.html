@@ -33,6 +33,7 @@
     </form>
     <div id="results">
     </div>
+    <div id="poll-results"></div>
 
     <script>
       const form = document.getElementById('upload-form');
@@ -40,6 +41,35 @@
       let timerInterval;      
       let elapsedTime = 0;      
 
+        function pollForResults(userId) {
+        const pollResultsDiv = document.getElementById('poll-results');
+        let pollInterval = setInterval(() => {
+            fetch(`/get-results/${userId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data && data.message) {
+                        // Only display the message content
+                        resultsDiv.innerHTML = `<p>${data.message}</p>`;
+                        clearInterval(pollInterval);
+                        // Add download button
+                        const downloadButton = document.createElement('button');
+                        downloadButton.textContent = 'Download Results';
+                        downloadButton.addEventListener('click', () => {
+                            downloadResults(userId); // Call downloadResults with userId
+                        });
+                        resultsDiv.appendChild(downloadButton);
+                    }
+                    else{
+                      pollResultsDiv.innerHTML = `<p>No result yet. Still Polling...</p>`;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error polling for results:', error);
+                    clearInterval(pollInterval); // Stop polling on error
+                });
+
+        }, 10000); // Poll every 10 seconds
+    }
       function validateForm() {
         const nucFile = form.elements['nuc_file'].files[0];
         const protFile = form.elements['prot_file'].files[0];
@@ -109,7 +139,7 @@
         .then(data => {
           // Display the results
           let minutes = Math.floor(elapsedTime / 60000);
-          let seconds = Math.floor((elapsedTime % 60000) / 1000);
+          let seconds = Math.floor((elapsedTime % 60000) / 1000);          
           let formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
           // alert(JSON.stringify(data))
           if (data.result.startsWith('error:')) {
@@ -119,14 +149,7 @@
             resultsDiv.innerHTML = `<p>Elapsed time: ${formattedTime}</p><p>Result: ${data.result}</p>`;
           }
 
-          // Add download button
-          const downloadButton = document.createElement('button');
-          downloadButton.textContent = 'Download Results';
-          downloadButton.addEventListener('click', () => {
-            downloadResults(data.user_id);
-          });
-          resultsDiv.appendChild(downloadButton);
-
+          pollForResults(data.user_id);
         })
         .catch(error => {
           // Stop the timer

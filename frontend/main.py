@@ -50,7 +50,7 @@ def tabulize(tab_delimited):
     Returns:
         A string containing the HTML table.
     """
-    lines = tab_delimited.strip().split('\n')
+    lines = tab_delimited.decode('utf-8').strip().split('\n')
     headers = lines[0].split('\t')
     rows = [line.split('\t') for line in lines[1:]]
     html = '<table><thead><tr>'
@@ -180,6 +180,23 @@ def analyze_file():
 
     # For now, return success and user_id
     return jsonify({'result': "Files uploaded successfully. Analysis will begin shortly.", 'user_id': user_id}), 200
+
+@app.route('/get-results/<user_id>', methods=['GET'])
+def return_results(user_id):
+    """Returns the results of the analysis if they're availble"""
+    # check for availability of the files in the cloud storage bucket webamr-output
+    bucket_name = 'webamr-output'
+    storage_client = storage.Client(project='amrfinder')
+    bucket = storage_client.bucket(bucket_name)
+    blob = bucket.blob(f'{user_id}/output.amrfinder')
+    if blob.exists():
+        print("File exists")
+        # grab the output for the web page
+        results = tabulize(blob.download_as_string())
+
+        return jsonify({'result': results, 'user_id': user_id}), 200
+    else:
+        return '', 204
 
 
 def run_amrfinder(command):

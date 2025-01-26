@@ -305,6 +305,7 @@ You Can test locally by copying the contents of the data-XXXX file message into
 test.json (making sure that the files pointed to by submission_id exist)
 I also create test.txt just so I know what I'm looking for.
 ```
+
 curl -v -X POST -H "Content-type: application/json" -d @test.json https://webamr-backend-901977498675.us-east1.run.app
 ```
 
@@ -335,3 +336,9 @@ Have not yet deployed this I'm currently using the test server to send the pubsu
 ## Current status as of Jan-25
 
 Back-end seems to work when running as a test, but it is failing when deployed. I need to confirm it's working locally then see if I can debug why it's failing when deployed. (Possibly RAM or some other issue is killing it)
+
+## Current status as of Jan 26
+
+1. Back-end works, but I still have the problem of pubsub messages timing out before they're acknowledged by the finishing of the cloud run job. I'm not sure how to handle that. I upped the acknowledgement timeout to its mask (600 secs / 10 minutes), but I'm not sure that worked. 
+
+2. Front-end is partially working locally. Still needs quite a bit of polish, but it waited until a job was done then put the HTML table at the bottom.
