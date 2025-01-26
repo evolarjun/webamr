@@ -267,7 +267,9 @@ docker push us-east1-docker.pkg.dev/amrfinder/webamr-backend/webamr-backend:$VER
 gcloud run deploy webamr-backend \
   --image us-east1-docker.pkg.dev/amrfinder/webamr-backend/webamr-backend:$VERSION \
   --region=us-east1 --platform=managed --project=amrfinder \
-  --allow-unauthenticated 
+  --allow-unauthenticated \
+  --cpu 2 \
+  --memory 4Gi 
 ```
 Set up trigger (?)
 ```
@@ -295,11 +297,19 @@ gcloud eventarc triggers delete events-pubsub-trigger --location=us-east1
 ### For debugging and testing
 ```
 # version should be the last published version
-build_and_deploy.sh 4.0.17
-gcloud pubsub topics publish webamr-trigger --project amrfinder --message="hello
+build_and_deploy.sh
  
 # check in bucket webamr-trigger for log files / messages
 ```
+You Can test locally by copying the contents of the data-XXXX file message into
+test.json (making sure that the files pointed to by submission_id exist)
+I also create test.txt just so I know what I'm looking for.
+```
+curl -v -X POST -H "Content-type: application/json" -d @test.json https://webamr-backend-901977498675.us-east1.run.app
+```
+
+Note that unsuccessfull runs of the backend will keep trying Clear out all messages by using the clearout subscripton and clicking PURGE MESSAGES
+
 ### Commandline pubsub
 ```
 gcloud pubsub topics publish webamr-trigger --project amrfinder --message="hello"
@@ -319,3 +329,9 @@ python -m flask --app main run -p 8080
 docker run -p 8080:8080 webamr-backend
 curl -X POST -H "Content-type: application/json" -d @test.json http://localhost:8080
 ```
+
+Have not yet deployed this I'm currently using the test server to send the pubsub messages and write to the cloud storage buckets. 
+
+## Current status as of Jan-25
+
+Back-end seems to work when running as a test, but it is failing when deployed. I need to confirm it's working locally then see if I can debug why it's failing when deployed. (Possibly RAM or some other issue is killing it)
