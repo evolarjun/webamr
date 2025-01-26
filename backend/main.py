@@ -21,7 +21,7 @@ def log_message(prefix, message):
     # I can't figure out the logging, so I'm going to try logging to a cloud storage file
     now = datetime.datetime.now()
     formatted_date_time = now.strftime("%Y-%m-%d-%H:%M:%S")
-    print(formatted_date_time)        
+    print(formatted_date_time + f'Logging to {prefix}-')
     bucket = 'webamr-trigger'
     blob_name = f'{prefix}-{formatted_date_time}-' + generate_random_string()
     storage_client = storage.Client()
@@ -117,6 +117,7 @@ def hello_pubsub():
     if request.method == 'GET':
         return "This is a GET request"
     try:
+        print("Got here request-method is POST")
         envelope = request.get_json()
  #       log_message('envelope', "POST received with\n" + str(request.data) + "\n\n"
  #           + "envelope=" + str() + "\n\n")
@@ -128,13 +129,13 @@ def hello_pubsub():
             msg = 'invalid Pub/Sub message format'
             print(f'error: {msg}')
             return f'Bad Request: {msg}', 400
+        pubsub_message = envelope['message']
+        data = pubsub_message.get('data', '')
         if not data:
             msg = 'empty Pub/Sub message'
             print(f'error: {msg}')
             return f'Bad Request: {msg}', 400
-
-        pubsub_message = envelope['message']
-        data = pubsub_message.get('data', '')
+        print("Got data from pubsub message")
         data = base64.b64decode(data).decode('utf-8')
         log_message('data', str(request.data) + "\n\ndecoded data=" + data)
         run_amrfinder(data)
