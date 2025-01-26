@@ -339,6 +339,8 @@ Back-end seems to work when running as a test, but it is failing when deployed. 
 
 ## Current status as of Jan 26
 
-1. Back-end works, but I still have the problem of pubsub messages timing out before they're acknowledged by the finishing of the cloud run job. I'm not sure how to handle that. I upped the acknowledgement timeout to its mask (600 secs / 10 minutes), but I'm not sure that worked. 
+1. Back-end works, but I still have the problem of pubsub messages timing out before they're acknowledged by the finishing of the cloud run job. I'm not sure how to handle that. I upped the acknowledgement timeout to its mask (600 secs / 10 minutes), but I'm not sure that worked. If I can't figure it out I should have it detect that the job is complete and just return success quickly.
+
+It means everything gets run at least twice, but I can set the retry to max and maybe that's ok? Or I could have it detect how long it has been in process? Not sure still. Maybe use a database? This trigger thing isn't working very well. I could also create a cloud function shim(?).
 
 2. Front-end is partially working locally. Still needs quite a bit of polish, but it waited until a job was done then put the HTML table at the bottom.
