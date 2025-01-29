@@ -256,7 +256,10 @@ Back-end redo, working on using pubsub message to trigger processing.
 
 Work in `backend/` done.
 
-### Deploy
+### Deploy backend
+
+Now just use backend/build_and_deploy.sh
+
 ```
 VERSION=0.4.7
 docker build -t webamr-backend -t webamr-backend:$VERSION \
@@ -344,3 +347,11 @@ Back-end seems to work when running as a test, but it is failing when deployed. 
 It means everything gets run at least twice, but I can set the retry to max and maybe that's ok? Or I could have it detect how long it has been in process? Not sure still. Maybe use a database? This trigger thing isn't working very well. I could also create a cloud function shim(?).
 
 2. Front-end is partially working locally. Still needs quite a bit of polish, but it waited until a job was done then put the HTML table at the bottom.
+
+## Current status as of Jan 29
+
+1. Revised back-end to create a timestamp file when it starts processing and skip running if the timestamp is too recent.
+
+2. Has not been tested at all...
+
+3. Front end still needs work
