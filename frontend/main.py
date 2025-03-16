@@ -10,8 +10,10 @@ import time
 from datetime import datetime, timedelta
 from google.cloud import storage, pubsub_v1
 
+# set values to environment variables else listed here
 UPLOAD_FOLDER_BASE = os.environ.get('UPLOAD_FOLDER_BASE', 'uploads')
 RESULTS_FOLDER_BASE = os.environ.get('RESULTS_FOLDER_BASE', 'results')
+# base bucket name for app
 BUCKET_NAME = os.environ.get('BUCKET_NAME', 'webamr') 
 
 #app_dir = os.path.dirname(os.path.abspath(__file__))

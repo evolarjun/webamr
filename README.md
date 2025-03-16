@@ -355,3 +355,17 @@ It means everything gets run at least twice, but I can set the retry to max and 
 2. Has not been tested at all...
 
 3. Front end still needs work
+
+## Current status as of March 16
+
+1. Not working, backend not triggered, consider swithcing to a persistant server that spawns cloud run jobs
+    - Test backend using `backend/test_local.sh`
+    - Added test for 
+2. Do more testing
+3. Need to document how it works because I keep forgetting
+4. Need to create a service account to limit security risks
+5. Added automatic deletion of files > 14-days old, could reduce number
+6. Fix front-end
+7. Figure out logging and limit resource use
+8. Figure out billing and set billing limit notifications
+9. Clean up code and make improvements
