@@ -1,3 +1,38 @@
+## Application Overview
+
+The application's purpose is to identify antimicrobial resistance (AMR) genes using the AMRFinderPlus software. It consists of two main components: a web frontend and a backend processing service.
+
+### Frontend
+
+The frontend is responsible for user interaction and managing the submission process. Its key responsibilities include:
+
+*   Allowing users to upload sequence data, which can be nucleotide or protein files. Optionally, users can also upload GFF files.
+*   Allowing users to select the target organism for the analysis.
+*   Submitting the uploaded data to a designated Google Cloud Storage (GCS) bucket (Input Bucket).
+*   Triggering the backend processing by publishing a message to a Pub/Sub topic.
+*   Polling for the analysis results from a separate GCS bucket (Output Bucket) and displaying them to the user.
+
+### Backend
+
+The backend service, typically running on Cloud Run, handles the core analysis tasks. Its main responsibilities are:
+
+*   Listening for new messages on a specific Pub/Sub subscription, which indicate new data submissions.
+*   Retrieving the submitted sequence data from the GCS Input Bucket.
+*   Executing the AMRFinderPlus software on the retrieved data.
+*   Storing the analysis results (output from AMRFinderPlus) back into the GCS Output Bucket.
+
+### Simplified Data Flow
+
+The overall data flow can be summarized as follows:
+
+1.  **User:** Interacts with the Frontend UI to upload data and specify parameters.
+2.  **Frontend UI:** Uploads the data to the **GCS (Input Bucket)**.
+3.  **Frontend UI:** Sends a **Pub/Sub notification** to a topic.
+4.  **Backend Service:** Receives the notification from its Pub/Sub subscription.
+5.  **Backend Service:** Retrieves data from the **GCS (Input Bucket)**.
+6.  **Backend Service:** Executes AMRFinderPlus and stores results in the **GCS (Output Bucket)**.
+7.  **Frontend UI (Results Display):** Polls the **GCS (Output Bucket)** and displays the results to the user.
+
 
 # Current status
 
