@@ -4,7 +4,7 @@
 flowchart TD
     User([User / Browser])
     
-    subgraph Frontend [React SPA]
+    subgraph Frontend [Flask Web App]
         UI[Upload UI & Param Controls]
         Dashboard[Results Dashboard]
     end
@@ -37,20 +37,20 @@ flowchart TD
     UI -->|1. Request Signed URL| API_Upload
     API_Upload -.->|Returns Signed URL| UI
     
-    UI ==>|2. Direct PUT Upload| BucketIn
+    UI == 2. Direct PUT Upload ==> BucketIn
     
     UI -->|3. Submit Job (GCS URI + Params)| API_Submit
     API_Submit -->|Update Status: Pending| DB
     API_Submit -->|4. Publish Job Msg| Queue
     API_Submit -.->|Returns Job ID| UI
     
-    Queue ==>|5. Pull Job Msg| Worker
+    Queue == 5. Pull Job Msg ==> Worker
     Worker -->|Update Status: Processing| DB
     Worker -.->|6. Download FASTA| BucketIn
     
     Worker -->|7. Execute AMRFinderPlus| Worker
     
-    Worker ==>|8. Upload TSV Result| BucketOut
+    Worker == 8. Upload TSV Result ==> BucketOut
     Worker -->|Update Status: Completed| DB
     
     UI -->|Poll Status| API_Status
