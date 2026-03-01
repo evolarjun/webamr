@@ -1,42 +1,51 @@
-css
 table {
-    border-collapse: collapse;
-    width: 100%;
-    margin-bottom: 20px;
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 20px;
 }
 
-th, td {
-    border: 1px solid #ddd;
-    padding: 8px;
-    text-align: left;
+th,
+td {
+  border: 1px solid #ddd;
+  padding: 8px;
+  text-align: left;
 }
 
 th {
-    background-color: #f2f2f2;
+  background-color: #f2f2f2;
 }
 
 tr:nth-child(even) {
-    background-color: #f9f9f9;
+  background-color: #f9f9f9;
 }
 
 tr:hover {
-    background-color: #e0e0e0;
-}
-body {
-    font-family: sans-serif;
-    margin: 20px;
-    line-height: 1.6;
+  background-color: #e0e0e0;
 }
 
-h1, h2, h3 {
-    color: #333;
-    margin-bottom: 10px;
+body {
+  font-family: sans-serif;
+  margin: 20px;
+  line-height: 1.6;
 }
+
+h1,
+h2,
+h3 {
+  color: #333;
+  margin-bottom: 10px;
+}
+
 a {
-    color: #007BFF;
-    text-decoration: none;
+  color: #007BFF;
+  text-decoration: none;
 }
 
 a:hover {
-    text-decoration: underline;
+  text-decoration: underline;
+}
+
+.error {
+  color: red;
+  font-weight: bold;
 }

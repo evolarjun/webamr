@@ -2,29 +2,57 @@
 
 This guide assumes you have the Google Cloud CLI (`gcloud`) installed and authenticated, and a GCP project ready.
 
+> **Command Frequency Legend:**
+> - 🟢 **[One-Time Setup]**: Commands only needed the very first time you set up the environment.
+> - 🔄 **[Run Every Update]**: Commands to re-run whenever you update the codebase and deploy a new version.
+> - 🛠️ **[Session Setup]**: Commands to set variables whenever you open a new terminal session for deployment.
+
 ## 1. Version Control (GitHub)
 
 The local code has been initialized as a Git repository. To push it to GitHub:
 
 1. Create a new repository on GitHub.
 2. Link your local repository to GitHub and push:
+
+🟢 **[One-Time Setup]**
 ```bash
 git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
 git branch -M main
+```
+
+🔄 **[Run Every Update]**
+```bash
+git add .
+git commit -m "Your commit message"
 git push -u origin main
 ```
 
 ## 2. GCP Infrastructure Setup
 
-Set your project variables:
+Set your project variables and application environment variables:
+
+🛠️ **[Session Setup]**
 ```bash
+# General GCP Variables
 PROJECT_ID="your-project-id"
 REGION="us-central1"
+
+# Application Setup Variables (Environment Variables)
+INPUT_BUCKET="amr-input-bucket-${PROJECT_ID}"
+OUTPUT_BUCKET="amr-output-bucket-${PROJECT_ID}"
+TOPIC_ID="amr-jobs-topic"
+
+# Security setup: A comma-separated list of allowed origin domains for the backend CORS policy
+ALLOWED_ORIGINS="https://your-frontend-domain.com,http://localhost:5173" 
+API_KEY="your-super-secret-production-random-api-key"
+
 gcloud config set project $PROJECT_ID
 ```
 
 ### Enable APIs
 Enable the necessary GCP APIs:
+
+🟢 **[One-Time Setup]**
 ```bash
 gcloud services enable \
   run.googleapis.com \
@@ -37,6 +65,8 @@ gcloud services enable \
 
 ### Storage Buckets
 Create the input and output Cloud Storage buckets:
+
+🟢 **[One-Time Setup]**
 ```bash
 gsutil mb -l $REGION gs://amr-input-bucket-${PROJECT_ID}
 gsutil mb -l $REGION gs://amr-output-bucket-${PROJECT_ID}
@@ -54,12 +84,16 @@ Configure CORS on the input bucket to allow direct uploads from the browser. Cre
 ]
 ```
 Apply the CORS policy:
+
+🟢 **[One-Time Setup]**
 ```bash
 gsutil cors set cors.json gs://amr-input-bucket-${PROJECT_ID}
 ```
 
 ### Pub/Sub
 Create the topic and subscription for the job queue:
+
+🟢 **[One-Time Setup]**
 ```bash
 gcloud pubsub topics create amr-jobs-topic
 gcloud pubsub subscriptions create amr-jobs-sub --topic=amr-jobs-topic --ack-deadline=600
@@ -68,61 +102,141 @@ gcloud pubsub subscriptions create amr-jobs-sub --topic=amr-jobs-topic --ack-dea
 
 ### Firestore
 Initialize Firestore in Native mode. You can do this through the GCP Console (Firestore section) or via CLI:
+
+🟢 **[One-Time Setup]**
 ```bash
 gcloud firestore databases create --location=$REGION
 ```
 
 ## 3. Deploying the Backend (FastAPI)
 
-We will deploy the backend to Google Cloud Run. First, create a `Dockerfile` for the backend:
-
-**`backend/Dockerfile`**:
-```dockerfile
-FROM python:3.9-slim
-WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY main.py .
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
-```
+The backend `Dockerfile` is at `backend/Dockerfile`. It is a lightweight `python:3.11-slim-buster` container running `uvicorn` — it does **not** include AMRFinderPlus or any bioinformatics tools (those belong in the worker).
 
 Deploy to Cloud Run:
+
+🔄 **[Run Every Update]** *(whenever backend code changes)*
 ```bash
 cd backend
 gcloud run deploy amr-backend \
   --source . \
   --region $REGION \
   --allow-unauthenticated \
-  --set-env-vars PROJECT_ID=$PROJECT_ID,INPUT_BUCKET=amr-input-bucket-${PROJECT_ID},TOPIC_ID=amr-jobs-topic
+  --set-env-vars PROJECT_ID=$PROJECT_ID,INPUT_BUCKET=$INPUT_BUCKET,TOPIC_ID=$TOPIC_ID,ALLOWED_ORIGINS=$ALLOWED_ORIGINS,API_KEY=$API_KEY
 ```
 
 ## 4. Deploying the Worker
 
-The worker runs as a continuous background process. We can deploy it to a Compute Engine VM, or a background Cloud Run service, or Google Kubernetes Engine (GKE).
+The worker is a Flask HTTP service. Rather than pulling from Pub/Sub itself, it
+receives job messages as **HTTP POST requests pushed by Pub/Sub** directly to
+its Cloud Run URL. Cloud Run scales up an instance per job and back to zero
+when idle — no VM needed.
 
-For simplicity, let's deploy it to a background Cloud Run Service (or a small Compute Engine instance). Let's use Artifact Registry to build and store the Docker image:
+### 4a. Build and push the Docker image
 
+🟢 **[One-Time Setup]**
 ```bash
 gcloud artifacts repositories create amr-repo --repository-format=docker --location=$REGION
-gcloud builds submit --tag ${REGION}-docker.pkg.dev/${PROJECT_ID}/amr-repo/amr-worker ./worker
 ```
 
-*Option A: Compute Engine VM (Recommended for long-running bioinformatics jobs)*
-Create a VM with container support:
+🔄 **[Run Every Update]** *(whenever worker code changes)*
 ```bash
-gcloud compute instances create-with-container amr-worker-vm \
-  --zone=${REGION}-a \
-  --machine-type=e2-standard-4 \
-  --scopes=cloud-platform \
-  --container-image=${REGION}-docker.pkg.dev/${PROJECT_ID}/amr-repo/amr-worker \
-  --container-env=PROJECT_ID=$PROJECT_ID,SUBSCRIPTION_ID=amr-jobs-sub,OUTPUT_BUCKET=amr-output-bucket-${PROJECT_ID}
+# Cloud Build submits the worker/ directory and pushes to Artifact Registry
+gcloud builds submit \
+  --tag ${REGION}-docker.pkg.dev/${PROJECT_ID}/amr-repo/amr-worker \
+  ./worker
 ```
+
+### 4b. Deploy as a Cloud Run service
+
+🔄 **[Run Every Update]**
+```bash
+gcloud run deploy amr-worker \
+  --image ${REGION}-docker.pkg.dev/${PROJECT_ID}/amr-repo/amr-worker \
+  --region $REGION \
+  --no-allow-unauthenticated \
+  --timeout 3600 \
+  --memory 4Gi \
+  --cpu 2 \
+  --set-env-vars PROJECT_ID=$PROJECT_ID,OUTPUT_BUCKET=$OUTPUT_BUCKET
+
+# Save the deployed URL for the next step
+WORKER_URL=$(gcloud run services describe amr-worker \
+  --region $REGION --format='value(status.url)')
+```
+
+`--no-allow-unauthenticated` restricts the endpoint so only Pub/Sub (via its
+service account) can invoke it — not arbitrary HTTP clients.
+
+### 4c. Create a Pub/Sub push subscription pointing at the worker
+
+🟢 **[One-Time Setup]**
+```bash
+# Grant Pub/Sub permission to invoke the Cloud Run service
+gcloud run services add-iam-policy-binding amr-worker \
+  --region $REGION \
+  --member="serviceAccount:service-$(gcloud projects describe $PROJECT_ID \
+      --format='value(projectNumber)')@gcp-sa-pubsub.iam.gserviceaccount.com" \
+  --role="roles/run.invoker"
+
+# Create the push subscription — Pub/Sub will POST each job message to /
+gcloud pubsub subscriptions create amr-jobs-sub \
+  --topic amr-jobs-topic \
+  --push-endpoint=${WORKER_URL}/ \
+  --push-auth-service-account=service-$(gcloud projects describe $PROJECT_ID \
+      --format='value(projectNumber)')@gcp-sa-pubsub.iam.gserviceaccount.com \
+  --ack-deadline=600 \
+  --min-retry-delay=10s \
+  --max-retry-delay=600s
+```
+
+*(Note: if you already created `amr-jobs-sub` in step 2 as a pull subscription,
+delete it first: `gcloud pubsub subscriptions delete amr-jobs-sub`)*
 
 ## 5. Frontend Setup
 
-Move into the frontend folder, set up your preferred framework (e.g., Vite/React), and embed the `AMRFinderPlusComponent.tsx`.
+The frontend is a Flask application located in `frontend/`. It serves the HTML UI from `frontend/templates/index.html` and handles file uploads and job submission directly.
 
-Remember to update the API URLs in the component from `http://localhost:8000` to your deployed Cloud Run backend URL!
+Before deploying, update the backend API URL inside `frontend/main.py` (the `send_pubsub_message` function and related GCS calls) to point to your deployed Cloud Run services.
+
+### 5a. Build and push the Frontend Docker image
+
+From the `frontend` directory, download the required AMRFinderPlus resource files and submit the build:
+
+🔄 **[Run Every Update]** *(whenever frontend code changes)*
+```bash
+cd frontend
+
+# Download required datatables for the frontend UI
+curl -s -o database_version.txt https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/version.txt
+curl -s -O https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/taxgroup.tsv
+
+# Build and push the docker image
+gcloud builds submit \
+  --tag ${REGION}-docker.pkg.dev/${PROJECT_ID}/amr-repo/amr-frontend \
+  .
+```
+
+### 5b. Deploy Frontend as a Cloud Run service
+
+🔄 **[Run Every Update]**
+```bash
+gcloud run deploy amr-frontend \
+  --image ${REGION}-docker.pkg.dev/${PROJECT_ID}/amr-repo/amr-frontend \
+  --region $REGION \
+  --allow-unauthenticated \
+  --port 80 \
+  --set-env-vars PROJECT_ID=$PROJECT_ID
+```
+*(Note: the container listens on port 80 as defined in its Dockerfile, so we specify `--port 80`)*
+
+### Running Local Frontend
+
+To run locally (e.g. for testing UI modifications before pushing):
+```bash
+cd frontend
+source .venv/bin/activate
+python -m flask --app main run -p 8080
+```
 
 ## Local Testing & Development
 
@@ -169,32 +283,38 @@ uvicorn main:app --reload
 ```
 *The API will be available at `http://localhost:8000`*
 
-### 4. Run the Worker Locally
+### 4. Hybrid Testing (Local AMRFinderPlus Worker with Real GCP)
 
-You can run the python worker locally if you have `amrfinder` installed on your Mac, or better yet, run the Docker container locally and point it to your GCP resources/emulators.
+To test the full cloud architecture without paying for a Compute Engine VM, deploy the frontend and backend to GCP (or run them locally pointing to GCP), but run the computationally heavy AMRFinderPlus worker locally on your own machine using Docker. 
 
-```bash
-cd worker
-docker build -t amr-worker-local .
+This connects your local container natively to the real Google Cloud Pub/Sub queue, Cloud Storage, and Firestore.
 
-# Run the docker container locally, injecting your GCP credentials and emulator host
-docker run -it \
-  -e PROJECT_ID="your-project-id" \
-  -e SUBSCRIPTION_ID="amr-jobs-sub" \
-  -e OUTPUT_BUCKET="amr-output-bucket-your-project-id" \
-  -e GOOGLE_APPLICATION_CREDENTIALS=/tmp/keys/key.json \
-  -e PUBSUB_EMULATOR_HOST=host.docker.internal:8085 \
-  -v ~/.config/gcloud/application_default_credentials.json:/tmp/keys/key.json \
-  amr-worker-local
-```
+1.  Make sure you are authenticated locally with GCP so Docker can borrow your credentials:
+    ```bash
+    gcloud auth application-default login --project="your-project-id"
+    ```
+
+2.  Build and run the worker container:
+    ```bash
+    cd worker
+    docker build -t amr-worker-local .
+
+    # Run the docker container locally, injecting your GCP credentials so it can talk to your live project
+    docker run -it \
+      -e PROJECT_ID="your-project-id" \
+      -e SUBSCRIPTION_ID="amr-jobs-sub" \
+      -e OUTPUT_BUCKET="amr-output-bucket-your-project-id" \
+      -e GOOGLE_APPLICATION_CREDENTIALS=/tmp/keys/key.json \
+      -v ~/.config/gcloud/application_default_credentials.json:/tmp/keys/key.json \
+      amr-worker-local
+    ```
 
 ### 5. Run the Frontend
 
-If you drop the `AMRFinderPlusComponent.tsx` into a fresh Vite project (`npm create vite@latest frontend -- --template react-ts`), you can just run:
-
 ```bash
 cd frontend
-npm install
-npm run dev
+source .venv/bin/activate
+python -m flask --app main run -p 8080
 ```
-It will hit your local `localhost:8000` FastAPI server!
+
+The Flask app will be available at `http://localhost:8080/`.

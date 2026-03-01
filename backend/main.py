@@ -3,7 +3,8 @@ import uuid
 import json
 from datetime import timedelta
 from typing import Optional
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Security
+from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from google.cloud import storage, pubsub_v1, firestore
@@ -11,9 +12,12 @@ from google.cloud import storage, pubsub_v1, firestore
 app = FastAPI(title="AMRFinderPlus API")
 
 # Setup CORS for the frontend application
+allowed_origins_str = os.environ.get("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173,http://localhost:8080")
+allowed_origins = [origin.strip() for origin in allowed_origins_str.split(",")]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Should be restricted in production
+    allow_origins=allowed_origins, # Restricted via environment variables
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -22,6 +26,17 @@ app.add_middleware(
 PROJECT_ID = os.environ.get("PROJECT_ID", "my-gcp-project")
 INPUT_BUCKET = os.environ.get("INPUT_BUCKET", "amr-input-bucket")
 TOPIC_ID = os.environ.get("TOPIC_ID", "amr-jobs-topic")
+API_KEY = os.environ.get("API_KEY", "dev-secret-key") # Must be overridden in production
+
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
+
+# Security
+api_key_header = APIKeyHeader(name="x-api-key", auto_error=True)
+
+def verify_api_key(api_key: str = Security(api_key_header)):
+    if api_key != API_KEY:
+        raise HTTPException(status_code=403, detail="Invalid or missing API Key")
+    return api_key
 
 # GCP Clients
 storage_client = storage.Client(project=PROJECT_ID)
@@ -40,7 +55,7 @@ class JobSubmitRequest(BaseModel):
     coverage_min: Optional[float] = None
 
 @app.post("/api/upload-url")
-def generate_upload_url(req: UploadUrlRequest):
+def generate_upload_url(req: UploadUrlRequest, api_key: str = Security(verify_api_key)):
     """Generates a v4 signed URL for uploading to GCS directly from the browser."""
     # Generate a unique object name to prevent collisions
     blob_name = f"uploads/{uuid.uuid4()}-{req.filename}"
@@ -57,12 +72,24 @@ def generate_upload_url(req: UploadUrlRequest):
     return {
         "signed_url": url,
         "gcs_uri": f"gs://{INPUT_BUCKET}/{blob_name}",
-        "object_name": blob_name
+        "object_name": blob_name,
+        "max_upload_bytes": MAX_UPLOAD_BYTES,
     }
 
 @app.post("/api/submit-job")
-def submit_job(req: JobSubmitRequest):
+def submit_job(req: JobSubmitRequest, api_key: str = Security(verify_api_key)):
     """Submits the job to Pub/Sub and records it in Firestore."""
+    # Verify the uploaded file size before doing anything else.
+    parts = req.gcs_uri.replace("gs://", "").split("/", 1)
+    blob = storage_client.bucket(parts[0]).blob(parts[1])
+    blob.reload()  # Fetches metadata (including blob.size) from GCS
+    if blob.size > MAX_UPLOAD_BYTES:
+        blob.delete()  # Remove the oversized file so it doesn't linger
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large: {blob.size} bytes. Maximum allowed size is {MAX_UPLOAD_BYTES} bytes (10 MB)."
+        )
+
     job_id = str(uuid.uuid4())
 
     # 1. Update DB state to pending

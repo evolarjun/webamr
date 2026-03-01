@@ -1,7 +1,10 @@
 """
 Unit tests for the FastAPI backend (backend/main.py).
 GCP clients (storage, pubsub, firestore) are patched so no real GCP credentials are needed.
+The default API key ('dev-secret-key') is sent via the x-api-key header in every request.
 """
+
+API_KEY_HEADERS = {"x-api-key": "dev-secret-key"}
 import json
 import sys
 import os
@@ -48,6 +51,13 @@ def _make_signed_url_blob():
     return mock_blob
 
 
+def _make_submit_blob(size_bytes=1024):
+    """Return a mock blob for submit-job, with a configurable size attribute."""
+    mock_blob = MagicMock()
+    mock_blob.size = size_bytes
+    return mock_blob
+
+
 # ---------------------------------------------------------------------------
 # Tests: /api/upload-url
 # ---------------------------------------------------------------------------
@@ -58,21 +68,26 @@ class TestUploadUrl:
         MOCK_STORAGE.bucket.return_value.blob.return_value = _make_signed_url_blob()
 
     def test_returns_signed_url(self):
-        resp = client.post("/api/upload-url", json={"filename": "sample.fasta"})
+        resp = client.post("/api/upload-url", json={"filename": "sample.fasta"}, headers=API_KEY_HEADERS)
         assert resp.status_code == 200
         data = resp.json()
         assert "signed_url" in data
         assert data["signed_url"].startswith("https://storage.googleapis.com")
 
     def test_returns_gcs_uri(self):
-        resp = client.post("/api/upload-url", json={"filename": "sample.fasta"})
+        resp = client.post("/api/upload-url", json={"filename": "sample.fasta"}, headers=API_KEY_HEADERS)
         data = resp.json()
         assert "gcs_uri" in data
         assert data["gcs_uri"].startswith("gs://")
 
+    def test_returns_max_upload_bytes(self):
+        resp = client.post("/api/upload-url", json={"filename": "sample.fasta"}, headers=API_KEY_HEADERS)
+        data = resp.json()
+        assert data["max_upload_bytes"] == 10 * 1024 * 1024
+
     def test_missing_filename_returns_422(self):
         """Pydantic validation should reject a body with no filename."""
-        resp = client.post("/api/upload-url", json={})
+        resp = client.post("/api/upload-url", json={}, headers=API_KEY_HEADERS)
         assert resp.status_code == 422
 
 
@@ -88,13 +103,15 @@ class TestSubmitJob:
         mock_future = MagicMock()
         mock_future.result.return_value = "msg-id-123"
         MOCK_PUBLISHER.publish.return_value = mock_future
+        # Default: a small, valid file (1 KB)
+        MOCK_STORAGE.bucket.return_value.blob.return_value = _make_submit_blob(size_bytes=1024)
 
     def _post_job(self, **extra):
         payload = {
             "gcs_uri": "gs://amr-input-bucket/uploads/test-uuid-sample.fasta",
             **extra,
         }
-        return client.post("/api/submit-job", json=payload)
+        return client.post("/api/submit-job", json=payload, headers=API_KEY_HEADERS)
 
     def test_returns_job_id_and_pending_status(self):
         resp = self._post_job()
@@ -135,7 +152,7 @@ class TestSubmitJob:
         assert resp.status_code == 200
 
     def test_missing_gcs_uri_returns_422(self):
-        resp = client.post("/api/submit-job", json={})
+        resp = client.post("/api/submit-job", json={}, headers=API_KEY_HEADERS)
         assert resp.status_code == 422
 
     def test_pubsub_failure_returns_500(self):
@@ -144,6 +161,29 @@ class TestSubmitJob:
         assert resp.status_code == 500
         # Reset for future tests
         MOCK_PUBLISHER.publish.side_effect = None
+
+    def test_oversized_file_returns_413(self):
+        """Files exceeding 10 MB must be rejected before publishing to Pub/Sub."""
+        oversized_blob = _make_submit_blob(size_bytes=11 * 1024 * 1024)  # 11 MB
+        MOCK_STORAGE.bucket.return_value.blob.return_value = oversized_blob
+        resp = self._post_job()
+        assert resp.status_code == 413
+        assert "too large" in resp.json()["detail"].lower()
+
+    def test_oversized_file_deletes_blob(self):
+        """The oversized blob must be deleted from GCS, not left in the bucket."""
+        oversized_blob = _make_submit_blob(size_bytes=11 * 1024 * 1024)
+        MOCK_STORAGE.bucket.return_value.blob.return_value = oversized_blob
+        self._post_job()
+        oversized_blob.delete.assert_called_once()
+
+    def test_oversized_file_does_not_publish(self):
+        """Pub/Sub must not receive a message for an oversized file."""
+        MOCK_PUBLISHER.publish.reset_mock()
+        oversized_blob = _make_submit_blob(size_bytes=11 * 1024 * 1024)
+        MOCK_STORAGE.bucket.return_value.blob.return_value = oversized_blob
+        self._post_job()
+        MOCK_PUBLISHER.publish.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

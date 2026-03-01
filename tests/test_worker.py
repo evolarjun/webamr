@@ -1,16 +1,22 @@
 """
-Unit tests for the async worker (worker/worker.py).
-All GCP clients and subprocess calls are patched so no real GCP or amrfinder binary is needed.
+Unit tests for the Pub/Sub push worker (worker/worker.py).
+All GCP clients and subprocess calls are patched so no real GCP or
+amrfinder binary is needed.
 """
+import base64
+import json
 import os
 import sys
-from unittest.mock import MagicMock, patch, mock_open, call
+from unittest.mock import MagicMock, patch
+
 import pytest
 
-# Patch GCP constructors before importing worker
+# ---------------------------------------------------------------------------
+# Patch GCP client constructors BEFORE importing worker so module-level
+# instantiation doesn't try to hit real GCP.
+# ---------------------------------------------------------------------------
 patchers = [
     patch("google.cloud.storage.Client", return_value=MagicMock()),
-    patch("google.cloud.pubsub_v1.SubscriberClient", return_value=MagicMock()),
     patch("google.cloud.firestore.Client", return_value=MagicMock()),
 ]
 for p in patchers:
@@ -18,6 +24,29 @@ for p in patchers:
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "worker"))
 import worker  # noqa: E402
+
+# Flask test client
+flask_client = worker.app.test_client()
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _make_push_body(job_id="job-abc", gcs_uri="gs://bucket/uploads/in.fasta", params=None):
+    """Build a Pub/Sub push envelope as Cloud Run would receive it."""
+    payload = json.dumps({
+        "job_id": job_id,
+        "gcs_uri": gcs_uri,
+        "parameters": params or {},
+    }).encode("utf-8")
+    return {
+        "message": {
+            "data": base64.b64encode(payload).decode("utf-8"),
+            "messageId": "test-msg-id",
+        },
+        "subscription": "projects/test-project/subscriptions/amr-jobs-sub",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -114,42 +143,38 @@ class TestRunAmrfinder:
 
 
 # ---------------------------------------------------------------------------
-# Tests: callback (the Pub/Sub message handler)
+# Tests: handle_pubsub_push (the Cloud Run HTTP endpoint)
 # ---------------------------------------------------------------------------
 
-class TestCallback:
-    def _make_message(self, job_id="job-abc", gcs_uri="gs://bucket/uploads/in.fasta", params=None):
-        import json
-        msg = MagicMock()
-        msg.data = json.dumps({
-            "job_id": job_id,
-            "gcs_uri": gcs_uri,
-            "parameters": params or {},
-        }).encode("utf-8")
-        return msg
+class TestHandlePubsubPush:
+    def setup_method(self):
+        worker.db.collection.return_value.document.return_value = MagicMock()
+
+    def test_missing_envelope_returns_400(self):
+        resp = flask_client.post("/", json={})
+        assert resp.status_code == 400
+
+    def test_missing_message_key_returns_400(self):
+        resp = flask_client.post("/", json={"subscription": "projects/x/subscriptions/y"})
+        assert resp.status_code == 400
 
     @patch("worker.upload_blob", return_value="gs://output/results/job-abc.tsv")
     @patch("worker.run_amrfinder")
     @patch("worker.download_blob")
-    def test_successful_job_acks_message(self, mock_dl, mock_run, mock_ul):
+    def test_successful_job_returns_200(self, mock_dl, mock_run, mock_ul):
         mock_run.return_value = ""
-        msg = self._make_message()
-        # Set up firestore mock
-        worker.db.collection.return_value.document.return_value = MagicMock()
-
-        worker.callback(msg)
-        msg.ack.assert_called_once()
+        resp = flask_client.post("/", json=_make_push_body())
+        assert resp.status_code == 200
 
     @patch("worker.upload_blob", return_value="gs://output/results/job-abc.tsv")
     @patch("worker.run_amrfinder")
     @patch("worker.download_blob")
     def test_successful_job_updates_status_to_completed(self, mock_dl, mock_run, mock_ul):
         mock_run.return_value = ""
-        msg = self._make_message()
         mock_doc = MagicMock()
         worker.db.collection.return_value.document.return_value = mock_doc
 
-        worker.callback(msg)
+        flask_client.post("/", json=_make_push_body(job_id="job-xyz"))
 
         update_calls = [str(c) for c in mock_doc.update.call_args_list]
         assert any("Completed" in s for s in update_calls)
@@ -157,23 +182,24 @@ class TestCallback:
     @patch("worker.run_amrfinder", side_effect=Exception("amrfinder crashed"))
     @patch("worker.download_blob")
     def test_failed_job_updates_status_to_failed(self, mock_dl, mock_run):
-        msg = self._make_message()
         mock_doc = MagicMock()
         worker.db.collection.return_value.document.return_value = mock_doc
 
-        worker.callback(msg)
+        flask_client.post("/", json=_make_push_body())
 
         update_calls = [str(c) for c in mock_doc.update.call_args_list]
         assert any("Failed" in s for s in update_calls)
 
     @patch("worker.run_amrfinder", side_effect=Exception("crash"))
     @patch("worker.download_blob")
-    def test_failed_job_still_acks_message(self, mock_dl, mock_run):
-        """Even on failure, the message must be ack'd to prevent redelivery loops."""
-        msg = self._make_message()
-        worker.db.collection.return_value.document.return_value = MagicMock()
-        worker.callback(msg)
-        msg.ack.assert_called_once()
+    def test_failed_job_still_returns_200(self, mock_dl, mock_run):
+        """
+        Even on AMRFinderPlus failure we return HTTP 200.
+        Returning non-200 would cause Pub/Sub to redeliver infinitely.
+        The error is recorded in Firestore instead.
+        """
+        resp = flask_client.post("/", json=_make_push_body())
+        assert resp.status_code == 200
 
     @patch("worker.upload_blob", return_value="gs://output/results/job-abc.tsv")
     @patch("worker.run_amrfinder")
@@ -182,10 +208,7 @@ class TestCallback:
     @patch("worker.os.remove")
     def test_tmp_files_cleaned_up(self, mock_remove, mock_exists, mock_dl, mock_run, mock_ul):
         mock_run.return_value = ""
-        msg = self._make_message(job_id="job-abc")
-        worker.db.collection.return_value.document.return_value = MagicMock()
-
-        worker.callback(msg)
+        flask_client.post("/", json=_make_push_body(job_id="job-cleanup"))
 
         removed_paths = [c[0][0] for c in mock_remove.call_args_list]
-        assert any("job-abc" in p for p in removed_paths)
+        assert any("job-cleanup" in p for p in removed_paths)

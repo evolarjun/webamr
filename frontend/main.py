@@ -9,12 +9,16 @@ import uuid
 import time
 from datetime import datetime, timedelta
 from google.cloud import storage, pubsub_v1
+from werkzeug.utils import secure_filename
 
 # set values to environment variables else listed here
 UPLOAD_FOLDER_BASE = os.environ.get('UPLOAD_FOLDER_BASE', 'uploads')
 RESULTS_FOLDER_BASE = os.environ.get('RESULTS_FOLDER_BASE', 'results')
 # base bucket name for app
-BUCKET_NAME = os.environ.get('BUCKET_NAME', 'webamr') 
+BUCKET_NAME = os.environ.get('BUCKET_NAME', 'webamr')
+PROJECT_ID = os.environ.get('PROJECT_ID', 'amrfinder')
+TOPIC_ID = os.environ.get('TOPIC_ID', 'eventarc-us-east1-webamr-trigger-838')
+OUTPUT_BUCKET = os.environ.get('OUTPUT_BUCKET', 'webamr-output')
 
 #app_dir = os.path.dirname(os.path.abspath(__file__))
 #amrfinder_path = os.path.join(app_dir, 'bin', 'amrfinder')
@@ -22,6 +26,7 @@ amrfinder_path = 'amrfinder'
 
 app = Flask(__name__, static_folder='static')
 app.config['UPLOAD_FOLDER_BASE'] = UPLOAD_FOLDER_BASE
+app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10 MB limit
 logging.basicConfig(level=logging.INFO)
 
 def generate_user_id():
@@ -81,20 +86,15 @@ def organism_select():
 
 def upload_to_gcs(bucket_name, source_file_name, destination_blob_name):
     """Uploads a file to the bucket."""
-    storage_client = storage.Client(project='amrfinder')
+    storage_client = storage.Client(project=PROJECT_ID)
     bucket = storage_client.bucket(bucket_name)
     blob = bucket.blob(destination_blob_name)
     blob.upload_from_filename(source_file_name)
 
 def send_pubsub_message(message):
-    """Sends a message to the Pub/Sub topic 
-    .eventarc-us-east1-webamr-trigger-sub-529 """
-    project_id = 'amrfinder'
-#    topic_id = "projects/amrfinder/topics/eventarc-us-east1-webamr-trigger-838"
-    topic_id = 'eventarc-us-east1-webamr-trigger-838'
-
+    """Sends a message to the Pub/Sub topic"""
     publisher = pubsub_v1.PublisherClient()
-    topic_path = publisher.topic_path(project_id, topic_id)
+    topic_path = publisher.topic_path(PROJECT_ID, TOPIC_ID)
 
     data = message.encode("utf-8")
     future = publisher.publish(topic_path, data)
@@ -103,14 +103,29 @@ def send_pubsub_message(message):
     except Exception as e:
         print(f"Error publishing message: {e}")
 
+# Cache the database version to avoid fetching it on every page load
+cached_db_version = None
+
 @app.route("/")
-#@app.route("/", methods=["post"])
 def index():
+    global cached_db_version
     organism_select_options = organism_select()
-    database_version = read_file('database_version.txt')
-    # print("options: " + organism_select_options + "\n\n")
+    
+    if not cached_db_version:
+        try:
+            storage_client = storage.Client(project=PROJECT_ID)
+            bucket = storage_client.bucket(OUTPUT_BUCKET)
+            blob = bucket.blob("config/database_version.txt")
+            if blob.exists():
+                cached_db_version = blob.download_as_string().decode('utf-8').strip()
+            else:
+                cached_db_version = "Pending (Worker starting up...)"
+        except Exception as e:
+            print(f"Error fetching DB version: {e}")
+            cached_db_version = "Unknown"
+
     return render_template('index.html', organism_select=organism_select_options, 
-        database_version = database_version)
+        database_version=cached_db_version)
 
 @app.errorhandler(404)
 def page_not_found(error):
@@ -150,15 +165,18 @@ def analyze_file():
     print("Now saving files")
     # save files
     if nuc_file: 
-        filepath = os.path.join(upload_folder, nuc_file.filename)
+        filename = secure_filename(nuc_file.filename)
+        filepath = os.path.join(upload_folder, filename)
         nuc_file.save(filepath)
         command.extend(["-n", filepath])
     if prot_file:
-        filepath = os.path.join(upload_folder, prot_file.filename)
+        filename = secure_filename(prot_file.filename)
+        filepath = os.path.join(upload_folder, filename)
         prot_file.save(filepath)
         command.extend(["-p", filepath])
     if gff_file:
-        filepath = os.path.join(upload_folder, gff_file.filename)
+        filename = secure_filename(gff_file.filename)
+        filepath = os.path.join(upload_folder, filename)
         gff_file.save(filepath)
         command.extend(["-g", filepath])
 
@@ -187,9 +205,8 @@ def analyze_file():
 def return_results(user_id):
     """Returns the results of the analysis if they're availble"""
     # check for availability of the files in the cloud storage bucket webamr-output
-    bucket_name = 'webamr-output'
-    storage_client = storage.Client(project='amrfinder')
-    bucket = storage_client.bucket(bucket_name)
+    storage_client = storage.Client(project=PROJECT_ID)
+    bucket = storage_client.bucket(OUTPUT_BUCKET)
     blob = bucket.blob(f'{user_id}/output.amrfinder')
     if blob.exists():
         print("File exists")
