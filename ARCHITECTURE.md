@@ -10,9 +10,9 @@ flowchart TD
     end
     
     subgraph Backend [FastAPI on Cloud Run]
-        API_Upload[/api/upload-url]
-        API_Submit[/api/submit-job]
-        API_Status[/api/status/{job_id}]
+        API_Upload["/api/upload-url"]
+        API_Submit["/api/submit-job"]
+        API_Status["/api/status/{job_id}"]
     end
     
     subgraph GCP_Storage [Google Cloud Storage]
