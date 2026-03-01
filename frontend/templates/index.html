@@ -76,6 +76,14 @@
       const protFile = form.elements['prot_file'].files[0];
       const gffFile = form.elements['gff_file'].files[0];
 
+      const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
+      if ((nucFile && nucFile.size > MAX_SIZE) ||
+        (protFile && protFile.size > MAX_SIZE) ||
+        (gffFile && gffFile.size > MAX_SIZE)) {
+        resultsDiv.innerHTML = '<p class="error">File size exceeds the 10MB limit. Please upload smaller files.</p>';
+        return false;
+      }
+
       if (nucFile && !protFile && !gffFile) {
         return true; // Only nuc_file provided
       } else if (protFile && !nucFile && !gffFile) {

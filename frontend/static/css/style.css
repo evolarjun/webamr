@@ -1,4 +1,4 @@
-css table {
+table {
   border-collapse: collapse;
   width: 100%;
   margin-bottom: 20px;
@@ -43,4 +43,9 @@ a {
 
 a:hover {
   text-decoration: underline;
+}
+
+.error {
+  color: red;
+  font-weight: bold;
 }

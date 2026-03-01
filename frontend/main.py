@@ -26,6 +26,7 @@ amrfinder_path = 'amrfinder'
 
 app = Flask(__name__, static_folder='static')
 app.config['UPLOAD_FOLDER_BASE'] = UPLOAD_FOLDER_BASE
+app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10 MB limit
 logging.basicConfig(level=logging.INFO)
 
 def generate_user_id():
