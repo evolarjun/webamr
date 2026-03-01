@@ -39,7 +39,7 @@ flowchart TD
     
     UI == 2. Direct PUT Upload ==> BucketIn
     
-    UI -->|3. Submit Job (GCS URI + Params)| API_Submit
+    UI -->|"3. Submit Job (GCS URI + Params)"| API_Submit
     API_Submit -->|Update Status: Pending| DB
     API_Submit -->|4. Publish Job Msg| Queue
     API_Submit -.->|Returns Job ID| UI
