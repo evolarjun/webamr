@@ -1,145 +1,146 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="stylesheet" href="static/css/style.css" />
-    <link rel="icon" href="static/favicon.ico" type="image/x-icon" />
-  </head>
 
-  <body>
-    <h1>Upload your files to run <a href="https://github.com/ncbi/amr/wiki">AMRFinderPlus</a></h1>
-    This is designed to run a bacterial genome at a time. Larger submissions will probably fail. <br />
-    <span style="color: red;">This is experimental and likely to fail anyway.</span>
-    <p></p>
-    <pre>db={{ database_version }}</pre>
-    <form id="upload-form" action="/analyze" method="POST" enctype="multipart/form-data">
-      <label for="file">Select an assembled nucleotide file:</label> 
-      <input type="file" name="nuc_file"> <br>
-      <label for="file">Select an assembled protein file:</label> 
-      <input type="file" name="prot_file"> <br>
-      <label for="file">Select a GFF file:</label> 
-      <input type="file" name="gff_file"> <br>
-      <label for="organism">Organism group (optional):</label>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="static/css/style.css" />
+  <link rel="icon" href="static/favicon.ico" type="image/x-icon" />
+</head>
 
-      <select id="organism" name="organism">
-        <option value="">None</option>
-{{ organism_select | safe }}
-      </select> <br />
-      <!-- label for="parameters">Parameters (optional):</label> <br> 
+<body>
+  <h1>Upload your files to run <a href="https://github.com/ncbi/amr/wiki">AMRFinderPlus</a></h1>
+  This is designed to run a bacterial genome at a time. Larger submissions will probably fail. <br />
+  <span style="color: red;">This is experimental and likely to fail anyway.</span>
+  <p></p>
+  <pre>db={{ database_version }}</pre>
+  <form id="upload-form" action="/analyze" method="POST" enctype="multipart/form-data">
+    <label for="file">Select an assembled nucleotide file:</label>
+    <input type="file" name="nuc_file"> <br>
+    <label for="file">Select an assembled protein file:</label>
+    <input type="file" name="prot_file"> <br>
+    <label for="file">Select a GFF file:</label>
+    <input type="file" name="gff_file"> <br>
+    <label for="organism">Organism group (optional):</label>
+
+    <select id="organism" name="organism">
+      <option value="">None</option>
+      {{ organism_select | safe }}
+    </select> <br />
+    <!-- label for="parameters">Parameters (optional):</label> <br> 
       <input type="text" name="parameters" id="parameters"> <br><br>-->
-      <button type="submit">Run AMRFinderPlus</button>
-      <button type="reset">Reset</button>
-    </form>
-    <div id="results">
-    </div>
-    <div id="poll-results"></div>
+    <button type="submit">Run AMRFinderPlus</button>
+    <button type="reset">Reset</button>
+  </form>
+  <div id="results">
+  </div>
+  <div id="poll-results"></div>
 
-    <script>
-      const form = document.getElementById('upload-form');
-      const resultsDiv = document.getElementById('results');      
-      let timerInterval;      
-      let elapsedTime = 0;      
+  <script>
+    const form = document.getElementById('upload-form');
+    const resultsDiv = document.getElementById('results');
+    let timerInterval;
+    let elapsedTime = 0;
 
-        function pollForResults(userId) {
-        const pollResultsDiv = document.getElementById('poll-results');
-        let pollInterval = setInterval(() => {
-            fetch(`/get-results/${userId}`)
-                .then(response => response.json())
-                .then(data => {
-                    if (data && data.message) {
-                        // Only display the message content
-                        resultsDiv.innerHTML = `<p>${data.message}</p>`;
-                        clearInterval(pollInterval);
-                        // Add download button
-                        const downloadButton = document.createElement('button');
-                        downloadButton.textContent = 'Download Results';
-                        downloadButton.addEventListener('click', () => {
-                            downloadResults(userId); // Call downloadResults with userId
-                        });
-                        resultsDiv.appendChild(downloadButton);
-                    }
-                    else{
-                      pollResultsDiv.innerHTML = `<p>No result yet. Still Polling...</p>`;
-                    }
-                })
-                .catch(error => {
-                    console.error('Error polling for results:', error);
-                    clearInterval(pollInterval); // Stop polling on error
-                });
+    function pollForResults(userId) {
+      const pollResultsDiv = document.getElementById('poll-results');
+      let pollInterval = setInterval(() => {
+        fetch(`/get-results/${userId}`)
+          .then(response => response.json())
+          .then(data => {
+            if (data && data.message) {
+              // Only display the message content
+              resultsDiv.innerHTML = `<p>${data.message}</p>`;
+              clearInterval(pollInterval);
+              // Add download button
+              const downloadButton = document.createElement('button');
+              downloadButton.textContent = 'Download Results';
+              downloadButton.addEventListener('click', () => {
+                downloadResults(userId); // Call downloadResults with userId
+              });
+              resultsDiv.appendChild(downloadButton);
+            }
+            else {
+              pollResultsDiv.innerHTML = `<p>No result yet. Still Polling...</p>`;
+            }
+          })
+          .catch(error => {
+            console.error('Error polling for results:', error);
+            clearInterval(pollInterval); // Stop polling on error
+          });
 
-        }, 10000); // Poll every 10 seconds
+      }, 10000); // Poll every 10 seconds
     }
-      function validateForm() {
-        const nucFile = form.elements['nuc_file'].files[0];
-        const protFile = form.elements['prot_file'].files[0];
-        const gffFile = form.elements['gff_file'].files[0];
+    function validateForm() {
+      const nucFile = form.elements['nuc_file'].files[0];
+      const protFile = form.elements['prot_file'].files[0];
+      const gffFile = form.elements['gff_file'].files[0];
 
-        if (nucFile && !protFile && !gffFile) {
-          return true; // Only nuc_file provided
-        } else if (protFile && !nucFile && !gffFile) {
-          return true; // Only prot_file provided
-        } else if (nucFile && protFile && gffFile) {
-          return true; // All three files provided
-        } else {
-          resultsDiv.innerHTML = '<p class="error">Please upload either only a nucleotide file, only a protein file, or all three files (nucleotide, protein, and GFF).</p>';
-          return false; // Invalid file combination
-        }
+      if (nucFile && !protFile && !gffFile) {
+        return true; // Only nuc_file provided
+      } else if (protFile && !nucFile && !gffFile) {
+        return true; // Only prot_file provided
+      } else if (nucFile && protFile && gffFile) {
+        return true; // All three files provided
+      } else {
+        resultsDiv.innerHTML = '<p class="error">Please upload either only a nucleotide file, only a protein file, or all three files (nucleotide, protein, and GFF).</p>';
+        return false; // Invalid file combination
+      }
+    }
+
+    form.addEventListener('submit', (event) => {
+      event.preventDefault();
+      resultsDiv.innerHTML = ''; // Clear previous results
+      const formData = new FormData();
+      formData.append('nuc_file', form.elements['nuc_file'].files[0]);
+      formData.append('prot_file', form.elements['prot_file'].files[0]);
+      formData.append('gff_file', form.elements['gff_file'].files[0]);
+      formData.append('organism', form.elements['organism'].value);
+
+      // Validate the form
+      if (!validateForm()) {
+        return; // Prevent form submission if validation fails
       }
 
-      form.addEventListener('submit', (event) => {
-        event.preventDefault();
-        resultsDiv.innerHTML = ''; // Clear previous results
-        const formData = new FormData();        
-        formData.append('nuc_file', form.elements['nuc_file'].files[0]);
-        formData.append('prot_file', form.elements['prot_file'].files[0]);
-        formData.append('gff_file', form.elements['gff_file'].files[0]);
-        formData.append('organism', form.elements['organism'].value);
+      // Start the timer
+      elapsedTime = 0;
+      timerInterval = setInterval(() => {
+        elapsedTime += 1000;
+        let minutes = Math.floor(elapsedTime / 60000);
+        let seconds = Math.floor((elapsedTime % 60000) / 1000);
+        let formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        resultsDiv.innerHTML = `<p>Analyzing with AMRFinderPlus, on this slow cheap VM it usually takes 5-10 minutes for a whole genome... <br />Elapsed time: ${formattedTime}</p>`;
+      }, 1000);
 
-        // Validate the form
-        if (!validateForm()) {
-          return; // Prevent form submission if validation fails
-        }
+      function downloadResults(userId) {
+        fetch('/output/' + userId)
+          .then(response => response.blob())
+          .then(blob => {
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = 'amr_results.txt';
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+          })
+          .catch(error => console.error('Error downloading results:', error));
+      }
 
-        // Start the timer
-        elapsedTime = 0;
-        timerInterval = setInterval(() => {
-          elapsedTime += 1000;  
-          let minutes = Math.floor(elapsedTime / 60000);
-          let seconds = Math.floor((elapsedTime % 60000) / 1000);
-          let formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-          resultsDiv.innerHTML = `<p>Analyzing with AMRFinderPlus, on this slow cheap VM it usually takes 5-10 minutes for a whole genome... <br />Elapsed time: ${formattedTime}</p>`;
-        }, 1000);
-
-        function downloadResults(userId) {
-          fetch('/output/' + userId)
-            .then(response => response.blob())
-            .then(blob => {
-              const url = window.URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.style.display = 'none';
-              a.href = url;
-              a.download = 'amr_results.txt';
-              document.body.appendChild(a);
-              a.click();
-              window.URL.revokeObjectURL(url);
-            })
-            .catch(error => console.error('Error downloading results:', error));
-        }
-
-        fetch('/analyze', {
-          method: 'POST',
-          body: formData
-        })
+      fetch('/analyze', {
+        method: 'POST',
+        body: formData
+      })
         .then(response => {
           // Stop the timer
-          clearInterval(timerInterval); 
+          clearInterval(timerInterval);
           return response.json();
         })
         .then(data => {
           // Display the results
           let minutes = Math.floor(elapsedTime / 60000);
-          let seconds = Math.floor((elapsedTime % 60000) / 1000);          
+          let seconds = Math.floor((elapsedTime % 60000) / 1000);
           let formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
           // alert(JSON.stringify(data))
           if (data.result.startsWith('error:')) {
@@ -170,9 +171,9 @@
           });
           resultsDiv.appendChild(copyButton);
         });
-      });
-    </script>
+    });
+  </script>
 
-  </body>
+</body>
 
 </html>

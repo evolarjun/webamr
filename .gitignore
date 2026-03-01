@@ -18,5 +18,9 @@ tests/__pycache__/
 *.json
 !cors.json
 
+# GCP configuration script
+gcp_setup_commands.txt
+
 # OS
 .DS_Store
+
