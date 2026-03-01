@@ -1,3 +1,5 @@
+## NOTE this is still under heavy development, please do not try to use
+
 ## Application Overview
 
 The application's purpose is to identify antimicrobial resistance (AMR) genes using the AMRFinderPlus software. It consists of two main components: a web frontend and a backend processing service.
