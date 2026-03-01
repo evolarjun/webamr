@@ -206,7 +206,7 @@ def return_results(user_id):
     """Returns the results of the analysis if they're availble"""
     # check for availability of the files in the cloud storage bucket webamr-output
     storage_client = storage.Client(project=PROJECT_ID)
-    bucket = storage_client.bucket(OUTPUT_BUCKET_NAME)
+    bucket = storage_client.bucket(OUTPUT_BUCKET)
     blob = bucket.blob(f'{user_id}/output.amrfinder')
     if blob.exists():
         print("File exists")
