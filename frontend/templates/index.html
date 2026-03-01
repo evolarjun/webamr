@@ -99,17 +99,27 @@
     form.addEventListener('submit', (event) => {
       event.preventDefault();
       resultsDiv.innerHTML = ''; // Clear previous results
-      const formData = new FormData();
-      formData.append('nuc_file', form.elements['nuc_file'].files[0]);
-      formData.append('prot_file', form.elements['prot_file'].files[0]);
-      formData.append('gff_file', form.elements['gff_file'].files[0]);
-      formData.append('organism', form.elements['organism'].value);
 
-      // Validate the form
+      // Validate the form before building FormData
       if (!validateForm()) {
         return; // Prevent form submission if validation fails
       }
 
+      const nucFile = form.elements['nuc_file'].files[0];
+      const protFile = form.elements['prot_file'].files[0];
+      const gffFile = form.elements['gff_file'].files[0];
+
+      const formData = new FormData();
+      if (nucFile) {
+        formData.append('nuc_file', nucFile);
+      }
+      if (protFile) {
+        formData.append('prot_file', protFile);
+      }
+      if (gffFile) {
+        formData.append('gff_file', gffFile);
+      }
+      formData.append('organism', form.elements['organism'].value);
       // Start the timer
       elapsedTime = 0;
       timerInterval = setInterval(() => {
