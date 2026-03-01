@@ -1,36 +1,67 @@
-# Use a slim Python 3.9 image
-FROM python:3.9-slim
+# ── Stage 1: Build AMRFinderPlus + HMMER3 from source ────────────────────────
+FROM ubuntu:22.04 AS builder
 
-# Install system dependencies required for AMRFinderPlus (NCBI BLAST+, hmmer, libcurl)
 RUN apt-get update && apt-get install -y \
-    wget \
-    curl \
-    ncbi-blast+ \
-    hmmer \
+    git \
     libcurl4-openssl-dev \
+    build-essential \
+    wget \
     && rm -rf /var/lib/apt/lists/*
 
-# Download and install latest AMRFinderPlus binary from NCBI
-RUN cd /tmp && \
-    curl -LO https://github.com/ncbi/amr/releases/latest/download/amrfinder_linux_bin.tar.gz && \
-    tar -zxvf amrfinder_linux_bin.tar.gz && \
-    mv amrfinder /usr/local/bin/ && \
-    mv amrfinder_update /usr/local/bin/ && \
-    rm -r /tmp/*
+# Install HMMER3 from source (not in arm64 apt repos)
+ENV HMMER_VERSION=3.4
+RUN wget -q http://eddylab.org/software/hmmer/hmmer-${HMMER_VERSION}.tar.gz \
+    && tar xzf hmmer-${HMMER_VERSION}.tar.gz \
+    && cd hmmer-${HMMER_VERSION} \
+    && ./configure --prefix=/usr/local \
+    && make -j$(nproc) \
+    && make install \
+    && cd .. && rm -rf hmmer-${HMMER_VERSION}*
 
-# Create working app directory
+# Compile AMRFinderPlus from source
+RUN git clone https://github.com/ncbi/amr.git \
+    && cd amr \
+    && git submodule update --init \
+    && make -j$(nproc) -O \
+    && make install INSTALL_DIR=/amrfinder
+
+# ── Stage 2: Runtime image ────────────────────────────────────────────────────
+FROM ubuntu:22.04
+
+RUN apt-get update && apt-get install -y \
+    libcurl4-openssl-dev \
+    curl \
+    libgomp1 \
+    python3 \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy HMMER3 binaries from builder
+COPY --from=builder /usr/local/bin/hmm* /usr/local/bin/
+
+# Install BLAST+ pre-built binary — uses correct arch (aarch64 for arm, x64 for amd64)
+ENV BLAST_VERSION=2.17.0
+RUN ARCH=$(uname -m) \
+    && if [ "$ARCH" = "aarch64" ]; then BLAST_ARCH="aarch64-linux"; else BLAST_ARCH="x64-linux"; fi \
+    && curl -L -O https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/${BLAST_VERSION}/ncbi-blast-${BLAST_VERSION}+-${BLAST_ARCH}.tar.gz \
+    && tar -zxf ncbi-blast-${BLAST_VERSION}+-${BLAST_ARCH}.tar.gz \
+    && cp -r ncbi-blast-${BLAST_VERSION}+/bin/* /usr/local/bin/ \
+    && rm -rf ncbi-blast-${BLAST_VERSION}+*
+
+# Copy AMRFinderPlus binaries
+COPY --from=builder /amrfinder/ /usr/local/bin/
+
+# Download AMRFinderPlus databases at build time
+RUN amrfinder -u
+
 WORKDIR /app
 
-# Install Python requirements
+# Install Python worker dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip3 install --no-cache-dir -r requirements.txt
 
-# Copy the worker python script
 COPY worker.py .
 
-# Update database at image build time to bake modern databases directly in the layer
-RUN amrfinder_update
+WORKDIR /data
 
-# Command to run the worker process on container start
-# -u provides unbuffered python output for Cloud run / Compute engine logs
-CMD ["python", "-u", "worker.py"]
+CMD ["python3", "-u", "/app/worker.py"]
