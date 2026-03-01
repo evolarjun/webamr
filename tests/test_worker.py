@@ -212,3 +212,47 @@ class TestHandlePubsubPush:
 
         removed_paths = [c[0][0] for c in mock_remove.call_args_list]
         assert any("job-cleanup" in p for p in removed_paths)
+
+    def test_empty_data_field_returns_200(self):
+        """Empty data field is permanently invalid — should ack (200) not cause retries."""
+        body = {"message": {"data": "", "messageId": "test-id"}, "subscription": "sub"}
+        resp = flask_client.post("/", json=body)
+        assert resp.status_code == 200
+        assert b"Malformed" in resp.data
+
+    def test_invalid_base64_data_returns_200(self):
+        """Non-base64 data is permanently malformed — should ack (200) not cause retries."""
+        body = {"message": {"data": "!!!not-valid-base64!!!", "messageId": "test-id"}, "subscription": "sub"}
+        resp = flask_client.post("/", json=body)
+        assert resp.status_code == 200
+        assert b"Malformed" in resp.data
+
+    def test_valid_base64_but_invalid_json_returns_200(self):
+        """Valid base64 of non-JSON is permanently malformed — should ack (200)."""
+        bad_payload = base64.b64encode(b"not json at all").decode("utf-8")
+        body = {"message": {"data": bad_payload, "messageId": "test-id"}, "subscription": "sub"}
+        resp = flask_client.post("/", json=body)
+        assert resp.status_code == 200
+        assert b"Malformed" in resp.data
+
+    def test_missing_job_id_returns_200(self):
+        """Payload missing job_id is permanently invalid — should ack (200)."""
+        payload = json.dumps({"gcs_uri": "gs://bucket/file.fasta"}).encode()
+        body = {
+            "message": {"data": base64.b64encode(payload).decode(), "messageId": "x"},
+            "subscription": "sub",
+        }
+        resp = flask_client.post("/", json=body)
+        assert resp.status_code == 200
+        assert b"Missing required fields" in resp.data
+
+    def test_missing_gcs_uri_returns_200(self):
+        """Payload missing gcs_uri is permanently invalid — should ack (200)."""
+        payload = json.dumps({"job_id": "job-123"}).encode()
+        body = {
+            "message": {"data": base64.b64encode(payload).decode(), "messageId": "x"},
+            "subscription": "sub",
+        }
+        resp = flask_client.post("/", json=body)
+        assert resp.status_code == 200
+        assert b"Missing required fields" in resp.data

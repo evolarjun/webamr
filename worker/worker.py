@@ -10,6 +10,7 @@ No streaming pull loop is needed; Pub/Sub handles delivery and retries.
 import os
 import json
 import base64
+import binascii
 import subprocess
 from flask import Flask, request, jsonify
 from google.cloud import storage, firestore
@@ -110,10 +111,19 @@ def handle_pubsub_push():
 
     # Decode the base64-encoded payload
     raw = envelope["message"].get("data", "")
-    payload = json.loads(base64.b64decode(raw).decode("utf-8"))
+    try:
+        payload = json.loads(base64.b64decode(raw).decode("utf-8"))
+    except (binascii.Error, UnicodeDecodeError, json.JSONDecodeError) as e:
+        # Permanently malformed data — log and ack (200) to prevent infinite redelivery.
+        print(f"ERROR: Could not decode/parse Pub/Sub message data: {e}")
+        return jsonify({"error": "Malformed message data"}), 200
 
-    job_id = payload["job_id"]
-    gcs_uri = payload["gcs_uri"]
+    job_id = payload.get("job_id")
+    gcs_uri = payload.get("gcs_uri")
+    if not job_id or not gcs_uri:
+        # Missing required fields — permanently invalid, ack to avoid retry loop.
+        print(f"ERROR: Message missing required fields (job_id={job_id!r}, gcs_uri={gcs_uri!r})")
+        return jsonify({"error": "Missing required fields"}), 200
     params = payload.get("parameters", {})
 
     print(f"Received job {job_id}. Processing...")
