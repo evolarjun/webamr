@@ -8,6 +8,7 @@ from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from google.cloud import storage, pubsub_v1, firestore
+from google.api_core.exceptions import NotFound, BadRequest
 
 app = FastAPI(title="AMRFinderPlus API")
 
@@ -80,9 +81,18 @@ def generate_upload_url(req: UploadUrlRequest, api_key: str = Security(verify_ap
 def submit_job(req: JobSubmitRequest, api_key: str = Security(verify_api_key)):
     """Submits the job to Pub/Sub and records it in Firestore."""
     # Verify the uploaded file size before doing anything else.
-    parts = req.gcs_uri.replace("gs://", "").split("/", 1)
-    blob = storage_client.bucket(parts[0]).blob(parts[1])
-    blob.reload()  # Fetches metadata (including blob.size) from GCS
+    if not req.gcs_uri.startswith("gs://"):
+        raise HTTPException(status_code=400, detail="Invalid GCS URI: must start with 'gs://'")
+    parts = req.gcs_uri.removeprefix("gs://").split("/", 1)
+    if len(parts) != 2 or not parts[0] or not parts[1].strip():
+        raise HTTPException(status_code=400, detail="Invalid GCS URI: must be in the format 'gs://bucket/object'")
+    try:
+        blob = storage_client.bucket(parts[0]).blob(parts[1])
+        blob.reload()  # Fetches metadata (including blob.size) from GCS
+    except NotFound:
+        raise HTTPException(status_code=404, detail="File not found in GCS")
+    except BadRequest as e:
+        raise HTTPException(status_code=400, detail=f"Invalid GCS request: {e}")
     if blob.size > MAX_UPLOAD_BYTES:
         blob.delete()  # Remove the oversized file so it doesn't linger
         raise HTTPException(

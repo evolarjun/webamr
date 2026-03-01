@@ -9,6 +9,7 @@ import json
 import sys
 import os
 from unittest.mock import MagicMock, patch
+from google.api_core.exceptions import NotFound, BadRequest
 
 import pytest
 
@@ -184,6 +185,44 @@ class TestSubmitJob:
         MOCK_STORAGE.bucket.return_value.blob.return_value = oversized_blob
         self._post_job()
         MOCK_PUBLISHER.publish.assert_not_called()
+
+    def test_invalid_uri_no_gs_prefix_returns_400(self):
+        """A URI without gs:// prefix must return 400."""
+        resp = client.post(
+            "/api/submit-job",
+            json={"gcs_uri": "s3://amr-input-bucket/uploads/file.fasta"},
+            headers=API_KEY_HEADERS,
+        )
+        assert resp.status_code == 400
+        assert "gs://" in resp.json()["detail"]
+
+    def test_invalid_uri_missing_object_returns_400(self):
+        """A URI with no object path (only bucket) must return 400."""
+        resp = client.post(
+            "/api/submit-job",
+            json={"gcs_uri": "gs://amr-input-bucket"},
+            headers=API_KEY_HEADERS,
+        )
+        assert resp.status_code == 400
+        assert "gs://bucket/object" in resp.json()["detail"]
+
+    def test_gcs_not_found_returns_404(self):
+        """When GCS blob.reload() raises NotFound, the endpoint must return 404."""
+        not_found_blob = MagicMock()
+        not_found_blob.reload.side_effect = NotFound("blob not found")
+        MOCK_STORAGE.bucket.return_value.blob.return_value = not_found_blob
+        resp = self._post_job()
+        assert resp.status_code == 404
+        assert "not found" in resp.json()["detail"].lower()
+
+    def test_gcs_bad_request_returns_400(self):
+        """When GCS blob.reload() raises BadRequest, the endpoint must return 400."""
+        bad_req_blob = MagicMock()
+        bad_req_blob.reload.side_effect = BadRequest("bad bucket name")
+        MOCK_STORAGE.bucket.return_value.blob.return_value = bad_req_blob
+        resp = self._post_job()
+        assert resp.status_code == 400
+        assert "invalid gcs request" in resp.json()["detail"].lower()
 
 
 # ---------------------------------------------------------------------------
