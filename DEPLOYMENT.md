@@ -123,3 +123,78 @@ gcloud compute instances create-with-container amr-worker-vm \
 Move into the frontend folder, set up your preferred framework (e.g., Vite/React), and embed the `AMRFinderPlusComponent.tsx`.
 
 Remember to update the API URLs in the component from `http://localhost:8000` to your deployed Cloud Run backend URL!
+
+## Local Testing & Development
+
+You can test this architecture locally before deploying to GCP! We will use the Google Cloud SDK local emulators and Docker.
+
+### 1. Start the GCP Emulators
+
+GCP provides a Pub/Sub emulator for local development.
+
+```bash
+# Install emulators if you don't have them
+gcloud components install pubsub-emulator
+
+# Start PubSub emulator
+gcloud beta emulators pubsub start --project=$PROJECT_ID --port=8085
+```
+
+In a **new terminal window**, set the environment variable so python clients use the emulator:
+```bash
+export PUBSUB_EMULATOR_HOST=localhost:8085
+```
+
+### 2. Create the Local Topics (Requires a quick python script)
+Write a quick script `setup_local_pubsub.py` to create the topic and subscription on the emulator, and run it.
+
+### 3. Run the Backend Locally
+
+In a terminal with `PUBSUB_EMULATOR_HOST` exported:
+
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+pip install uvicorn
+
+# We can bypass the GCS emulation for now by pointing to test buckets in your real GCP project, 
+# but publishing to the local pubsub.
+export PROJECT_ID="your-project-id"
+export INPUT_BUCKET="amr-input-bucket-your-project-id"
+export TOPIC_ID="amr-jobs-topic"
+
+uvicorn main:app --reload
+```
+*The API will be available at `http://localhost:8000`*
+
+### 4. Run the Worker Locally
+
+You can run the python worker locally if you have `amrfinder` installed on your Mac, or better yet, run the Docker container locally and point it to your GCP resources/emulators.
+
+```bash
+cd worker
+docker build -t amr-worker-local .
+
+# Run the docker container locally, injecting your GCP credentials and emulator host
+docker run -it \
+  -e PROJECT_ID="your-project-id" \
+  -e SUBSCRIPTION_ID="amr-jobs-sub" \
+  -e OUTPUT_BUCKET="amr-output-bucket-your-project-id" \
+  -e GOOGLE_APPLICATION_CREDENTIALS=/tmp/keys/key.json \
+  -e PUBSUB_EMULATOR_HOST=host.docker.internal:8085 \
+  -v ~/.config/gcloud/application_default_credentials.json:/tmp/keys/key.json \
+  amr-worker-local
+```
+
+### 5. Run the Frontend
+
+If you drop the `AMRFinderPlusComponent.tsx` into a fresh Vite project (`npm create vite@latest frontend -- --template react-ts`), you can just run:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+It will hit your local `localhost:8000` FastAPI server!
