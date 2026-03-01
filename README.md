@@ -7,7 +7,7 @@ This application provides a web-based UI and scalable cloud-native backend for r
 
 ## Project Structure
 
-WebAMR is built using a modern, decoupled Cloud-Native architecture on Google Cloud Platform:
+WebAMR is built using a decoupled Cloud-Native architecture on Google Cloud Platform:
 
 *   **`frontend/`**: A Flask-based web interface that allows users to upload nucleotide/protein/GFF files, select target organisms, and view real-time analysis results. It communicates with the backend API.
 *   **`backend/`**: A FastAPI service running on Cloud Run. It generates signed GCS upload URLs, manages job submissions, records status in Cloud Firestore, and publishes jobs to Pub/Sub.
@@ -19,7 +19,7 @@ For a detailed view of the infrastructure and data flow (including Google Cloud 
 
 ## Deployment
 
-The application is fully containerized and designed for deployment on Google Cloud Platform. 
+The application is containerized into two parts (backend and worker) and designed for deployment on Google Cloud Platform. 
 
 For complete instructions on setting up the GCP infrastructure, local testing with emulators, and deploying the frontend, backend, and workers to Cloud Run, please see the **[DEPLOYMENT.md](DEPLOYMENT.md)** guide.
 
