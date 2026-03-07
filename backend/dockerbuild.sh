@@ -29,7 +29,7 @@ docker build --build-arg VERSION=${VERSION} --build-arg DB_VERSION=${DB_VERSION}
     --build-arg SOFTWARE_VERSION=${SOFTWARE_VERSION} \
     --build-arg BINARY_URL=${BINARY_URL} \
     -t $IMAGE \
-    -t us-east1-docker.pkg.dev/amrfinder/webamr-backend/webamr-backend \
+    -t us-central1-docker.pkg.dev/amrfinder/amr-repo/amr-backend \
     .
 
 # docker push us-east1-docker.pkg.dev/amrfinder/webamr-backend/$IMAGE:$VERSION

@@ -46,11 +46,36 @@
       const pollResultsDiv = document.getElementById('poll-results');
       let pollInterval = setInterval(() => {
         fetch(`/get-results/${userId}`)
-          .then(response => response.json())
+          .then(response => {
+            if (response.status === 204) {
+              // No results yet — keep polling
+              pollResultsDiv.innerHTML = `<p>No result yet. Still Polling...</p>`;
+              return null;
+            }
+            return response.json();
+          })
           .then(data => {
-            if (data && data.message) {
-              // Only display the message content
-              resultsDiv.innerHTML = `<p>${data.message}</p>`;
+            if (!data) return; // 204 case, skip processing
+
+            if (data.error) {
+              // Job failed — stop timer and show error
+              clearInterval(timerInterval);
+              clearInterval(pollInterval);
+              let minutes = Math.floor(elapsedTime / 60000);
+              let seconds = Math.floor((elapsedTime % 60000) / 1000);
+              let formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+              resultsDiv.innerHTML = `<p>Elapsed time: ${formattedTime}</p><p>ERROR: ${data.error}</p>`;
+              return;
+            }
+
+            if (data.result) {
+              // Stop the timer now that we have final results
+              clearInterval(timerInterval);
+              let minutes = Math.floor(elapsedTime / 60000);
+              let seconds = Math.floor((elapsedTime % 60000) / 1000);
+              let formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+              // Display the result content with final elapsed time
+              resultsDiv.innerHTML = `<p>Elapsed time: ${formattedTime}</p>${data.result}`;
               clearInterval(pollInterval);
               // Add download button
               const downloadButton = document.createElement('button');
@@ -60,13 +85,10 @@
               });
               resultsDiv.appendChild(downloadButton);
             }
-            else {
-              pollResultsDiv.innerHTML = `<p>No result yet. Still Polling...</p>`;
-            }
           })
           .catch(error => {
             console.error('Error polling for results:', error);
-            clearInterval(pollInterval); // Stop polling on error
+            // Don't stop polling on transient network errors — keep trying
           });
 
       }, 10000); // Poll every 10 seconds
@@ -150,34 +172,41 @@
         method: 'POST',
         body: formData
       })
-        .then(response => {
-          // Stop the timer
-          clearInterval(timerInterval);
-          return response.json();
-        })
-        .then(data => {
-          // Display the results
-          let minutes = Math.floor(elapsedTime / 60000);
-          let seconds = Math.floor((elapsedTime % 60000) / 1000);
-          let formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-          // alert(JSON.stringify(data))
-          if (data.result.startsWith('error:')) {
-            const errorContent = data.result.substring(7); // Remove "error: " prefix
-            resultsDiv.innerHTML = `<p>Elapsed time: ${formattedTime}</p><p>ERROR:<br /><pre>\n${errorContent}\n</pre></p>`;
-          } else {
-            resultsDiv.innerHTML = `<p>Elapsed time: ${formattedTime}</p><p>Result: ${data.result}</p>`;
+        .then(async response => {
+          // Don't stop the timer here - keep it running during polling
+          let data;
+          try {
+            data = await response.json();
+          } catch (e) {
+            const text = await response.text();
+            throw new Error(`Server returned non-JSON response: ${text}`);
           }
 
-          pollForResults(data.user_id);
+          if (!response.ok) {
+            throw new Error(data.error || 'Unknown Server Error');
+          }
+          return data;
+        })
+        .then(data => {
+          if (data.result && data.result.startsWith('error:')) {
+            // Stop the timer on error
+            clearInterval(timerInterval);
+            let minutes = Math.floor(elapsedTime / 60000);
+            let seconds = Math.floor((elapsedTime % 60000) / 1000);
+            let formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            const errorContent = data.result.substring(7); // Remove "error: " prefix
+            resultsDiv.innerHTML = `<p>Elapsed time: ${formattedTime}</p><p>ERROR:<br /><pre>\n${errorContent}\n</pre></p>`;
+          } else if (data.result) {
+            // Keep timer running - it will be stopped when pollForResults gets the final result
+            pollForResults(data.user_id);
+          }
         })
         .catch(error => {
           // Stop the timer
           clearInterval(timerInterval);
           console.error('Error:', error);
-          // Display an alert box with the error message
-          alert('Error', error);
-          // Display the full error object in a <pre> tag
-          resultsDiv.innerHTML = `<p>ERROR:</p><pre>${JSON.stringify(error, null, 2)}</pre>`;
+          // Display the full error message in a <pre> tag
+          resultsDiv.innerHTML = `<p>ERROR:</p><pre>${error.message || error.toString()}</pre>`;
 
           // Add a button to copy the error to the clipboard
           const copyButton = document.createElement('button');

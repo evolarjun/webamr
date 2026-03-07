@@ -7,18 +7,19 @@ import sys
 import re
 import uuid
 import time
+import json
 from datetime import datetime, timedelta
-from google.cloud import storage, pubsub_v1
+from google.cloud import storage, pubsub_v1, firestore
 from werkzeug.utils import secure_filename
 
 # set values to environment variables else listed here
 UPLOAD_FOLDER_BASE = os.environ.get('UPLOAD_FOLDER_BASE', 'uploads')
 RESULTS_FOLDER_BASE = os.environ.get('RESULTS_FOLDER_BASE', 'results')
 # base bucket name for app
-BUCKET_NAME = os.environ.get('BUCKET_NAME', 'webamr')
 PROJECT_ID = os.environ.get('PROJECT_ID', 'amrfinder')
-TOPIC_ID = os.environ.get('TOPIC_ID', 'eventarc-us-east1-webamr-trigger-838')
-OUTPUT_BUCKET = os.environ.get('OUTPUT_BUCKET', 'webamr-output')
+BUCKET_NAME = os.environ.get('BUCKET_NAME', f'amr-input-bucket-{PROJECT_ID}')
+TOPIC_ID = os.environ.get('TOPIC_ID', 'amr-jobs-topic')
+OUTPUT_BUCKET = os.environ.get('OUTPUT_BUCKET', f'amr-output-bucket-{PROJECT_ID}')
 
 #app_dir = os.path.dirname(os.path.abspath(__file__))
 #amrfinder_path = os.path.join(app_dir, 'bin', 'amrfinder')
@@ -184,30 +185,66 @@ def analyze_file():
     command_file_path = os.path.join(upload_folder, "command.txt")
     with open(command_file_path, "w") as command_file:
         command_file.write(" ".join(command))
-    print("Now uploading files to bucket")
-    # Upload files and command to GCS
-    for filename in os.listdir(upload_folder):
-        source_path = os.path.join(upload_folder, filename)
-        destination_path = os.path.join(user_id, filename)  # Use user_id as prefix in GCS
-        upload_to_gcs(BUCKET_NAME, source_path, destination_path)
-        print(f"Uploaded {source_path} to gs://{BUCKET_NAME}/{destination_path}")
+    try:
+        print("Now uploading files to bucket")
+        # Upload files and command to GCS
+        for filename in os.listdir(upload_folder):
+            source_path = os.path.join(upload_folder, filename)
+            destination_path = os.path.join(user_id, filename)  # Use user_id as prefix in GCS
+            upload_to_gcs(BUCKET_NAME, source_path, destination_path)
+            print(f"Uploaded {source_path} to gs://{BUCKET_NAME}/{destination_path}")
 
-    print ("Now sending pubsub message")
-    # Trigger analysis via pubsub message
-    send_pubsub_message('{"submission_id":"' + user_id + '"}')
-        # Now you can trigger your analysis on GCS using the uploaded files
-        # and the command.txt file.
+        print ("Now sending pubsub message")
+        
+        # Determine the primary upload file for the worker's processing
+        main_filename = ""
+        if nuc_file:
+            main_filename = secure_filename(nuc_file.filename)
+        elif prot_file:
+            main_filename = secure_filename(prot_file.filename)
+            
+        gcs_uri = f"gs://{BUCKET_NAME}/{user_id}/{main_filename}"
+        
+        params = {}
+        if 'organism' in request.form and request.form['organism'] not in ["", "None"]:
+            params["organism"] = re.sub(r'[^A-Za-z0-9_]', '', request.form['organism'])
+            
+        # 1. Update DB state to pending
+        db = firestore.Client(project=PROJECT_ID)
+        doc_ref = db.collection("amr_jobs").document(user_id)
+        doc_ref.set({
+            "job_id": user_id,
+            "status": "Pending",
+            "gcs_uri": gcs_uri,
+            "parameters": params,
+            "result_uri": None,
+            "error_message": None
+        })
 
-    # For now, return success and user_id
-    return jsonify({'result': "Files uploaded successfully. Analysis will begin shortly.", 'user_id': user_id}), 200
+        # 2. Trigger analysis via pubsub message (matching worker's payload expectations)
+        message_data = {
+            "job_id": user_id,
+            "gcs_uri": gcs_uri,
+            "parameters": params
+        }
+        send_pubsub_message(json.dumps(message_data))
+
+        # For now, return success and user_id
+        return jsonify({'result': "Files uploaded successfully. Analysis will begin shortly.", 'user_id': user_id}), 200
+    except Exception as e:
+        print(f"Server Error in analyze_file: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f"Failed to submit job: {str(e)}"}), 500
+
 
 @app.route('/get-results/<user_id>', methods=['GET'])
 def return_results(user_id):
     """Returns the results of the analysis if they're availble"""
-    # check for availability of the files in the cloud storage bucket webamr-output
+    # check for availability of the files in the cloud storage bucket
     storage_client = storage.Client(project=PROJECT_ID)
     bucket = storage_client.bucket(OUTPUT_BUCKET)
-    blob = bucket.blob(f'{user_id}/output.amrfinder')
+    blob = bucket.blob(f'results/{user_id}.tsv')
     if blob.exists():
         print("File exists")
         # grab the output for the web page
@@ -215,6 +252,16 @@ def return_results(user_id):
 
         return jsonify({'result': results, 'user_id': user_id}), 200
     else:
+        # Check if the job failed in Firestore
+        try:
+            db = firestore.Client(project=PROJECT_ID)
+            doc = db.collection("amr_jobs").document(user_id).get()
+            if doc.exists and doc.to_dict().get("status") == "Failed":
+                error_msg = doc.to_dict().get("error_message", "Unknown error")
+                return jsonify({'error': f"Analysis failed: {error_msg}"}), 500
+        except Exception as e:
+            print(f"Error checking Firestore: {e}")
+            
         return '', 204
 
 
@@ -232,11 +279,25 @@ def run_amrfinder(command):
 
 @app.route('/output/<user_id>')
 def output(user_id):
-    output_filepath = os.path.join(app.config['UPLOAD_FOLDER_BASE'], user_id, "output.amrfinder")
-    # if the file doesn't exist return an error
-    if not os.path.exists(output_filepath):
-        return jsonify({'error': 'AMRFinderPlus output file is no longer available.'}), 404
-    return send_file(output_filepath, as_attachment=True), 200
+    try:
+        import io
+        storage_client = storage.Client(project=PROJECT_ID)
+        bucket = storage_client.bucket(OUTPUT_BUCKET)
+        blob = bucket.blob(f'results/{user_id}.tsv')
+        
+        if not blob.exists():
+            return jsonify({'error': 'AMRFinderPlus output file is no longer available.'}), 404
+            
+        file_bytes = blob.download_as_bytes()
+        return send_file(
+            io.BytesIO(file_bytes),
+            as_attachment=True,
+            download_name=f"amrfinder_{user_id}.tsv",
+            mimetype="text/tab-separated-values"
+        ), 200
+    except Exception as e:
+        print(f"Error serving output: {e}")
+        return jsonify({'error': 'Failed to retrieve output file.'}), 500
     #shutil.rmtree(os.path.join(app.config['UPLOAD_FOLDER_BASE'], user_id), ignore_errors=True)  # Remove user directory
 
 @app.route('/favicon.ico')

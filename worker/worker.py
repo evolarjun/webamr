@@ -106,11 +106,24 @@ def handle_pubsub_push():
     """
     envelope = request.get_json(silent=True)
     if not envelope or "message" not in envelope:
+        print(f"Invalid Pub/Sub envelope: {envelope}")
         return jsonify({"error": "Invalid Pub/Sub envelope"}), 400
 
     # Decode the base64-encoded payload
     raw = envelope["message"].get("data", "")
-    payload = json.loads(base64.b64decode(raw).decode("utf-8"))
+    try:
+        payload = json.loads(base64.b64decode(raw).decode("utf-8"))
+    except Exception as e:
+        print(f"Failed to decode message data: {e}, raw={raw[:200]}")
+        # Ack the message (200) so Pub/Sub stops retrying a broken message
+        return jsonify({"error": "Could not decode message"}), 200
+
+    print(f"Decoded payload: {payload}")
+
+    if "job_id" not in payload or "gcs_uri" not in payload:
+        print(f"Malformed message — missing job_id or gcs_uri. Payload: {payload}")
+        # Ack the message (200) so Pub/Sub stops retrying it
+        return jsonify({"error": "Malformed message, missing required fields"}), 200
 
     job_id = payload["job_id"]
     gcs_uri = payload["gcs_uri"]

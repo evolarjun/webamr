@@ -108,17 +108,24 @@ Initialize Firestore in Native mode. You can do this through the GCP Console (Fi
 gcloud firestore databases create --location=$REGION
 ```
 
-## 3. Deploying the Backend (FastAPI)
-
-The backend `Dockerfile` is at `backend/Dockerfile`. It is a lightweight `python:3.11-slim-buster` container running `uvicorn` — it does **not** include AMRFinderPlus or any bioinformatics tools (those belong in the worker).
-
-Deploy to Cloud Run:
+### 3a. Build and push the Backend Docker image
 
 🔄 **[Run Every Update]** *(whenever backend code changes)*
 ```bash
 cd backend
+
+# Use Cloud Build to push to your custom repository
+gcloud builds submit \
+  --tag ${REGION}-docker.pkg.dev/${PROJECT_ID}/amr-repo/amr-backend \
+  .
+```
+
+### 3b. Deploy Backend to Cloud Run
+
+🔄 **[Run Every Update]**
+```bash
 gcloud run deploy amr-backend \
-  --source . \
+  --image ${REGION}-docker.pkg.dev/${PROJECT_ID}/amr-repo/amr-backend \
   --region $REGION \
   --allow-unauthenticated \
   --set-env-vars PROJECT_ID=$PROJECT_ID,INPUT_BUCKET=$INPUT_BUCKET,TOPIC_ID=$TOPIC_ID,ALLOWED_ORIGINS=$ALLOWED_ORIGINS,API_KEY=$API_KEY
@@ -171,26 +178,27 @@ service account) can invoke it — not arbitrary HTTP clients.
 
 🟢 **[One-Time Setup]**
 ```bash
-# Grant Pub/Sub permission to invoke the Cloud Run service
+# Create a dedicated service account for Pub/Sub to authenticate with Cloud Run
+gcloud iam service-accounts create amr-pubsub-invoker \
+  --display-name="AMR Pub/Sub Invoker"
+
+# Grant it permission to invoke the Cloud Run worker
 gcloud run services add-iam-policy-binding amr-worker \
   --region $REGION \
-  --member="serviceAccount:service-$(gcloud projects describe $PROJECT_ID \
-      --format='value(projectNumber)')@gcp-sa-pubsub.iam.gserviceaccount.com" \
+  --member="serviceAccount:amr-pubsub-invoker@${PROJECT_ID}.iam.gserviceaccount.com" \
   --role="roles/run.invoker"
 
 # Create the push subscription — Pub/Sub will POST each job message to /
 gcloud pubsub subscriptions create amr-jobs-sub \
   --topic amr-jobs-topic \
   --push-endpoint=${WORKER_URL}/ \
-  --push-auth-service-account=service-$(gcloud projects describe $PROJECT_ID \
-      --format='value(projectNumber)')@gcp-sa-pubsub.iam.gserviceaccount.com \
+  --push-auth-service-account=amr-pubsub-invoker@${PROJECT_ID}.iam.gserviceaccount.com \
   --ack-deadline=600 \
   --min-retry-delay=10s \
   --max-retry-delay=600s
 ```
 
-*(Note: if you already created `amr-jobs-sub` in step 2 as a pull subscription,
-delete it first: `gcloud pubsub subscriptions delete amr-jobs-sub`)*
+*(Note: if you already created `amr-jobs-sub` as a pull subscription, delete it first: `gcloud pubsub subscriptions delete amr-jobs-sub`)*
 
 ## 5. Frontend Setup
 
