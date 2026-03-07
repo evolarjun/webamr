@@ -59,6 +59,39 @@ gcloud services enable \
   artifactregistry.googleapis.com
 ```
 
+### 3a. Firestore Time-To-Live (TTL)
+
+This tells Firestore to automatically delete jobs 90 days after they were created. The application codebase adds an `expire_at` field (90 days in the future) to every new job document.
+
+```bash
+gcloud firestore fields ttls update expire_at \
+  --collection-group=amr_jobs \
+  --enable-ttl
+```
+
+### 3b. Cloud Storage Lifecycle Policy
+
+This tells Cloud Storage to delete files older than 10 days from both buckets.
+
+1. Create a `lifecycle.json` file:
+```json
+{
+  "rule": [
+    {
+      "action": {"type": "Delete"},
+      "condition": {"age": 10}
+    }
+  ]
+}
+```
+Apply the lifecycle policy to both buckets:
+
+🟢 **[One-Time Setup]**
+```bash
+gsutil lifecycle set lifecycle.json gs://amr-input-bucket-${PROJECT_ID}
+gsutil lifecycle set lifecycle.json gs://amr-output-bucket-${PROJECT_ID}
+```
+
 ### Storage Buckets
 Create the input and output Cloud Storage buckets:
 
@@ -111,7 +144,7 @@ receives job messages as **HTTP POST requests pushed by Pub/Sub** directly to
 its Cloud Run URL. Cloud Run scales up an instance per job and back to zero
 when idle — no VM needed.
 
-### 3a. Build and push the Docker image
+### 4a. Build and push the Docker image
 
 🟢 **[One-Time Setup]**
 ```bash
@@ -137,7 +170,9 @@ gcloud run deploy amr-worker \
   --timeout 3600 \
   --memory 4Gi \
   --cpu 2 \
-  --set-env-vars PROJECT_ID=$PROJECT_ID,OUTPUT_BUCKET=$OUTPUT_BUCKET
+  --set-env-vars PROJECT_ID=$PROJECT_ID,OUTPUT_BUCKET=$OUTPUT_BUCKET \
+  --concurrency 1 \
+  --max-instances 2  # Adjust this to change the number of simultaneous jobs
 
 # Save the deployed URL for the next step
 WORKER_URL=$(gcloud run services describe amr-worker \
@@ -204,7 +239,8 @@ gcloud run deploy amr-frontend \
   --region $REGION \
   --allow-unauthenticated \
   --port 80 \
-  --set-env-vars PROJECT_ID=$PROJECT_ID
+  --set-env-vars PROJECT_ID=$PROJECT_ID \
+  --max-instances 1
 ```
 *(Note: the container listens on port 80 as defined in its Dockerfile, so we specify `--port 80`)*
 

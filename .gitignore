@@ -18,9 +18,16 @@ tests/__pycache__/
 *.json
 !cors.json
 
-# GCP configuration script
+# GCP configuration stuff
 gcp_setup_commands.txt
+set_variables.sh
 
 # OS
 .DS_Store
+
+# User uploads (data only, keep directory structure)
+uploads/
+!uploads/.gitkeep
+frontend/uploads/
+!frontend/uploads/.gitkeep
 

@@ -1,16 +1,15 @@
 import os
-import subprocess
-import shutil
 from flask import Flask, send_file, request, jsonify, render_template, send_from_directory
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 import logging
-import sys
 import re
 import uuid
-import time
 import json
 from datetime import datetime, timedelta
 from google.cloud import storage, pubsub_v1, firestore
 from werkzeug.utils import secure_filename
+from datetime import timezone
 
 # set values to environment variables else listed here
 UPLOAD_FOLDER_BASE = os.environ.get('UPLOAD_FOLDER_BASE', 'uploads')
@@ -29,6 +28,17 @@ app = Flask(__name__, static_folder='static')
 app.config['UPLOAD_FOLDER_BASE'] = UPLOAD_FOLDER_BASE
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10 MB limit
 logging.basicConfig(level=logging.INFO)
+
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=[],      # no global limit — only apply where decorated
+    storage_uri="memory://",
+)
+
+@app.errorhandler(429)
+def ratelimit_error(e):
+    return jsonify(error="Rate limit exceeded. Please wait a minute before submitting another job."), 429
 
 def generate_user_id():
     return str(uuid.uuid4())
@@ -160,6 +170,7 @@ def page_not_found(error):
     return render_template('404.html', url=request.url), 404
 
 @app.route('/analyze', methods=['POST'])
+@limiter.limit("5 per minute")
 def analyze_file():
     if 'nuc_file' not in request.files and 'prot_file' not in request.files:
         return jsonify({'error': 'No nucleotide or protein file provided.'}), 400
@@ -235,7 +246,14 @@ def analyze_file():
         params = {"print_node": True}
         if 'organism' in request.form and request.form['organism'] not in ["", "None"]:
             params["organism"] = re.sub(r'[^A-Za-z0-9_]', '', request.form['organism'])
-            
+
+        # Calculate file sizes to write to DB
+        nuc_size = os.path.getsize(os.path.join(upload_folder, secure_filename(nuc_file.filename))) if nuc_file else 0
+        prot_size = os.path.getsize(os.path.join(upload_folder, secure_filename(prot_file.filename))) if prot_file else 0
+        gff_size = os.path.getsize(os.path.join(upload_folder, secure_filename(gff_file.filename))) if gff_file else 0
+
+        total_file_size_bytes = nuc_size + prot_size + gff_size
+
         # 1. Update DB state to pending
         db = firestore.Client(project=PROJECT_ID)
         doc_ref = db.collection("amr_jobs").document(user_id)
@@ -245,7 +263,13 @@ def analyze_file():
             "gcs_uri": gcs_uri,
             "parameters": params,
             "result_uri": None,
-            "error_message": None
+            "error_message": None,
+            "created_at": datetime.now(timezone.utc),
+            "expire_at": datetime.now(timezone.utc) + timedelta(days=90),
+            "total_file_size_bytes": total_file_size_bytes,
+            "nuc_file_size_bytes": nuc_size,
+            "prot_file_size_bytes": prot_size,
+            "gff_file_size_bytes": gff_size
         })
 
         # 2. Trigger analysis via pubsub message (matching worker's payload expectations)
@@ -320,17 +344,7 @@ def return_results(user_id):
         return '', 204
 
 
-def run_amrfinder(command):
-    """ Runs amrfinder and returns the output"""
-    try:
-        result = subprocess.run(command, capture_output=True, text=True, check=True)
-        message = "Files analyzed successfully with command:<br />\n<pre>" + ' '.join(command) + "</pre><br />\n"
-        output_filepath = os.path.join(upload_folder, "output.amrfinder")
-        # print(message)
-        message += tabulize(read_file(output_filepath))
-        return jsonify({'result': message, 'user_id': user_id}), 200  # Include user_id in response
-    except:
-        return jsonify({'result': 'error: Requires a nucleotide or protein file.', 'user_id': user_id}), 400 # Include user_id in response
+
 
 @app.route('/output/<user_id>')
 def output(user_id):

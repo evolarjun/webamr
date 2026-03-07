@@ -36,6 +36,7 @@ import main  # noqa: E402 (imported after patches)
 
 client = main.app.test_client()
 main.app.config["TESTING"] = True
+main.limiter.enabled = False  # reliably disable limiter globally for unit tests
 
 
 # ---------------------------------------------------------------------------
@@ -184,6 +185,11 @@ class TestAnalyze:
         mock_doc.set.assert_called_once()
         set_data = mock_doc.set.call_args[0][0]
         assert set_data["status"] == "Pending"
+        assert "created_at" in set_data
+        assert "expire_at" in set_data
+        # Ensure expire_at is roughly 90 days after created_at
+        delta = set_data["expire_at"] - set_data["created_at"]
+        assert 89 < delta.days <= 90
 
     def test_no_file_returns_400(self):
         resp = client.post("/analyze", data={}, content_type="multipart/form-data")
@@ -191,9 +197,52 @@ class TestAnalyze:
 
     def test_pubsub_failure_returns_500(self):
         MOCK_PUBLISHER.publish.side_effect = Exception("Pub/Sub down")
-        resp = self._post_analyze()
-        assert resp.status_code == 500
-        MOCK_PUBLISHER.publish.side_effect = None
+        try:
+            resp = self._post_analyze()
+            assert resp.status_code == 500
+        finally:
+            MOCK_PUBLISHER.publish.side_effect = None
+
+
+# ---------------------------------------------------------------------------
+# Tests: Rate limiting on /analyze
+# ---------------------------------------------------------------------------
+
+class TestRateLimit:
+    """Verify the 5/minute rate limit on /analyze returns 429 when exceeded."""
+
+    def setup_method(self):
+        MOCK_STORAGE.bucket.return_value.blob.side_effect = None
+        MOCK_STORAGE.bucket.return_value.blob.return_value = _make_blob()
+        mock_future = MagicMock()
+        mock_future.result.return_value = "msg-id-1"
+        MOCK_PUBLISHER.publish.return_value = mock_future
+        MOCK_PUBLISHER.topic_path.return_value = "projects/amrfinder/topics/amr-jobs-topic"
+        MOCK_FIRESTORE.collection.return_value.document.return_value = MagicMock()
+
+    def test_sixth_request_returns_429(self):
+        main.limiter.enabled = True
+        main.limiter.reset()
+        try:
+            for _ in range(5):
+                resp = client.post(
+                    "/analyze",
+                    data={"organism": "", "nuc_file": _fasta_file()},
+                    content_type="multipart/form-data",
+                )
+                assert resp.status_code == 200, f"Expected 200 on attempt, got {resp.status_code}"
+            # 6th request in same minute should be rate-limited
+            resp = client.post(
+                "/analyze",
+                data={"organism": "", "nuc_file": _fasta_file()},
+                content_type="multipart/form-data",
+            )
+            assert resp.status_code == 429
+            body = resp.get_json()
+            assert "rate limit" in body["error"].lower()
+        finally:
+            main.limiter.enabled = False
+            main.limiter.reset()
 
 
 # ---------------------------------------------------------------------------

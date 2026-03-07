@@ -29,7 +29,8 @@ gcloud run deploy amr-worker \
   --memory 4Gi \
   --cpu 2 \
   --set-env-vars PROJECT_ID=$PROJECT_ID,OUTPUT_BUCKET=$OUTPUT_BUCKET \
-  --max-instances 1  # Only allow one job to run at a time
+  --concurrency 1 \
+  --max-instances 1  # Change this number to limit total simultaneous jobs
 
 
 ELAPSED=$((SECONDS - START_TIME))

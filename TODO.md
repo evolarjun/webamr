@@ -1,3 +1,2 @@
-- Store stderr from running AMRFinderPlus and add a link to that output file
 - After GFF file add an Annotation format option dropdown. 
 - 

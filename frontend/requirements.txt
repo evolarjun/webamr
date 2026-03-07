@@ -4,6 +4,7 @@ autopep8
 
 # App
 flask
+Flask-Limiter
 Werkzeug
 gunicorn
 google-cloud-core
