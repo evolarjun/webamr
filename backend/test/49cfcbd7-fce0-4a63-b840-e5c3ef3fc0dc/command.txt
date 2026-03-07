@@ -1,1 +1,0 @@
-amrfinder -o uploads/49cfcbd7-fce0-4a63-b840-e5c3ef3fc0dc/output.amrfinder -n uploads/49cfcbd7-fce0-4a63-b840-e5c3ef3fc0dc/test_dna.fa

@@ -42,10 +42,6 @@ INPUT_BUCKET="amr-input-bucket-${PROJECT_ID}"
 OUTPUT_BUCKET="amr-output-bucket-${PROJECT_ID}"
 TOPIC_ID="amr-jobs-topic"
 
-# Security setup: A comma-separated list of allowed origin domains for the backend CORS policy
-ALLOWED_ORIGINS="https://your-frontend-domain.com,http://localhost:5173" 
-API_KEY="your-super-secret-production-random-api-key"
-
 gcloud config set project $PROJECT_ID
 ```
 
@@ -108,37 +104,14 @@ Initialize Firestore in Native mode. You can do this through the GCP Console (Fi
 gcloud firestore databases create --location=$REGION
 ```
 
-### 3a. Build and push the Backend Docker image
-
-🔄 **[Run Every Update]** *(whenever backend code changes)*
-```bash
-cd backend
-
-# Use Cloud Build to push to your custom repository
-gcloud builds submit \
-  --tag ${REGION}-docker.pkg.dev/${PROJECT_ID}/amr-repo/amr-backend \
-  .
-```
-
-### 3b. Deploy Backend to Cloud Run
-
-🔄 **[Run Every Update]**
-```bash
-gcloud run deploy amr-backend \
-  --image ${REGION}-docker.pkg.dev/${PROJECT_ID}/amr-repo/amr-backend \
-  --region $REGION \
-  --allow-unauthenticated \
-  --set-env-vars PROJECT_ID=$PROJECT_ID,INPUT_BUCKET=$INPUT_BUCKET,TOPIC_ID=$TOPIC_ID,ALLOWED_ORIGINS=$ALLOWED_ORIGINS,API_KEY=$API_KEY
-```
-
-## 4. Deploying the Worker
+## 3. Deploying the Worker
 
 The worker is a Flask HTTP service. Rather than pulling from Pub/Sub itself, it
 receives job messages as **HTTP POST requests pushed by Pub/Sub** directly to
 its Cloud Run URL. Cloud Run scales up an instance per job and back to zero
 when idle — no VM needed.
 
-### 4a. Build and push the Docker image
+### 3a. Build and push the Docker image
 
 🟢 **[One-Time Setup]**
 ```bash
@@ -153,7 +126,7 @@ gcloud builds submit \
   ./worker
 ```
 
-### 4b. Deploy as a Cloud Run service
+### 3b. Deploy as a Cloud Run service
 
 🔄 **[Run Every Update]**
 ```bash
@@ -174,7 +147,7 @@ WORKER_URL=$(gcloud run services describe amr-worker \
 `--no-allow-unauthenticated` restricts the endpoint so only Pub/Sub (via its
 service account) can invoke it — not arbitrary HTTP clients.
 
-### 4c. Create a Pub/Sub push subscription pointing at the worker
+### 3c. Create a Pub/Sub push subscription pointing at the worker
 
 🟢 **[One-Time Setup]**
 ```bash
@@ -200,13 +173,11 @@ gcloud pubsub subscriptions create amr-jobs-sub \
 
 *(Note: if you already created `amr-jobs-sub` as a pull subscription, delete it first: `gcloud pubsub subscriptions delete amr-jobs-sub`)*
 
-## 5. Frontend Setup
+## 4. Frontend Setup
 
-The frontend is a Flask application located in `frontend/`. It serves the HTML UI from `frontend/templates/index.html` and handles file uploads and job submission directly.
+The frontend is a Flask application located in `frontend/`. It serves the HTML UI from `frontend/templates/index.html` and handles file uploads and job submission directly to GCP.
 
-Before deploying, update the backend API URL inside `frontend/main.py` (the `send_pubsub_message` function and related GCS calls) to point to your deployed Cloud Run services.
-
-### 5a. Build and push the Frontend Docker image
+### 4a. Build and push the Frontend Docker image
 
 From the `frontend` directory, download the required AMRFinderPlus resource files and submit the build:
 
@@ -224,7 +195,7 @@ gcloud builds submit \
   .
 ```
 
-### 5b. Deploy Frontend as a Cloud Run service
+### 4b. Deploy Frontend as a Cloud Run service
 
 🔄 **[Run Every Update]**
 ```bash
@@ -270,30 +241,9 @@ export PUBSUB_EMULATOR_HOST=localhost:8085
 ### 2. Create the Local Topics (Requires a quick python script)
 Write a quick script `setup_local_pubsub.py` to create the topic and subscription on the emulator, and run it.
 
-### 3. Run the Backend Locally
+### 3. Hybrid Testing (Local AMRFinderPlus Worker with Real GCP)
 
-In a terminal with `PUBSUB_EMULATOR_HOST` exported:
-
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-pip install uvicorn
-
-# We can bypass the GCS emulation for now by pointing to test buckets in your real GCP project, 
-# but publishing to the local pubsub.
-export PROJECT_ID="your-project-id"
-export INPUT_BUCKET="amr-input-bucket-your-project-id"
-export TOPIC_ID="amr-jobs-topic"
-
-uvicorn main:app --reload
-```
-*The API will be available at `http://localhost:8000`*
-
-### 4. Hybrid Testing (Local AMRFinderPlus Worker with Real GCP)
-
-To test the full cloud architecture without paying for a Compute Engine VM, deploy the frontend and backend to GCP (or run them locally pointing to GCP), but run the computationally heavy AMRFinderPlus worker locally on your own machine using Docker. 
+To test the full cloud architecture without paying for a Compute Engine VM, run the computationally heavy AMRFinderPlus worker locally on your own machine using Docker. 
 
 This connects your local container natively to the real Google Cloud Pub/Sub queue, Cloud Storage, and Firestore.
 
@@ -317,7 +267,7 @@ This connects your local container natively to the real Google Cloud Pub/Sub que
       amr-worker-local
     ```
 
-### 5. Run the Frontend
+### 4. Run the Frontend
 
 ```bash
 cd frontend

@@ -4,15 +4,9 @@
 flowchart TD
     User([User / Browser])
     
-    subgraph Frontend [Flask Web App]
+    subgraph Frontend [Flask Web App (Cloud Run)]
         UI[Upload UI & Param Controls]
-        Dashboard[Results Dashboard]
-    end
-    
-    subgraph Backend [FastAPI on Cloud Run]
-        API_Upload["/api/upload-url"]
-        API_Submit["/api/submit-job"]
-        API_Status["/api/status/{job_id}"]
+        App[Flask App logic]
     end
     
     subgraph GCP_Storage [Google Cloud Storage]
@@ -34,28 +28,25 @@ flowchart TD
 
     %% Flow steps
     User -->|Selects File & Params| UI
-    UI -->|1. Request Signed URL| API_Upload
-    API_Upload -.->|Returns Signed URL| UI
+    UI -->|Submits Form| App
     
-    UI == 2. Direct PUT Upload ==> BucketIn
+    App -->|1. Upload Files| BucketIn
+    App -->|2. Create Job Record: Pending| DB
+    App -->|3. Publish Job Msg| Queue
+    App -.->|Returns Status Page| UI
     
-    UI -->|"3. Submit Job (GCS URI + Params)"| API_Submit
-    API_Submit -->|Update Status: Pending| DB
-    API_Submit -->|4. Publish Job Msg| Queue
-    API_Submit -.->|Returns Job ID| UI
-    
-    Queue == 5. Pull Job Msg ==> Worker
+    Queue == 4. Push Job Msg ==> Worker
     Worker -->|Update Status: Processing| DB
-    Worker -.->|6. Download FASTA| BucketIn
+    Worker -.->|5. Download FASTA/Proteins| BucketIn
     
-    Worker -->|7. Execute AMRFinderPlus| Worker
+    Worker -->|6. Execute AMRFinderPlus| Worker
     
-    Worker == 8. Upload TSV Result ==> BucketOut
+    Worker == 7. Upload TSV Result ==> BucketOut
     Worker -->|Update Status: Completed| DB
     
-    UI -->|Poll Status| API_Status
-    API_Status -.->|Check DB| DB
+    UI -->|Poll /get-results| App
+    App -.->|Check File/DB| BucketOut
+    App -.->|Fallback Error Check| DB
     
-    Dashboard -.->|9. Fetch TSV| BucketOut
-    Dashboard -->|Render Table| User
+    App -->|Render Table| User
 ```

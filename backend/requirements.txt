@@ -1,6 +1,0 @@
-fastapi
-uvicorn
-pydantic
-google-cloud-storage
-google-cloud-pubsub
-google-cloud-firestore
