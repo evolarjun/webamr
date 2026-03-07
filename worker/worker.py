@@ -23,22 +23,34 @@ storage_client = storage.Client(project=PROJECT_ID)
 db = firestore.Client(project=PROJECT_ID)
 
 
-def upload_db_version():
-    """Uploads the local AMRFinder database version to GCS configuration path."""
+def upload_versions():
+    """Uploads the local AMRFinder database and software versions to GCS configuration path."""
+    bucket = storage_client.bucket(OUTPUT_BUCKET)
+    
+    # Upload Database Version
     version_file = "/etc/amrfinder_db_version.txt"
     if os.path.exists(version_file):
         print(f"Uploading AMRFinder DB version to gs://{OUTPUT_BUCKET}/config/database_version.txt")
-        bucket = storage_client.bucket(OUTPUT_BUCKET)
         blob = bucket.blob("config/database_version.txt")
         blob.upload_from_filename(version_file)
     else:
         print("WARNING: Could not find /etc/amrfinder_db_version.txt!")
 
+    # Upload Software Version
+    try:
+        print(f"Uploading AMRFinder software version to gs://{OUTPUT_BUCKET}/config/software_version.txt")
+        result = subprocess.run(["amrfinder", "--version"], capture_output=True, text=True, check=True)
+        software_version = result.stdout.strip()
+        software_blob = bucket.blob("config/software_version.txt")
+        software_blob.upload_from_string(software_version)
+    except Exception as e:
+        print(f"Failed to get/upload software version: {e}")
+
 # Upload config once on container cold-start
 try:
-    upload_db_version()
+    upload_versions()
 except Exception as e:
-    print(f"Failed to upload DB version on startup: {e}")
+    print(f"Failed to upload versions on startup: {e}")
 
 
 def download_blob(gcs_uri, local_path):

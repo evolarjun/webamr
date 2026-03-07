@@ -106,10 +106,11 @@ def send_pubsub_message(message):
 
 # Cache the database version to avoid fetching it on every page load
 cached_db_version = None
+cached_software_version = None
 
 @app.route("/")
 def index():
-    global cached_db_version
+    global cached_db_version, cached_software_version
     organism_select_options = organism_select()
     
     if not cached_db_version:
@@ -120,13 +121,39 @@ def index():
             if blob.exists():
                 cached_db_version = blob.download_as_string().decode('utf-8').strip()
             else:
-                cached_db_version = "Pending (Worker starting up...)"
+                return render_template('index.html', organism_select=organism_select_options, 
+                    database_version="Pending (Worker starting up...)", 
+                    software_version=cached_software_version or "Pending (Worker starting up...)")
         except Exception as e:
             print(f"Error fetching DB version: {e}")
-            cached_db_version = "Unknown"
+            # Don't cache error/unknown so we can retry
+            db_v = "Unknown"
+        else:
+            db_v = cached_db_version
+    else:
+        db_v = cached_db_version
+
+    if not cached_software_version:
+        try:
+            storage_client = storage.Client(project=PROJECT_ID)
+            bucket = storage_client.bucket(OUTPUT_BUCKET)
+            blob = bucket.blob("config/software_version.txt")
+            if blob.exists():
+                cached_software_version = blob.download_as_string().decode('utf-8').strip()
+            else:
+                return render_template('index.html', organism_select=organism_select_options, 
+                    database_version=db_v, 
+                    software_version="Pending (Worker starting up...)")
+        except Exception as e:
+            print(f"Error fetching software version: {e}")
+            soft_v = "Unknown"
+        else:
+            soft_v = cached_software_version
+    else:
+        soft_v = cached_software_version
 
     return render_template('index.html', organism_select=organism_select_options, 
-        database_version=cached_db_version)
+        database_version=db_v, software_version=soft_v)
 
 @app.errorhandler(404)
 def page_not_found(error):
