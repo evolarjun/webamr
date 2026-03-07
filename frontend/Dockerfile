@@ -7,9 +7,8 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-COPY static .
-COPY templates .
-COPY .venv .
+COPY static ./static
+COPY templates ./templates
 COPY database_version.txt .
 COPY taxgroup.tsv .
 COPY main.py .

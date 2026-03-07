@@ -177,7 +177,7 @@ def analyze_file():
         return jsonify({'error': 'No protein file selected'}), 400
 
     # Basic command structure
-    command = [amrfinder_path, "-o", upload_folder + "/output.amrfinder"]  
+    command = [amrfinder_path, "--print_node", "-o", upload_folder + "/output.amrfinder"]  
 
     # Check for organism value
     if 'organism' in request.form:
@@ -232,7 +232,7 @@ def analyze_file():
             
         gcs_uri = f"gs://{BUCKET_NAME}/{user_id}/{main_filename}"
         
-        params = {}
+        params = {"print_node": True}
         if 'organism' in request.form and request.form['organism'] not in ["", "None"]:
             params["organism"] = re.sub(r'[^A-Za-z0-9_]', '', request.form['organism'])
             
@@ -256,8 +256,13 @@ def analyze_file():
         }
         send_pubsub_message(json.dumps(message_data))
 
-        # For now, return success and user_id
-        return jsonify({'result': "Files uploaded successfully. Analysis will begin shortly.", 'user_id': user_id}), 200
+        results_url = f"/results/{user_id}"
+        # Return success with user_id and a shareable results URL
+        return jsonify({
+            'result': "Files uploaded successfully. Analysis will begin shortly.",
+            'user_id': user_id,
+            'results_url': results_url,
+        }), 200
     except Exception as e:
         print(f"Server Error in analyze_file: {str(e)}")
         import traceback
@@ -265,19 +270,42 @@ def analyze_file():
         return jsonify({'error': f"Failed to submit job: {str(e)}"}), 500
 
 
+@app.route('/results/<job_id>')
+def results_page(job_id):
+    """Shareable results page for a specific job."""
+    try:
+        db = firestore.Client(project=PROJECT_ID)
+        doc = db.collection("amr_jobs").document(job_id).get()
+    except Exception as e:
+        print(f"Error fetching job from Firestore: {e}")
+        return render_template('404.html', url=request.url), 404
+
+    if not doc.exists:
+        return render_template('404.html', url=request.url), 404
+
+    job_data = doc.to_dict()
+    status = job_data.get("status", "Unknown")
+    error_message = job_data.get("error_message", "")
+
+    return render_template(
+        'results.html',
+        job_id=job_id,
+        status=status,
+        error_message=error_message,
+    )
+
+
 @app.route('/get-results/<user_id>', methods=['GET'])
 def return_results(user_id):
-    """Returns the results of the analysis if they're availble"""
-    # check for availability of the files in the cloud storage bucket
+    """Returns the results of the analysis if they're available"""
     storage_client = storage.Client(project=PROJECT_ID)
     bucket = storage_client.bucket(OUTPUT_BUCKET)
     blob = bucket.blob(f'results/{user_id}.tsv')
+    stderr_available = bucket.blob(f'results/{user_id}_stderr.txt').exists()
     if blob.exists():
         print("File exists")
-        # grab the output for the web page
-        results = tabulize(blob.download_as_string())
-
-        return jsonify({'result': results, 'user_id': user_id}), 200
+        results = tabulize(blob.download_as_bytes())
+        return jsonify({'result': results, 'user_id': user_id, 'stderr_available': stderr_available}), 200
     else:
         # Check if the job failed in Firestore
         try:
@@ -285,10 +313,10 @@ def return_results(user_id):
             doc = db.collection("amr_jobs").document(user_id).get()
             if doc.exists and doc.to_dict().get("status") == "Failed":
                 error_msg = doc.to_dict().get("error_message", "Unknown error")
-                return jsonify({'error': f"Analysis failed: {error_msg}"}), 500
+                return jsonify({'error': f"Analysis failed: {error_msg}", 'stderr_available': stderr_available}), 500
         except Exception as e:
             print(f"Error checking Firestore: {e}")
-            
+
         return '', 204
 
 
@@ -325,7 +353,29 @@ def output(user_id):
     except Exception as e:
         print(f"Error serving output: {e}")
         return jsonify({'error': 'Failed to retrieve output file.'}), 500
-    #shutil.rmtree(os.path.join(app.config['UPLOAD_FOLDER_BASE'], user_id), ignore_errors=True)  # Remove user directory
+
+
+@app.route('/stderr/<user_id>')
+def stderr_output(user_id):
+    try:
+        import io
+        storage_client = storage.Client(project=PROJECT_ID)
+        bucket = storage_client.bucket(OUTPUT_BUCKET)
+        blob = bucket.blob(f'results/{user_id}_stderr.txt')
+
+        if not blob.exists():
+            return jsonify({'error': 'AMRFinderPlus stderr log is no longer available.'}), 404
+
+        file_bytes = blob.download_as_bytes()
+        return send_file(
+            io.BytesIO(file_bytes),
+            as_attachment=True,
+            download_name=f"amrfinder_{user_id}_stderr.txt",
+            mimetype="text/plain"
+        ), 200
+    except Exception as e:
+        print(f"Error serving stderr: {e}")
+        return jsonify({'error': 'Failed to retrieve stderr log.'}), 500
 
 @app.route('/favicon.ico')
 def favicon():

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AMRFinderPlus Results</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+  <link rel="icon" href="/static/favicon.ico" type="image/x-icon" />
+</head>
+
+<body>
+  <h1><a href="/">AMRFinderPlus</a> — Job Results</h1>
+
+  <p>
+    <strong>Job ID:</strong> <code id="job-id">{{ job_id }}</code>
+  </p>
+
+  <p>
+    <strong>Shareable link:</strong>
+    <a id="share-link" href="/results/{{ job_id }}">/results/{{ job_id }}</a>
+    &nbsp;<button onclick="copyLink()">Copy</button>
+  </p>
+
+  {% if status == "Failed" %}
+  <p class="error"><strong>Job failed:</strong> {{ error_message }}</p>
+  {% else %}
+  <div id="status-msg">
+    <p>Status: <strong>{{ status }}</strong> — polling for results every 10 seconds…</p>
+  </div>
+  <div id="results"></div>
+  <div id="poll-results"></div>
+  {% endif %}
+
+  <script>
+    const jobId = {{ job_id | tojson }};
+    const resultsDiv = document.getElementById('results');
+    const statusMsg = document.getElementById('status-msg');
+
+    function copyLink() {
+      const url = window.location.origin + '/results/' + jobId;
+      navigator.clipboard.writeText(url)
+        .then(() => alert('Link copied to clipboard!'))
+        .catch(() => alert('Could not copy — please copy manually:\n' + url));
+    }
+
+    function downloadResults(userId) {
+      fetch('/output/' + userId)
+        .then(response => response.blob())
+        .then(blob => {
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.style.display = 'none';
+          a.href = url;
+          a.download = 'amr_results.tsv';
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+        })
+        .catch(error => console.error('Error downloading results:', error));
+    }
+
+    {% if status != "Failed" %}
+    (function pollForResults() {
+      const pollInterval = setInterval(() => {
+        fetch('/get-results/' + jobId)
+          .then(response => {
+            if (response.status === 204) {
+              if (statusMsg) statusMsg.innerHTML = '<p>Status: <strong>Running</strong> — still polling…</p>';
+              return null;
+            }
+            return response.json();
+          })
+          .then(data => {
+            if (!data) return;
+
+            if (data.error) {
+              clearInterval(pollInterval);
+              if (statusMsg) statusMsg.innerHTML = '';
+              resultsDiv.innerHTML = '<p class="error"><strong>Job failed:</strong> ' + data.error + '</p>';
+              return;
+            }
+
+            if (data.result) {
+              clearInterval(pollInterval);
+              if (statusMsg) statusMsg.innerHTML = '';
+
+              const downloadButton = document.createElement('button');
+              downloadButton.textContent = 'Download Results';
+              downloadButton.style.marginBottom = '10px';
+              downloadButton.addEventListener('click', () => downloadResults(jobId));
+
+              resultsDiv.innerHTML = '';
+              resultsDiv.appendChild(downloadButton);
+              resultsDiv.insertAdjacentHTML('beforeend', data.result);
+
+              if (data.stderr_available) {
+                const stderrLink = document.createElement('p');
+                stderrLink.innerHTML = '<a href="/stderr/' + jobId + '" target="_blank">Download stderr log</a>';
+                resultsDiv.appendChild(stderrLink);
+              }
+            }
+          })
+          .catch(err => console.error('Polling error:', err));
+      }, 10000);
+    })();
+    {% endif %}
+  </script>
+
+</body>
+
+</html>

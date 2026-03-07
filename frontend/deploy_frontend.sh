@@ -3,11 +3,11 @@
 set -e
 
 # Configuration
-PROJECT_ID="amrfinder"
-REGION="us-central1"
-BUCKET_NAME="amr-input-bucket-${PROJECT_ID}"
-OUTPUT_BUCKET="amr-output-bucket-${PROJECT_ID}"
-TOPIC_ID="amr-jobs-topic"
+# PROJECT_ID=""
+# REGION=""
+# BUCKET_NAME=""
+# OUTPUT_BUCKET=""
+# TOPIC_ID=""
 
 START_TIME=$SECONDS
 

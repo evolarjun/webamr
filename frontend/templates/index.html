@@ -17,7 +17,7 @@
   <form id="upload-form" action="/analyze" method="POST" enctype="multipart/form-data">
     <label for="file">Select an assembled nucleotide file:</label>
     <input type="file" name="nuc_file"> <br>
-    <label for="file">Select an assembled protein file:</label>
+    <label for="file">Select a protein file:</label>
     <input type="file" name="prot_file"> <br>
     <label for="file">Select a GFF file:</label>
     <input type="file" name="gff_file"> <br>
@@ -41,6 +41,22 @@
     const resultsDiv = document.getElementById('results');
     let timerInterval;
     let elapsedTime = 0;
+
+    function downloadResults(userId) {
+      fetch('/output/' + userId)
+        .then(response => response.blob())
+        .then(blob => {
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.style.display = 'none';
+          a.href = url;
+          a.download = 'amr_results.txt';
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+        })
+        .catch(error => console.error('Error downloading results:', error));
+    }
 
     function pollForResults(userId) {
       const pollResultsDiv = document.getElementById('poll-results');
@@ -71,19 +87,30 @@
             if (data.result) {
               // Stop the timer now that we have final results
               clearInterval(timerInterval);
+              clearInterval(pollInterval);
+              pollResultsDiv.innerHTML = '';
               let minutes = Math.floor(elapsedTime / 60000);
               let seconds = Math.floor((elapsedTime % 60000) / 1000);
               let formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-              // Display the result content with final elapsed time
-              resultsDiv.innerHTML = `<p>Elapsed time: ${formattedTime}</p>${data.result}`;
-              clearInterval(pollInterval);
               // Add download button
               const downloadButton = document.createElement('button');
               downloadButton.textContent = 'Download Results';
+              downloadButton.style.marginBottom = '10px';
               downloadButton.addEventListener('click', () => {
                 downloadResults(userId); // Call downloadResults with userId
               });
+
+              // Display the result content with final elapsed time
+              resultsDiv.innerHTML = `<p>Elapsed time: ${formattedTime}</p>`;
               resultsDiv.appendChild(downloadButton);
+              resultsDiv.insertAdjacentHTML('beforeend', data.result);
+
+              // Add stderr link after the results table
+              if (data.stderr_available) {
+                const stderrLink = document.createElement('p');
+                stderrLink.innerHTML = `<a href="/stderr/${userId}" target="_blank">Download stderr log</a>`;
+                resultsDiv.appendChild(stderrLink);
+              }
             }
           })
           .catch(error => {
@@ -152,21 +179,6 @@
         resultsDiv.innerHTML = `<p>Analyzing with AMRFinderPlus it may take 5-10 minutes for a whole genome... <br />Elapsed time: ${formattedTime}</p>`;
       }, 1000);
 
-      function downloadResults(userId) {
-        fetch('/output/' + userId)
-          .then(response => response.blob())
-          .then(blob => {
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.style.display = 'none';
-            a.href = url;
-            a.download = 'amr_results.txt';
-            document.body.appendChild(a);
-            a.click();
-            window.URL.revokeObjectURL(url);
-          })
-          .catch(error => console.error('Error downloading results:', error));
-      }
 
       fetch('/analyze', {
         method: 'POST',
@@ -198,6 +210,8 @@
             resultsDiv.innerHTML = `<p>Elapsed time: ${formattedTime}</p><p>ERROR:<br /><pre>\n${errorContent}\n</pre></p>`;
           } else if (data.result) {
             // Keep timer running - it will be stopped when pollForResults gets the final result
+            const shareUrl = window.location.origin + (data.results_url || `/results/${data.user_id}`);
+            resultsDiv.innerHTML += `<p>📎 <strong>Share / bookmark results:</strong> <a href="${shareUrl}" target="_blank">${shareUrl}</a></p>`;
             pollForResults(data.user_id);
           }
         })

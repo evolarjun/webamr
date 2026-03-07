@@ -1,5 +1,6 @@
 #taxgroup	gpipe_taxgroup	number_of_nucl_ref_genes
 Acinetobacter_baumannii	Acinetobacter	1
+Bordetella_pertussis	Bordetella_pertussis	1
 Burkholderia_cepacia	Burkholderia_cepacia_complex	0
 Burkholderia_mallei	Burkholderia_mallei	0
 Burkholderia_pseudomallei	Burkholderia_pseudomallei	0
@@ -13,6 +14,7 @@ Enterococcus_faecalis	Enterococcus_faecalis	1
 Enterococcus_faecium	Enterococcus_faecium	1
 Escherichia	Escherichia_coli_Shigella	6
 Haemophilus_influenzae	Haemophilus_influenzae	0
+Helicobacter_pylori	Helicobacter_pylori	0
 Klebsiella_oxytoca	Klebsiella_oxytoca	1
 Klebsiella_pneumoniae	Klebsiella	1
 Neisseria_gonorrhoeae	Neisseria_gonorrhoeae	6

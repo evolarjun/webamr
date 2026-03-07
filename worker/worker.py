@@ -71,12 +71,15 @@ def upload_blob(local_path, destination_blob_name):
     return f"gs://{OUTPUT_BUCKET}/{destination_blob_name}"
 
 
-def run_amrfinder(input_fasta, output_tsv, params):
+def run_amrfinder(input_fasta, output_tsv, stderr_path, params):
     """Build and execute the amrfinder command."""
     cmd = ["amrfinder", "-n", input_fasta, "-o", output_tsv]
 
     if params.get("plus_flag"):
         cmd.append("--plus")
+
+    if params.get("print_node"):
+        cmd.append("--print_node")
 
     organism = params.get("organism")
     if organism:
@@ -92,6 +95,11 @@ def run_amrfinder(input_fasta, output_tsv, params):
 
     print(f"Executing: {' '.join(cmd)}")
     result = subprocess.run(cmd, capture_output=True, text=True)
+
+    # Always save stderr to a file so it can be uploaded and reviewed
+    with open(stderr_path, "w") as f:
+        f.write(result.stderr)
+
     if result.returncode != 0:
         raise Exception(f"AMRFinderPlus failed: {result.stderr}")
 
@@ -147,24 +155,32 @@ def handle_pubsub_push():
 
     local_input = f"/tmp/{job_id}_input.fasta"
     local_output = f"/tmp/{job_id}_output.tsv"
+    local_stderr = f"/tmp/{job_id}_stderr.txt"
 
     try:
         download_blob(gcs_uri, local_input)
-        run_amrfinder(local_input, local_output, params)
+        run_amrfinder(local_input, local_output, local_stderr, params)
 
         result_uri = upload_blob(local_output, f"results/{job_id}.tsv")
-        doc_ref.update({"status": "Completed", "result_uri": result_uri})
+        stderr_uri = upload_blob(local_stderr, f"results/{job_id}_stderr.txt")
+        doc_ref.update({"status": "Completed", "result_uri": result_uri, "stderr_uri": stderr_uri})
         print(f"Job {job_id} completed successfully.")
 
     except Exception as e:
         print(f"Job {job_id} failed: {e}")
-        doc_ref.update({"status": "Failed", "error_message": str(e)})
+        # Upload stderr even on failure if the file was written
+        stderr_uri = None
+        if os.path.exists(local_stderr):
+            try:
+                stderr_uri = upload_blob(local_stderr, f"results/{job_id}_stderr.txt")
+            except Exception as upload_err:
+                print(f"Failed to upload stderr: {upload_err}")
+        doc_ref.update({"status": "Failed", "error_message": str(e), "stderr_uri": stderr_uri})
 
     finally:
-        if os.path.exists(local_input):
-            os.remove(local_input)
-        if os.path.exists(local_output):
-            os.remove(local_output)
+        for path in [local_input, local_output, local_stderr]:
+            if os.path.exists(path):
+                os.remove(path)
 
     # Always return 200 so Pub/Sub acks the message.
     return jsonify({"job_id": job_id}), 200

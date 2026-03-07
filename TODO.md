@@ -1,5 +1,3 @@
-- See if there's a way to filter uploads for size before writing them to disk.
-- Upload directly to buckets instead of through front-end?
-- Manual deployment and tests
-- Is the API key appropriate in setup commands
-- re-do setup commands based on DEPLOYMENT.md
+- Store stderr from running AMRFinderPlus and add a link to that output file
+- After GFF file add an Annotation format option dropdown. 
+- 

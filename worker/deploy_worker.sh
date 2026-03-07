@@ -2,9 +2,9 @@
 set -e
 
 # Configuration
-PROJECT_ID="amrfinder"
-REGION="us-central1"
-OUTPUT_BUCKET="amr-output-bucket-${PROJECT_ID}"
+# PROJECT_ID=""
+# REGION=""
+# OUTPUT_BUCKET=""
 
 START_TIME=$SECONDS
 

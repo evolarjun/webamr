@@ -54,6 +54,12 @@ def _make_push_body(job_id="job-abc", gcs_uri="gs://bucket/uploads/in.fasta", pa
 # ---------------------------------------------------------------------------
 
 class TestDownloadBlob:
+    def setup_method(self):
+        # upload_versions() runs at import time and may have already called
+        # storage_client.bucket(); reset the mock before each test so that
+        # assert_called_once_with counts only the call made by the test itself.
+        worker.storage_client.bucket.reset_mock()
+
     def test_parses_gcs_uri_correctly(self):
         mock_bucket = MagicMock()
         mock_blob = MagicMock()
@@ -101,7 +107,7 @@ class TestRunAmrfinder:
     @patch("worker.subprocess.run")
     def test_basic_command(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0, stdout="col1\tcol2\n", stderr="")
-        worker.run_amrfinder("/tmp/in.fasta", "/tmp/out.tsv", {})
+        worker.run_amrfinder("/tmp/in.fasta", "/tmp/out.tsv", "/tmp/stderr.txt", {})
         cmd = mock_run.call_args[0][0]
         assert cmd[:3] == ["amrfinder", "-n", "/tmp/in.fasta"]
         assert "-o" in cmd
@@ -110,14 +116,14 @@ class TestRunAmrfinder:
     @patch("worker.subprocess.run")
     def test_plus_flag_added(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-        worker.run_amrfinder("/tmp/in.fasta", "/tmp/out.tsv", {"plus_flag": True})
+        worker.run_amrfinder("/tmp/in.fasta", "/tmp/out.tsv", "/tmp/stderr.txt", {"plus_flag": True})
         cmd = mock_run.call_args[0][0]
         assert "--plus" in cmd
 
     @patch("worker.subprocess.run")
     def test_organism_flag_added(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-        worker.run_amrfinder("/tmp/in.fasta", "/tmp/out.tsv", {"organism": "Salmonella"})
+        worker.run_amrfinder("/tmp/in.fasta", "/tmp/out.tsv", "/tmp/stderr.txt", {"organism": "Salmonella"})
         cmd = mock_run.call_args[0][0]
         assert "-O" in cmd
         assert "Salmonella" in cmd
@@ -125,7 +131,7 @@ class TestRunAmrfinder:
     @patch("worker.subprocess.run")
     def test_ident_min_and_coverage_min(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-        worker.run_amrfinder("/tmp/in.fasta", "/tmp/out.tsv", {
+        worker.run_amrfinder("/tmp/in.fasta", "/tmp/out.tsv", "/tmp/stderr.txt", {
             "ident_min": 0.9,
             "coverage_min": 0.75,
         })
@@ -139,7 +145,7 @@ class TestRunAmrfinder:
     def test_nonzero_returncode_raises(self, mock_run):
         mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="Database error")
         with pytest.raises(Exception, match="AMRFinderPlus failed"):
-            worker.run_amrfinder("/tmp/in.fasta", "/tmp/out.tsv", {})
+            worker.run_amrfinder("/tmp/in.fasta", "/tmp/out.tsv", "/tmp/stderr.txt", {})
 
 
 # ---------------------------------------------------------------------------

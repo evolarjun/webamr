@@ -10,3 +10,4 @@ google-cloud-core
 google-cloud-logging
 google-cloud-storage
 google-cloud-pubsub
+google-cloud-firestore
