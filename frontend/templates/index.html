@@ -32,6 +32,7 @@
     <button type="submit">Run AMRFinderPlus</button>
     <button type="reset">Reset</button>
   </form>
+  <div id="share-link-div"></div>
   <div id="results">
   </div>
   <div id="poll-results"></div>
@@ -39,6 +40,7 @@
   <script>
     const form = document.getElementById('upload-form');
     const resultsDiv = document.getElementById('results');
+    const shareLinkDiv = document.getElementById('share-link-div');
     let timerInterval;
     let elapsedTime = 0;
 
@@ -211,7 +213,7 @@
           } else if (data.result) {
             // Keep timer running - it will be stopped when pollForResults gets the final result
             const shareUrl = window.location.origin + (data.results_url || `/results/${data.user_id}`);
-            resultsDiv.innerHTML += `<p>📎 <strong>Share / bookmark results:</strong> <a href="${shareUrl}" target="_blank">${shareUrl}</a></p>`;
+            shareLinkDiv.innerHTML = `<p>📎 <strong>Share / bookmark results:</strong> <a href="${shareUrl}" target="_blank">${shareUrl}</a></p>`;
             pollForResults(data.user_id);
           }
         })
