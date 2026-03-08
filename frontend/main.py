@@ -310,12 +310,28 @@ def results_page(job_id):
     job_data = doc.to_dict()
     status = job_data.get("status", "Unknown")
     error_message = job_data.get("error_message", "")
+    
+    result_html = None
+    stderr_available = False
+    
+    if status == "Completed":
+        try:
+            storage_client = storage.Client(project=PROJECT_ID)
+            bucket = storage_client.bucket(OUTPUT_BUCKET)
+            blob = bucket.blob(f'results/{job_id}.tsv')
+            if blob.exists():
+                result_html = tabulize(blob.download_as_bytes())
+            stderr_available = bucket.blob(f'results/{job_id}_stderr.txt').exists()
+        except Exception as e:
+            print(f"Error fetching results from GCS for completed job {job_id}: {e}")
 
     return render_template(
         'results.html',
         job_id=job_id,
         status=status,
         error_message=error_message,
+        result_html=result_html,
+        stderr_available=stderr_available
     )
 
 

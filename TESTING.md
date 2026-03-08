@@ -97,3 +97,44 @@ pytest tests/test_integration.py -v
 source set_variables.sh
 pytest tests/ -v
 ```
+
+---
+
+## Production E2E Tests
+
+These tests make real HTTPS requests to the **deployed** Cloud Run frontend service,
+running the full pipeline end-to-end with actual AMRFinderPlus compute.
+
+> **Note**: These tests consume real GCP resources (Cloud Run, GCS, Firestore, Pub/Sub)
+> and may take up to 10 minutes per run. They clean up after themselves.
+
+### Prerequisites
+
+1. Valid GCP credentials and environment variables:
+   ```bash
+   gcloud auth application-default login
+   source set_variables.sh
+   ```
+
+2. Export the deployed frontend URL:
+   ```bash
+   export FRONTEND_URL=$(gcloud run services describe amr-frontend \
+     --region $REGION --format='value(status.url)')
+   ```
+
+### Run the production E2E tests
+
+```bash
+source set_variables.sh
+export FRONTEND_URL=$(gcloud run services describe amr-frontend --region $REGION --format='value(status.url)')
+pytest tests/test_e2e_production.py -v -s
+```
+
+### What is tested
+
+| Test | Description |
+|---|---|
+| `test_full_job_lifecycle` | Submits a real FASTA file, polls until complete, verifies the HTML results table and TSV download |
+| `test_results_page_is_accessible` | Submits a job and immediately verifies the `/results/<id>` shareable page loads |
+| `test_unknown_job_id_returns_404` | Verifies that an unknown job ID returns a 404 response (quick, no GCP compute) |
+

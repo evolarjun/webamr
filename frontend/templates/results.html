@@ -24,6 +24,14 @@
 
   {% if status == "Failed" %}
   <p class="error"><strong>Job failed:</strong> {{ error_message }}</p>
+  {% elif status == "Completed" and result_html %}
+  <div id="results">
+    <button onclick="downloadResults('{{ job_id }}')" style="margin-bottom: 10px;">Download Results</button>
+    {{ result_html | safe }}
+    {% if stderr_available %}
+    <p><a href="/stderr/{{ job_id }}" target="_blank">Download stderr log</a></p>
+    {% endif %}
+  </div>
   {% else %}
   <div id="status-msg">
     <p>Status: <strong>{{ status }}</strong> — polling for results every 10 seconds…</p>
@@ -60,9 +68,10 @@
         .catch(error => console.error('Error downloading results:', error));
     }
 
-    {% if status != "Failed" %}
+    {% if status != "Failed" and status != "Completed" %}
     (function pollForResults() {
-      const pollInterval = setInterval(() => {
+      // Fetch immediately once
+      function checkStatus() {
         fetch('/get-results/' + jobId)
           .then(response => {
             if (response.status === 204) {
@@ -102,7 +111,10 @@
             }
           })
           .catch(err => console.error('Polling error:', err));
-      }, 10000);
+      }
+
+      checkStatus(); // Initial check
+      const pollInterval = setInterval(checkStatus, 10000); // Poll every 10 seconds
     })();
     {% endif %}
   </script>

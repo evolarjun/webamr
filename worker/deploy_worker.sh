@@ -10,6 +10,7 @@ START_TIME=$SECONDS
 
 echo "---------------------------------------------------------"
 echo "Building worker image for project: ${PROJECT_ID}"
+echo "Usually takes about 8 minutes"
 echo "---------------------------------------------------------"
 
 # Cloud Build submits the current directory and pushes to Artifact Registry
