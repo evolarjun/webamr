@@ -254,6 +254,9 @@ def analyze_file():
 
         total_file_size_bytes = nuc_size + prot_size + gff_size
 
+        # Capture IP address for analytics
+        client_ip = get_remote_address()
+
         # 1. Update DB state to pending
         db = firestore.Client(project=PROJECT_ID)
         doc_ref = db.collection("amr_jobs").document(user_id)
@@ -269,7 +272,8 @@ def analyze_file():
             "total_file_size_bytes": total_file_size_bytes,
             "nuc_file_size_bytes": nuc_size,
             "prot_file_size_bytes": prot_size,
-            "gff_file_size_bytes": gff_size
+            "gff_file_size_bytes": gff_size,
+            "ip_address": client_ip
         })
 
         # 2. Trigger analysis via pubsub message (matching worker's payload expectations)
