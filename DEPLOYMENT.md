@@ -38,7 +38,7 @@ PROJECT_ID="your-project-id"
 REGION="us-central1"
 
 # Application Setup Variables (Environment Variables)
-BUCKET_NAME="amr-input-bucket-${PROJECT_ID}"
+INPUT_BUCKET="amr-input-bucket-${PROJECT_ID}"
 OUTPUT_BUCKET="amr-output-bucket-${PROJECT_ID}"
 TOPIC_ID="amr-jobs-topic"
 
@@ -126,7 +126,7 @@ Create the Pub/Sub topic for the job queue:
 ```bash
 gcloud pubsub topics create amr-jobs-topic
 ```
-*(The push subscription pointing at the worker will be created in [Step 3c](#3c-create-a-pubsub-push-subscription-pointing-at-the-worker) once the worker URL is known.)*
+*(The push subscription pointing at the worker will be created in [Step 3c](#3c-create-a-pubsub-push-subscription-pointing-at-the-worker) once the worker URL is known. Increase `--ack-deadline` if AMRFinderPlus jobs take longer than 10 minutes.)*
 
 ### Firestore
 Initialize Firestore in Native mode. You can do this through the GCP Console (Firestore section) or via CLI:
@@ -171,7 +171,7 @@ gcloud run deploy amr-worker \
   --cpu 2 \
   --set-env-vars PROJECT_ID=$PROJECT_ID,OUTPUT_BUCKET=$OUTPUT_BUCKET \
   --concurrency 1 \
-  --max-instances 1  # Change this number to limit total simultaneous jobs
+  --max-instances 2  # Adjust the number of simultaneous jobs
 
 # Save the deployed URL for the next step
 WORKER_URL=$(gcloud run services describe amr-worker \
