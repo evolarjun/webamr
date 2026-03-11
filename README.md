@@ -1,7 +1,7 @@
 # AMRFinderPlus Web Interface (WebAMR)
 
 > [!WARNING]
-> This application is currently under heavy development and is not yet functional. Please do not attempt to use it in production.
+> This application is experimental. It may fail or produce unexpected results. Please do not use it in production without validation.
 
 This application provides a web-based UI and scalable cloud-native backend for running [AMRFinderPlus](https://github.com/ncbi/amr), a tool by the NCBI for identifying antimicrobial resistance (AMR) genes in sequence data.
 
@@ -27,7 +27,8 @@ For complete instructions on setting up the GCP infrastructure, local testing wi
 ## Development Status
 
 This project is actively developed. Current features include:
-*   Direct-to-GCS browser uploads for large files.
+*   File uploads (nucleotide FASTA, protein FASTA, and GFF) via the web UI.
 *   Asynchronous job processing with Pub/Sub.
 *   Scalable zero-to-N worker instances on Cloud Run.
 *   Job status tracking via Cloud Firestore.
+*   Shareable result pages (`/results/<job_id>`) and TSV download.

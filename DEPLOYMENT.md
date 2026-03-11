@@ -59,7 +59,7 @@ gcloud services enable \
   artifactregistry.googleapis.com
 ```
 
-### 3a. Firestore Time-To-Live (TTL)
+### 2a. Firestore Time-To-Live (TTL)
 
 This tells Firestore to automatically delete jobs 90 days after they were created. The application codebase adds an `expire_at` field (90 days in the future) to every new job document.
 
@@ -69,7 +69,7 @@ gcloud firestore fields ttls update expire_at \
   --enable-ttl
 ```
 
-### 3b. Cloud Storage Lifecycle Policy
+### 2b. Cloud Storage Lifecycle Policy
 
 This tells Cloud Storage to delete files older than 10 days from both buckets.
 
@@ -120,14 +120,13 @@ gsutil cors set cors.json gs://amr-input-bucket-${PROJECT_ID}
 ```
 
 ### Pub/Sub
-Create the topic and subscription for the job queue:
+Create the Pub/Sub topic for the job queue:
 
 🟢 **[One-Time Setup]**
 ```bash
 gcloud pubsub topics create amr-jobs-topic
-gcloud pubsub subscriptions create amr-jobs-sub --topic=amr-jobs-topic --ack-deadline=600
 ```
-*(Note: Increase `--ack-deadline` if AMRFinderPlus jobs take longer than 10 minutes).*
+*(The push subscription pointing at the worker will be created in [Step 3c](#3c-create-a-pubsub-push-subscription-pointing-at-the-worker) once the worker URL is known. Increase `--ack-deadline` if AMRFinderPlus jobs take longer than 10 minutes.)*
 
 ### Firestore
 Initialize Firestore in Native mode. You can do this through the GCP Console (Firestore section) or via CLI:
@@ -144,7 +143,7 @@ receives job messages as **HTTP POST requests pushed by Pub/Sub** directly to
 its Cloud Run URL. Cloud Run scales up an instance per job and back to zero
 when idle — no VM needed.
 
-### 4a. Build and push the Docker image
+### 3a. Build and push the Docker image
 
 🟢 **[One-Time Setup]**
 ```bash
@@ -167,12 +166,12 @@ gcloud run deploy amr-worker \
   --image ${REGION}-docker.pkg.dev/${PROJECT_ID}/amr-repo/amr-worker \
   --region $REGION \
   --no-allow-unauthenticated \
-  --timeout 3600 \
+  --timeout 1200 \
   --memory 4Gi \
   --cpu 2 \
   --set-env-vars PROJECT_ID=$PROJECT_ID,OUTPUT_BUCKET=$OUTPUT_BUCKET \
   --concurrency 1 \
-  --max-instances 2  # Adjust this to change the number of simultaneous jobs
+  --max-instances 2  # Adjust the number of simultaneous jobs
 
 # Save the deployed URL for the next step
 WORKER_URL=$(gcloud run services describe amr-worker \
@@ -238,11 +237,10 @@ gcloud run deploy amr-frontend \
   --image ${REGION}-docker.pkg.dev/${PROJECT_ID}/amr-repo/amr-frontend \
   --region $REGION \
   --allow-unauthenticated \
-  --port 80 \
-  --set-env-vars PROJECT_ID=$PROJECT_ID \
+  --set-env-vars PROJECT_ID=$PROJECT_ID,BUCKET_NAME=$BUCKET_NAME,TOPIC_ID=$TOPIC_ID,OUTPUT_BUCKET=$OUTPUT_BUCKET \
   --max-instances 1
 ```
-*(Note: the container listens on port 80 as defined in its Dockerfile, so we specify `--port 80`)*
+*(Note: the container listens on port 80 as defined in its Dockerfile)*
 
 ### Running Local Frontend
 

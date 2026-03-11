@@ -1,6 +1,6 @@
 # Testing
 
-This project has two levels of tests: **unit tests** (no external dependencies) and **integration tests** (require Docker).
+This project has two levels of tests: **unit tests** (no external dependencies) and **integration tests** (require GCP credentials).
 
 ## Prerequisites
 
