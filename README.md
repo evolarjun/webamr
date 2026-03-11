@@ -14,6 +14,8 @@ WebAMR is built using a decoupled Cloud-Native architecture on Google Cloud Plat
 
 ## Architecture & Data Flow
 
+Uses all google serverless technologies (for fun). Code runs on Google Cloud Run with two images, one for the front-end and one "worker" that runs AMRFinderPlus. Parameters and status for the runs are stored in Firestore, Input and output files are stored in Google Cloud Storage buckets, and the "worker" job is triggered by a Pub/Sub message.
+
 For a detailed view of the infrastructure and data flow (including Google Cloud Storage, Pub/Sub, Firestore, and Cloud Run), please refer to the **[ARCHITECTURE.md](ARCHITECTURE.md)** file.
 
 ## Deployment
