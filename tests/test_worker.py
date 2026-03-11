@@ -49,6 +49,17 @@ def _make_push_body(job_id="job-abc", gcs_uri="gs://bucket/uploads/in.fasta", pa
     }
 
 
+def _make_raw_push_body(raw_bytes):
+    """Build a Pub/Sub push envelope with arbitrary base64-encoded bytes."""
+    return {
+        "message": {
+            "data": base64.b64encode(raw_bytes).decode("utf-8"),
+            "messageId": "test-msg-id",
+        },
+        "subscription": "projects/test-project/subscriptions/amr-jobs-sub",
+    }
+
+
 # ---------------------------------------------------------------------------
 # Tests: download_blob
 # ---------------------------------------------------------------------------
@@ -163,6 +174,58 @@ class TestHandlePubsubPush:
     def test_missing_message_key_returns_400(self):
         resp = flask_client.post("/", json={"subscription": "projects/x/subscriptions/y"})
         assert resp.status_code == 400
+
+    def test_non_dict_payload_returns_200(self):
+        """A JSON array payload is not a valid job message; should be ACK'd (200)."""
+        body = _make_raw_push_body(json.dumps(["job1", "job2"]).encode("utf-8"))
+        resp = flask_client.post("/", json=body)
+        assert resp.status_code == 200
+        assert b"JSON object" in resp.data
+
+    def test_empty_job_id_returns_200(self):
+        """An empty job_id should be ACK'd (200) to prevent infinite retries."""
+        body = _make_push_body(job_id="")
+        resp = flask_client.post("/", json=body)
+        assert resp.status_code == 200
+        assert b"job_id" in resp.data
+
+    def test_non_string_job_id_returns_200(self):
+        """A numeric job_id is invalid; should be ACK'd (200)."""
+        body = _make_raw_push_body(
+            json.dumps({"job_id": 12345, "gcs_uri": "gs://bucket/file.fasta", "parameters": {}}).encode("utf-8")
+        )
+        resp = flask_client.post("/", json=body)
+        assert resp.status_code == 200
+        assert b"job_id" in resp.data
+
+    def test_gcs_uri_missing_scheme_returns_200(self):
+        """A gcs_uri without gs:// prefix is invalid; should be ACK'd (200)."""
+        body = _make_push_body(gcs_uri="bucket/path/file.fasta")
+        resp = flask_client.post("/", json=body)
+        assert resp.status_code == 200
+        assert b"gcs_uri" in resp.data
+
+    def test_gcs_uri_http_scheme_returns_200(self):
+        """A gcs_uri with http:// instead of gs:// is invalid; should be ACK'd (200)."""
+        body = _make_push_body(gcs_uri="http://bucket/path/file.fasta")
+        resp = flask_client.post("/", json=body)
+        assert resp.status_code == 200
+        assert b"gcs_uri" in resp.data
+
+    @patch("worker.upload_blob", return_value="gs://output/results/job-params.tsv")
+    @patch("worker.run_amrfinder")
+    @patch("worker.download_blob")
+    def test_non_dict_parameters_defaults_to_empty(self, mock_dl, mock_run, mock_ul):
+        """Non-dict parameters should be silently replaced with {} and job should succeed."""
+        mock_run.return_value = ""
+        body = _make_raw_push_body(
+            json.dumps({"job_id": "job-params", "gcs_uri": "gs://bucket/file.fasta", "parameters": "bad"}).encode("utf-8")
+        )
+        resp = flask_client.post("/", json=body)
+        assert resp.status_code == 200
+        # run_amrfinder should be called with an empty dict as params
+        _, _, _, called_params = mock_run.call_args[0]
+        assert called_params == {}
 
     @patch("worker.upload_blob", return_value="gs://output/results/job-abc.tsv")
     @patch("worker.run_amrfinder")

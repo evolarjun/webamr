@@ -140,6 +140,11 @@ def handle_pubsub_push():
 
     print(f"Decoded payload: {payload}")
 
+    # Validate that the decoded payload is a JSON object (dict), not an array or scalar
+    if not isinstance(payload, dict):
+        print(f"Malformed message — payload is not a JSON object. Type: {type(payload).__name__}")
+        return jsonify({"error": "Malformed message, payload must be a JSON object"}), 200
+
     if "job_id" not in payload or "gcs_uri" not in payload:
         print(f"Malformed message — missing job_id or gcs_uri. Payload: {payload}")
         # Ack the message (200) so Pub/Sub stops retrying it
@@ -148,6 +153,24 @@ def handle_pubsub_push():
     job_id = payload["job_id"]
     gcs_uri = payload["gcs_uri"]
     params = payload.get("parameters", {})
+
+    # Validate that job_id and gcs_uri are non-empty strings
+    if not isinstance(job_id, str):
+        print(f"Malformed message — job_id must be a string. Got: {job_id!r}")
+        return jsonify({"error": "Malformed message, job_id must be a string"}), 200
+
+    if not job_id:
+        print(f"Malformed message — job_id must not be empty.")
+        return jsonify({"error": "Malformed message, job_id must be a non-empty string"}), 200
+
+    if not isinstance(gcs_uri, str) or not gcs_uri.startswith("gs://"):
+        print(f"Malformed message — gcs_uri must start with 'gs://'. Got: {gcs_uri!r}")
+        return jsonify({"error": "Malformed message, gcs_uri must start with gs://"}), 200
+
+    # Ensure parameters is a dict; fall back to empty dict if malformed
+    if not isinstance(params, dict):
+        print(f"Malformed message — parameters must be a JSON object. Type: {type(params).__name__}. Defaulting to empty.")
+        params = {}
 
     print(f"Received job {job_id}. Processing...")
     doc_ref = db.collection("amr_jobs").document(job_id)
