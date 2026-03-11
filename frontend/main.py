@@ -24,6 +24,28 @@ OUTPUT_BUCKET = os.environ.get('OUTPUT_BUCKET', f'amr-output-bucket-{PROJECT_ID}
 #amrfinder_path = os.path.join(app_dir, 'bin', 'amrfinder')
 amrfinder_path = 'amrfinder'
 
+_storage_client = None
+_firestore_client = None
+_publisher = None
+
+def get_storage_client():
+    global _storage_client
+    if _storage_client is None:
+        _storage_client = storage.Client(project=PROJECT_ID)
+    return _storage_client
+
+def get_firestore_client():
+    global _firestore_client
+    if _firestore_client is None:
+        _firestore_client = firestore.Client(project=PROJECT_ID)
+    return _firestore_client
+
+def get_publisher():
+    global _publisher
+    if _publisher is None:
+        _publisher = pubsub_v1.PublisherClient()
+    return _publisher
+
 app = Flask(__name__, static_folder='static')
 app.config['UPLOAD_FOLDER_BASE'] = UPLOAD_FOLDER_BASE
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10 MB limit
@@ -97,14 +119,14 @@ def organism_select():
 
 def upload_to_gcs(bucket_name, source_file_name, destination_blob_name):
     """Uploads a file to the bucket."""
-    storage_client = storage.Client(project=PROJECT_ID)
+    storage_client = get_storage_client()
     bucket = storage_client.bucket(bucket_name)
     blob = bucket.blob(destination_blob_name)
     blob.upload_from_filename(source_file_name)
 
 def send_pubsub_message(message):
     """Sends a message to the Pub/Sub topic"""
-    publisher = pubsub_v1.PublisherClient()
+    publisher = get_publisher()
     topic_path = publisher.topic_path(PROJECT_ID, TOPIC_ID)
 
     data = message.encode("utf-8")
@@ -120,12 +142,13 @@ cached_software_version = None
 
 @app.route("/")
 def index():
+    print("Inside index!")
     global cached_db_version, cached_software_version
     organism_select_options = organism_select()
     
     if not cached_db_version:
         try:
-            storage_client = storage.Client(project=PROJECT_ID)
+            storage_client = get_storage_client()
             bucket = storage_client.bucket(OUTPUT_BUCKET)
             blob = bucket.blob("config/database_version.txt")
             if blob.exists():
@@ -145,7 +168,7 @@ def index():
 
     if not cached_software_version:
         try:
-            storage_client = storage.Client(project=PROJECT_ID)
+            storage_client = get_storage_client()
             bucket = storage_client.bucket(OUTPUT_BUCKET)
             blob = bucket.blob("config/software_version.txt")
             if blob.exists():
@@ -258,7 +281,7 @@ def analyze_file():
         client_ip = get_remote_address()
 
         # 1. Update DB state to pending
-        db = firestore.Client(project=PROJECT_ID)
+        db = get_firestore_client()
         doc_ref = db.collection("amr_jobs").document(user_id)
         doc_ref.set({
             "job_id": user_id,
@@ -302,7 +325,7 @@ def analyze_file():
 def results_page(job_id):
     """Shareable results page for a specific job."""
     try:
-        db = firestore.Client(project=PROJECT_ID)
+        db = get_firestore_client()
         doc = db.collection("amr_jobs").document(job_id).get()
     except Exception as e:
         print(f"Error fetching job from Firestore: {e}")
@@ -320,7 +343,7 @@ def results_page(job_id):
     
     if status == "Completed":
         try:
-            storage_client = storage.Client(project=PROJECT_ID)
+            storage_client = get_storage_client()
             bucket = storage_client.bucket(OUTPUT_BUCKET)
             blob = bucket.blob(f'results/{job_id}.tsv')
             if blob.exists():
@@ -342,7 +365,7 @@ def results_page(job_id):
 @app.route('/get-results/<user_id>', methods=['GET'])
 def return_results(user_id):
     """Returns the results of the analysis if they're available"""
-    storage_client = storage.Client(project=PROJECT_ID)
+    storage_client = get_storage_client()
     bucket = storage_client.bucket(OUTPUT_BUCKET)
     blob = bucket.blob(f'results/{user_id}.tsv')
     stderr_available = bucket.blob(f'results/{user_id}_stderr.txt').exists()
@@ -353,7 +376,7 @@ def return_results(user_id):
     else:
         # Check if the job failed in Firestore
         try:
-            db = firestore.Client(project=PROJECT_ID)
+            db = get_firestore_client()
             doc = db.collection("amr_jobs").document(user_id).get()
             if doc.exists and doc.to_dict().get("status") == "Failed":
                 error_msg = doc.to_dict().get("error_message", "Unknown error")
@@ -370,7 +393,7 @@ def return_results(user_id):
 def output(user_id):
     try:
         import io
-        storage_client = storage.Client(project=PROJECT_ID)
+        storage_client = get_storage_client()
         bucket = storage_client.bucket(OUTPUT_BUCKET)
         blob = bucket.blob(f'results/{user_id}.tsv')
         
@@ -393,7 +416,7 @@ def output(user_id):
 def stderr_output(user_id):
     try:
         import io
-        storage_client = storage.Client(project=PROJECT_ID)
+        storage_client = get_storage_client()
         bucket = storage_client.bucket(OUTPUT_BUCKET)
         blob = bucket.blob(f'results/{user_id}_stderr.txt')
 

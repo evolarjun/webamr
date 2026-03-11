@@ -174,13 +174,13 @@ def handle_pubsub_push():
 
     print(f"Received job {job_id}. Processing...")
     doc_ref = db.collection("amr_jobs").document(job_id)
-    doc_ref.update({"status": "Processing"})
 
     local_input = f"/tmp/{job_id}_input.fasta"
     local_output = f"/tmp/{job_id}_output.tsv"
     local_stderr = f"/tmp/{job_id}_stderr.txt"
 
     try:
+        doc_ref.update({"status": "Processing"})
         download_blob(gcs_uri, local_input)
         run_amrfinder(local_input, local_output, local_stderr, params)
 
@@ -198,12 +198,19 @@ def handle_pubsub_push():
                 stderr_uri = upload_blob(local_stderr, f"results/{job_id}_stderr.txt")
             except Exception as upload_err:
                 print(f"Failed to upload stderr: {upload_err}")
-        doc_ref.update({"status": "Failed", "error_message": str(e), "stderr_uri": stderr_uri})
+                
+        try:
+            doc_ref.update({"status": "Failed", "error_message": str(e), "stderr_uri": stderr_uri})
+        except Exception as db_err:
+            print(f"Failed to update firestore with error status: {db_err}")
 
     finally:
         for path in [local_input, local_output, local_stderr]:
             if os.path.exists(path):
-                os.remove(path)
+                try:
+                    os.remove(path)
+                except Exception as cleanup_err:
+                    print(f"Failed to remove {path}: {cleanup_err}")
 
     # Always return 200 so Pub/Sub acks the message.
     return jsonify({"job_id": job_id}), 200

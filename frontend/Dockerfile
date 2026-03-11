@@ -15,6 +15,6 @@ COPY main.py .
 
 # Set the entrypoint to execute
 EXPOSE 80
-CMD ["gunicorn", "--bind", "0.0.0.0:80", "main:app"]
+CMD exec gunicorn --bind :80 --workers 1 --threads 8 --timeout 0 main:app
 
 

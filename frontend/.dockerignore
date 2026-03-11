@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+uploads/
+results/
+tmp/
+.git/
+.gitignore
+AGENTS.md
+ARCHITECTURE.md
+DEPLOYMENT.md

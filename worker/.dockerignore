@@ -1,0 +1,9 @@
+.venv/
+__pycache__/
+*.pyc
+tmp/
+.git/
+.gitignore
+AGENTS.md
+ARCHITECTURE.md
+DEPLOYMENT.md
