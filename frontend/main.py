@@ -188,7 +188,7 @@ def analyze_file():
         return jsonify({'error': 'No protein file selected'}), 400
 
     # Basic command structure
-    command = [amrfinder_path, "--print_node", "-o", upload_folder + "/output.amrfinder"]  
+    command = [amrfinder_path, "--plus", "--print_node", "-o", upload_folder + "/output.amrfinder"]
 
     # Check for organism value
     if 'organism' in request.form:
@@ -243,7 +243,7 @@ def analyze_file():
             
         gcs_uri = f"gs://{BUCKET_NAME}/{user_id}/{main_filename}"
         
-        params = {"print_node": True}
+        params = {"print_node": True, "plus_flag": True}
         if 'organism' in request.form and request.form['organism'] not in ["", "None"]:
             params["organism"] = re.sub(r'[^A-Za-z0-9_]', '', request.form['organism'])
 

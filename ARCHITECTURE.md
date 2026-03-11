@@ -4,25 +4,25 @@
 flowchart TD
     User([User / Browser])
     
-    subgraph Frontend [Flask Web App (Cloud Run)]
+    subgraph Frontend ["Flask Web App (Cloud Run)"]
         UI[Upload UI & Param Controls]
         App[Flask App logic]
     end
     
-    subgraph GCP_Storage [Google Cloud Storage]
+    subgraph GCP_Storage ["Google Cloud Storage"]
         BucketIn[(Input Bucket\nUploads)]
         BucketOut[(Output Bucket\nResults)]
     end
     
-    subgraph GCP_PubSub [Google Cloud Pub/Sub]
+    subgraph GCP_PubSub ["Google Cloud Pub/Sub"]
         Queue[[Job Queue Topic]]
     end
     
-    subgraph Workers [Python Workers on Cloud Run / GCE]
+    subgraph Workers ["Python Workers on Cloud Run / GCE"]
         Worker[Dockerized Worker\nAMRFinderPlus]
     end
     
-    subgraph GCP_DB [Cloud Firestore]
+    subgraph GCP_DB ["Cloud Firestore"]
         DB[(Job Status DB)]
     end
 
