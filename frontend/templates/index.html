@@ -12,7 +12,7 @@
 <body>
   <h1>Upload your files to run <a href="https://github.com/ncbi/amr/wiki">AMRFinderPlus</a></h1>
   This is designed to run a bacterial genome at a time. Larger submissions will probably fail. <br />
-  <span style="color: red;">This is experimental and may fail.</span>
+  <span style="color: red;">This is a personal experimental side-project and may fail.</span><span>This software does not reflect the priorities or opinions of my employer, and use of the results is at your own risk.</span>
   <p></p>
   <pre>AMRFinderPlus <a href="https://github.com/ncbi/amr/releases/tag/amrfinder_v{{ software_version }}"></a>{{ software_version }}</a> database version {{ database_version }}</pre>
   <form id="upload-form" action="/analyze" method="POST" enctype="multipart/form-data">
@@ -20,8 +20,21 @@
     <input type="file" name="nuc_file"> <br>
     <label for="file">Select a protein file:</label>
     <input type="file" name="prot_file"> <br>
-    <label for="file">Select a GFF file:</label>
-    <input type="file" name="gff_file"> <br>
+    <label for="gff_file">Select a GFF file:</label>
+    <input type="file" name="gff_file" id="gff_file">
+    <label for="annotation_format" style="margin-left: 15px;">Annotation format:</label>
+    <select id="annotation_format" name="annotation_format">
+      <option value="bakta">bakta</option>
+      <option value="genbank">genbank</option>
+      <option value="microscope">microscope</option>
+      <option value="patric">patric</option>
+      <option value="pgap">pgap</option>
+      <option value="prodigal">prodigal</option>
+      <option value="prokka">prokka</option>
+      <option value="pseudomonasdb">pseudomonasdb</option>
+      <option value="rast">rast</option>
+      <option value="standard" selected>standard</option>
+    </select> <br>
     <label for="organism">Organism group (optional):</label>
 
     <select id="organism" name="organism">
@@ -171,6 +184,7 @@
       if (gffFile) {
         formData.append('gff_file', gffFile);
       }
+      formData.append('annotation_format', form.elements['annotation_format'].value || 'standard');
       formData.append('organism', form.elements['organism'].value);
       // Start the timer
       elapsedTime = 0;

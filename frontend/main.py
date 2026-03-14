@@ -213,17 +213,33 @@ def analyze_file():
     # Basic command structure
     command = [amrfinder_path, "--plus", "--print_node", "-o", upload_folder + "/output.amrfinder"]
 
+    # Valid annotation formats as per amrfinder -h
+    ALLOWED_ANNOTATION_FORMATS = {
+        "bakta", "genbank", "microscope", "patric", "pgap", "prodigal",
+        "prokka", "pseudomonasdb", "rast", "standard"
+    }
+
     # Check for organism value
     if 'organism' in request.form:
         organism_value = request.form['organism']
         if organism_value != "" and organism_value != 'None':  
+            # Strict sanitization: alphanumeric and underscores only
             organism_value = re.sub(r'[^A-Za-z0-9_]', '', organism_value)
             print(f"Organism selected: {organism_value}")
-            command.extend(["--organism", organism_value])  # Add -t option if organism is selected
+            command.extend(["--organism", organism_value])  
         else:
             print("No organism selected.")
+            organism_value = None
     else:
         print("Organism not found in form data.")
+        organism_value = None
+
+    annotation_format = request.form.get('annotation_format', 'standard').strip()
+    if annotation_format not in ALLOWED_ANNOTATION_FORMATS:
+        print(f"Invalid annotation format: {annotation_format}. Defaulting to standard.")
+        annotation_format = "standard"
+    
+    command.extend(["--annotation_format", annotation_format])
     print("Now saving files")
     # save files
     if nuc_file: 
@@ -266,9 +282,9 @@ def analyze_file():
             
         gcs_uri = f"gs://{BUCKET_NAME}/{user_id}/{main_filename}"
         
-        params = {"print_node": True, "plus_flag": True}
-        if 'organism' in request.form and request.form['organism'] not in ["", "None"]:
-            params["organism"] = re.sub(r'[^A-Za-z0-9_]', '', request.form['organism'])
+        params = {"print_node": True, "plus_flag": True, "annotation_format": annotation_format}
+        if organism_value:
+            params["organism"] = organism_value
 
         # Calculate file sizes to write to DB
         nuc_size = os.path.getsize(os.path.join(upload_folder, secure_filename(nuc_file.filename))) if nuc_file else 0
@@ -368,7 +384,7 @@ def return_results(user_id):
     storage_client = get_storage_client()
     bucket = storage_client.bucket(OUTPUT_BUCKET)
     blob = bucket.blob(f'results/{user_id}.tsv')
-    stderr_available = bucket.blob(f'results/{user_id}_stderr.txt').exists()
+    stderr_available = bool(bucket.blob(f'results/{user_id}_stderr.txt').exists())
     if blob.exists():
         print("File exists")
         results = tabulize(blob.download_as_bytes())
