@@ -153,6 +153,19 @@ class TestRunAmrfinder:
         assert "0.75" in cmd
 
     @patch("worker.subprocess.run")
+    def test_annotation_format_added(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        worker.run_amrfinder(
+            "/tmp/in.fasta",
+            "/tmp/out.tsv",
+            "/tmp/stderr.txt",
+            {"annotation_format": "prokka"},
+        )
+        cmd = mock_run.call_args[0][0]
+        assert "--annotation_format" in cmd
+        assert "prokka" in cmd
+
+    @patch("worker.subprocess.run")
     def test_nonzero_returncode_raises(self, mock_run):
         mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="Database error")
         with pytest.raises(Exception, match="AMRFinderPlus failed"):

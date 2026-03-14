@@ -120,8 +120,8 @@ class TestAnalyze:
         # Firestore set succeeds
         MOCK_FIRESTORE.collection.return_value.document.return_value = MagicMock()
 
-    def _post_analyze(self, nuc_file=True, prot_file=False, organism="", extra_data=None):
-        data = {"organism": organism}
+    def _post_analyze(self, nuc_file=True, prot_file=False, organism="", annotation_format="standard", extra_data=None):
+        data = {"organism": organism, "annotation_format": annotation_format}
         if extra_data:
             data.update(extra_data)
         if nuc_file:
@@ -177,6 +177,20 @@ class TestAnalyze:
         call_args = MOCK_PUBLISHER.publish.call_args
         message = json.loads(call_args[0][1].decode("utf-8"))
         assert "organism" not in message["parameters"]
+
+    def test_default_annotation_format_in_pubsub_message(self):
+        MOCK_PUBLISHER.publish.reset_mock()
+        self._post_analyze()
+        call_args = MOCK_PUBLISHER.publish.call_args
+        message = json.loads(call_args[0][1].decode("utf-8"))
+        assert message["parameters"].get("annotation_format") == "standard"
+
+    def test_custom_annotation_format_in_pubsub_message(self):
+        MOCK_PUBLISHER.publish.reset_mock()
+        self._post_analyze(annotation_format="prokka")
+        call_args = MOCK_PUBLISHER.publish.call_args
+        message = json.loads(call_args[0][1].decode("utf-8"))
+        assert message["parameters"].get("annotation_format") == "prokka"
 
     def test_firestore_doc_set_to_pending(self):
         mock_doc = MagicMock()

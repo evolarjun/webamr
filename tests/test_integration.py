@@ -82,7 +82,7 @@ FAKE_AMR_TSV = (
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _submit_job(organism=""):
+def _submit_job(organism="", annotation_format="standard"):
     """
     Submit a FASTA file via the frontend, intercepting the Pub/Sub message.
     Returns (user_id, captured_pubsub_payload_dict).
@@ -95,6 +95,7 @@ def _submit_job(organism=""):
     fasta_content = b">seq1\nATCGATCGATCGATCGATCGATCG\n"
     data = {
         "organism": organism,
+        "annotation_format": annotation_format,
         "nuc_file": (io.BytesIO(fasta_content), "test_sample.fasta"),
     }
 
@@ -220,6 +221,17 @@ class TestEndToEnd:
 
             results_resp = _poll_results(user_id)
             assert results_resp.status_code == 200
+        finally:
+            _cleanup_gcs(user_id)
+            _cleanup_firestore(user_id)
+
+    def test_submit_with_annotation_format(self):
+        """Submit with annotation_format and verify it flows to the worker payload."""
+        user_id, payload = _submit_job(annotation_format="prokka")
+        try:
+            assert payload["parameters"].get("annotation_format") == "prokka"
+            worker_resp = _forward_to_worker(payload)
+            assert worker_resp.status_code == 200
         finally:
             _cleanup_gcs(user_id)
             _cleanup_firestore(user_id)

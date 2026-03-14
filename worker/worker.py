@@ -93,6 +93,10 @@ def run_amrfinder(input_fasta, output_tsv, stderr_path, params):
     if coverage_min is not None:
         cmd.extend(["-c", str(coverage_min)])
 
+    annotation_format = params.get("annotation_format")
+    if annotation_format:
+        cmd.extend(["--annotation_format", str(annotation_format)])
+
     print(f"Executing: {' '.join(cmd)}")
     result = subprocess.run(cmd, capture_output=True, text=True)
 
