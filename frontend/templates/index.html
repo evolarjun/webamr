@@ -58,6 +58,49 @@
     let timerInterval;
     let elapsedTime = 0;
 
+    /* ── Column sorting ─────────────────────────────────────────── */
+    function sortTable(table, columnIndex, ascending) {
+      const tbody = table.querySelector('tbody');
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+
+      rows.sort((a, b) => {
+        const aText = (a.children[columnIndex] || {}).textContent || '';
+        const bText = (b.children[columnIndex] || {}).textContent || '';
+        const aNum = parseFloat(aText);
+        const bNum = parseFloat(bText);
+
+        if (!isNaN(aNum) && !isNaN(bNum)) {
+          return ascending ? aNum - bNum : bNum - aNum;
+        }
+        const cmp = aText.localeCompare(bText, undefined, { sensitivity: 'base' });
+        return ascending ? cmp : -cmp;
+      });
+
+      rows.forEach(row => tbody.appendChild(row));
+    }
+
+    function initSortHeaders() {
+      const table = document.querySelector('#results table');
+      if (!table) return;
+
+      const headers = table.querySelectorAll('thead th');
+      headers.forEach((th, index) => {
+        if (th.dataset.sortBound) return;
+        th.dataset.sortBound = 'true';
+
+        th.addEventListener('click', () => {
+          const currentDir = th.dataset.sortDir;
+          const ascending = currentDir !== 'asc';
+
+          headers.forEach(h => { h.dataset.sortDir = ''; h.classList.remove('sort-asc', 'sort-desc'); });
+          th.dataset.sortDir = ascending ? 'asc' : 'desc';
+          th.classList.add(ascending ? 'sort-asc' : 'sort-desc');
+
+          sortTable(table, index, ascending);
+        });
+      });
+    }
+
     function downloadResults(userId) {
       fetch('/output/' + userId)
         .then(response => response.blob())
@@ -127,6 +170,9 @@
                 stderrLink.innerHTML = `<a href="/stderr/${userId}" target="_blank">Download stderr log</a>`;
                 resultsDiv.appendChild(stderrLink);
               }
+              
+              // Attach sort handlers to the newly injected table
+              initSortHeaders();
             }
           })
           .catch(error => {

@@ -13,6 +13,34 @@ td {
 
 th {
   background-color: #f2f2f2;
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  padding-right: 20px;
+}
+
+th:hover {
+  background-color: #e6e6e6;
+}
+
+th::after {
+  content: '';
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.7em;
+  color: #999;
+}
+
+th.sort-asc::after {
+  content: '▲';
+  color: #333;
+}
+
+th.sort-desc::after {
+  content: '▼';
+  color: #333;
 }
 
 tr:nth-child(even) {

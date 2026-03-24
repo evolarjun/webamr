@@ -68,6 +68,58 @@
         .catch(error => console.error('Error downloading results:', error));
     }
 
+    /* ── Column sorting ─────────────────────────────────────────── */
+    function sortTable(table, columnIndex, ascending) {
+      const tbody = table.querySelector('tbody');
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+
+      rows.sort((a, b) => {
+        const aText = (a.children[columnIndex] || {}).textContent || '';
+        const bText = (b.children[columnIndex] || {}).textContent || '';
+        const aNum = parseFloat(aText);
+        const bNum = parseFloat(bText);
+
+        // Use numeric comparison when both values are numbers
+        if (!isNaN(aNum) && !isNaN(bNum)) {
+          return ascending ? aNum - bNum : bNum - aNum;
+        }
+        // Otherwise use locale-aware string comparison
+        const cmp = aText.localeCompare(bText, undefined, { sensitivity: 'base' });
+        return ascending ? cmp : -cmp;
+      });
+
+      rows.forEach(row => tbody.appendChild(row));
+    }
+
+    function initSortHeaders() {
+      const table = document.querySelector('#results table');
+      if (!table) return;
+
+      const headers = table.querySelectorAll('thead th');
+      headers.forEach((th, index) => {
+        // Avoid attaching duplicate listeners
+        if (th.dataset.sortBound) return;
+        th.dataset.sortBound = 'true';
+
+        th.addEventListener('click', () => {
+          const currentDir = th.dataset.sortDir;
+          const ascending = currentDir !== 'asc';   // toggle: none→asc, asc→desc, desc→asc
+
+          // Clear all other headers
+          headers.forEach(h => { h.dataset.sortDir = ''; h.classList.remove('sort-asc', 'sort-desc'); });
+
+          // Set clicked header
+          th.dataset.sortDir = ascending ? 'asc' : 'desc';
+          th.classList.add(ascending ? 'sort-asc' : 'sort-desc');
+
+          sortTable(table, index, ascending);
+        });
+      });
+    }
+
+    // Attach to server-rendered table (completed jobs loaded directly)
+    document.addEventListener('DOMContentLoaded', initSortHeaders);
+
     {% if status != "Failed" and status != "Completed" %}
     (function pollForResults() {
       // Fetch immediately once
@@ -108,6 +160,9 @@
                 stderrLink.innerHTML = '<a href="/stderr/' + jobId + '" target="_blank">Download stderr log</a>';
                 resultsDiv.appendChild(stderrLink);
               }
+
+              // Attach sort handlers to the newly injected table
+              initSortHeaders();
             }
           })
           .catch(err => console.error('Polling error:', err));

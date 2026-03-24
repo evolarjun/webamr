@@ -11,17 +11,17 @@ def get_required_env(name: str) -> str:
         raise SystemExit(1)
     return value
 
-def clear_pending_jobs():
+def clear_queued_jobs():
     project_id = get_required_env("PROJECT_ID")
     db = firestore.Client(project=project_id)
-    print(f"Clearing pending jobs in Firestore for project: {project_id}...\n")
+    print(f"Clearing queued jobs in Firestore for project: {project_id}...\n")
 
     try:
-        pending_docs = list(db.collection("amr_jobs").where("status", "==", "Pending").stream())
-        if not pending_docs:
-             print("No pending jobs to clear.")
+        queued_docs = list(db.collection("amr_jobs").where("status", "==", "Queued").stream())
+        if not queued_docs:
+             print("No queued jobs to clear.")
         else:
-             for doc in pending_docs:
+             for doc in queued_docs:
                   doc.reference.update({
                       "status": "Failed",
                       "error_message": "Job timed out and was cleared from the system queue by the administrator."
@@ -41,4 +41,4 @@ def clear_pending_jobs():
         print(f"Error updating Firestore database: {e}")
 
 if __name__ == "__main__":
-    clear_pending_jobs()
+    clear_queued_jobs()

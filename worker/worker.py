@@ -11,6 +11,7 @@ import os
 import json
 import base64
 import subprocess
+import threading
 from flask import Flask, request, jsonify
 from google.cloud import storage, firestore
 
@@ -46,11 +47,12 @@ def upload_versions():
     except Exception as e:
         print(f"Failed to get/upload software version: {e}")
 
-# Upload config once on container cold-start
+# Upload config once on container cold-start in a background thread to avoid blocking Gunicorn startup
 try:
-    upload_versions()
+    threading.Thread(target=upload_versions, daemon=True).start()
+    print("Background thread started for version upload.")
 except Exception as e:
-    print(f"Failed to upload versions on startup: {e}")
+    print(f"Failed to start version upload thread: {e}")
 
 
 def download_blob(gcs_uri, local_path):
@@ -176,7 +178,7 @@ def handle_pubsub_push():
         print(f"Malformed message — parameters must be a JSON object. Type: {type(params).__name__}. Defaulting to empty.")
         params = {}
 
-    print(f"Received job {job_id}. Processing...")
+    print(f"[{job_id}] Received job. Fetching Firestore document...")
     doc_ref = db.collection("amr_jobs").document(job_id)
 
     local_input = f"/tmp/{job_id}_input.fasta"
@@ -184,6 +186,7 @@ def handle_pubsub_push():
     local_stderr = f"/tmp/{job_id}_stderr.txt"
 
     try:
+        print(f"[{job_id}] Updating status to Processing...")
         doc_ref.update({"status": "Processing"})
         download_blob(gcs_uri, local_input)
         run_amrfinder(local_input, local_output, local_stderr, params)

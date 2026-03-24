@@ -60,6 +60,9 @@ RUN amrfinder --database_version | awk -F ': ' '/Database version/ {print $2}' >
 
 WORKDIR /app
 
+# Ensure logs are not buffered and appear immediately in Cloud Run
+ENV PYTHONUNBUFFERED=1
+
 # Install Python worker dependencies
 COPY requirements.txt .
 RUN python3 -m venv /opt/venv

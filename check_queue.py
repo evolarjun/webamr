@@ -1,3 +1,5 @@
+#!python3 
+
 import os
 import sys
 from google.cloud import firestore
@@ -15,7 +17,7 @@ def check_queue_via_db():
     """
     Since Push subscriptions cannot be directly pulled/peeked via the Pub/Sub API,
     we can query the Firestore database to see exactly which jobs are currently 
-    stuck in the backlog (either Pending or endlessly Processing).
+    stuck in the backlog (either Queued or endlessly Processing).
     """
     project_id = get_required_env("PROJECT_ID")
     db = firestore.Client(project=project_id)
@@ -23,8 +25,8 @@ def check_queue_via_db():
     print(f"Querying Firestore for active jobs in project: {project_id}...\n")
 
     try:
-        # Check for Pending jobs (in queue, worker hasn't started them yet)
-        pending_docs = list(db.collection("amr_jobs").where("status", "==", "Pending").stream())
+        # Check for Queued jobs (in queue, worker hasn't started them yet)
+        pending_docs = list(db.collection("amr_jobs").where("status", "==", "Queued").stream())
         print(f"--- PENDING JOBS (Waiting in queue) ---")
         if not pending_docs:
              print("None.")
