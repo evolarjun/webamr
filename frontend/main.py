@@ -142,7 +142,7 @@ cached_software_version = None
 
 @app.route("/")
 def index():
-    print("Inside index!")
+    # print("Inside index!")
     global cached_db_version, cached_software_version
     organism_select_options = organism_select()
     
