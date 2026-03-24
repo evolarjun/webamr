@@ -42,7 +42,7 @@ def main():
         docs.sort(key=get_sort_key, reverse=True)
 
         # Print header (tab-delimited)
-        header = ["date", "status", "ip_address", "nuc_size_bytes", "prot_size_bytes", "gff_size_bytes", "organism"]
+        header = ["date", "status", "ip_address", "nuc_size_bytes", "prot_size_bytes", "gff_size_bytes", "organism", "job_id"]
         print("\t".join(header))
 
         for doc in docs:
@@ -79,7 +79,8 @@ def main():
                 str(nuc_size),
                 str(prot_size),
                 str(gff_size),
-                str(organism)
+                str(organism),
+                str(doc.id)
             ]
             print("\t".join(row))
             
