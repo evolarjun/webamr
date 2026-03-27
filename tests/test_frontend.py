@@ -104,6 +104,41 @@ class TestIndex:
         assert resp.status_code == 200
         assert b"Queued" in resp.data
 
+    def test_pending_when_software_blob_missing(self):
+        main.cached_db_version = None
+        main.cached_software_version = None
+        db_blob = _make_blob(exists=True, content=b"2024-01-01.2")
+        sw_blob = _make_blob(exists=False)
+        MOCK_STORAGE.bucket.return_value.blob.side_effect = lambda name: (
+            db_blob if "database_version" in name else sw_blob
+        )
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert b"Queued" in resp.data
+
+    def test_unknown_when_db_fetch_raises_exception(self):
+        main.cached_db_version = None
+        main.cached_software_version = None
+        MOCK_STORAGE.bucket.return_value.blob.side_effect = Exception("Storage error")
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert b"Unknown" in resp.data
+
+    def test_unknown_when_software_fetch_raises_exception(self):
+        main.cached_db_version = None
+        main.cached_software_version = None
+        db_blob = _make_blob(exists=True, content=b"2024-01-01.2")
+
+        def side_effect(name):
+            if "database_version" in name:
+                return db_blob
+            raise Exception("Storage error")
+
+        MOCK_STORAGE.bucket.return_value.blob.side_effect = side_effect
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert b"Unknown" in resp.data
+
 
 # ---------------------------------------------------------------------------
 # Tests: POST /analyze
