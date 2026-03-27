@@ -1,4 +1,6 @@
 import os
+import io
+import traceback
 from flask import Flask, send_file, request, jsonify, render_template, send_from_directory
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -332,7 +334,6 @@ def analyze_file():
         }), 200
     except Exception as e:
         print(f"Server Error in analyze_file: {str(e)}")
-        import traceback
         traceback.print_exc()
         return jsonify({'error': f"Failed to submit job: {str(e)}"}), 500
 
@@ -408,7 +409,6 @@ def return_results(user_id):
 @app.route('/output/<user_id>')
 def output(user_id):
     try:
-        import io
         storage_client = get_storage_client()
         bucket = storage_client.bucket(OUTPUT_BUCKET)
         blob = bucket.blob(f'results/{user_id}.tsv')
@@ -431,7 +431,6 @@ def output(user_id):
 @app.route('/stderr/<user_id>')
 def stderr_output(user_id):
     try:
-        import io
         storage_client = get_storage_client()
         bucket = storage_client.bucket(OUTPUT_BUCKET)
         blob = bucket.blob(f'results/{user_id}_stderr.txt')
