@@ -10,8 +10,18 @@ Usage:
 import os
 import sys
 
+
+def get_required_env(name: str) -> str:
+    value = os.environ.get(name)
+    if not value:
+        print(f"Missing required environment variable: {name}", file=sys.stderr)
+        print("Run: source set_variables.sh", file=sys.stderr)
+        raise SystemExit(1)
+    return value
+
+
 def main():
-    project_id = os.environ.get("PROJECT_ID", "amrfinder")
+    project_id = get_required_env("PROJECT_ID")
 
     try:
         from google.cloud import firestore
@@ -32,7 +42,7 @@ def main():
         docs.sort(key=get_sort_key, reverse=True)
 
         # Print header (tab-delimited)
-        header = ["date", "status", "ip_address", "nuc_size_bytes", "prot_size_bytes", "gff_size_bytes", "organism"]
+        header = ["date", "status", "ip_address", "nuc_size_bytes", "prot_size_bytes", "gff_size_bytes", "organism", "job_id"]
         print("\t".join(header))
 
         for doc in docs:
@@ -69,7 +79,8 @@ def main():
                 str(nuc_size),
                 str(prot_size),
                 str(gff_size),
-                str(organism)
+                str(organism),
+                str(doc.id)
             ]
             print("\t".join(row))
             

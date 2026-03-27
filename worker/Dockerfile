@@ -1,5 +1,5 @@
 # ── Stage 1: Build AMRFinderPlus + HMMER3 from source ────────────────────────
-FROM ubuntu:22.04 AS builder
+FROM ubuntu:24.04 AS builder
 
 RUN apt-get update && apt-get install -y \
   git \
@@ -26,13 +26,14 @@ RUN git clone https://github.com/ncbi/amr.git \
   && make install INSTALL_DIR=/amrfinder
 
 # ── Stage 2: Runtime image ────────────────────────────────────────────────────
-FROM ubuntu:22.04
+FROM ubuntu:24.04
 
 RUN apt-get update && apt-get install -y \
   libcurl4-openssl-dev \
   curl \
   libgomp1 \
   python3 \
+  python3-venv \
   python3-pip \
   && rm -rf /var/lib/apt/lists/*
 
@@ -59,8 +60,13 @@ RUN amrfinder --database_version | awk -F ': ' '/Database version/ {print $2}' >
 
 WORKDIR /app
 
+# Ensure logs are not buffered and appear immediately in Cloud Run
+ENV PYTHONUNBUFFERED=1
+
 # Install Python worker dependencies
 COPY requirements.txt .
+RUN python3 -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 RUN pip3 install --no-cache-dir -r requirements.txt
 
 COPY worker.py .

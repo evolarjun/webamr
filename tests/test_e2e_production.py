@@ -102,7 +102,7 @@ def _poll_for_results(job_id: str) -> requests.Response:
             return resp   # Results are ready
         if resp.status_code == 500:
             return resp   # Job failed — still a definitive answer
-        # 204 means still pending — wait and retry
+        # 204 means still queued — wait and retry
         time.sleep(POLL_INTERVAL_SECONDS)
 
     raise TimeoutError(

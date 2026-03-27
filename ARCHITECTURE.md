@@ -31,7 +31,7 @@ flowchart TD
     UI -->|Submits Form| App
     
     App -->|1. Upload Files| BucketIn
-    App -->|2. Create Job Record: Pending| DB
+    App -->|2. Create Job Record: Queued| DB
     App -->|3. Publish Job Msg| Queue
     App -.->|Returns Status Page| UI
     

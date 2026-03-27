@@ -34,6 +34,10 @@ os.chdir(os.path.join(os.path.dirname(__file__), "..", "frontend"))
 
 import main  # noqa: E402 (imported after patches)
 
+main._storage_client = MOCK_STORAGE
+main._firestore_client = MOCK_FIRESTORE
+main._publisher = MOCK_PUBLISHER
+
 client = main.app.test_client()
 main.app.config["TESTING"] = True
 main.limiter.enabled = False  # reliably disable limiter globally for unit tests
@@ -98,7 +102,7 @@ class TestIndex:
         MOCK_STORAGE.bucket.return_value.blob.return_value = _make_blob(exists=False)
         resp = client.get("/")
         assert resp.status_code == 200
-        assert b"Pending" in resp.data
+        assert b"Queued" in resp.data
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +202,7 @@ class TestAnalyze:
         self._post_analyze()
         mock_doc.set.assert_called_once()
         set_data = mock_doc.set.call_args[0][0]
-        assert set_data["status"] == "Pending"
+        assert set_data["status"] == "Queued"
         assert "created_at" in set_data
         assert "expire_at" in set_data
         # Ensure expire_at is roughly 90 days after created_at
@@ -366,10 +370,10 @@ class TestResultsPage:
     """Tests for the shareable /results/<job_id> route."""
 
     def _pending_firestore(self):
-        """Return a mock Firestore doc representing a pending job."""
+        """Return a mock Firestore doc representing a queued job."""
         doc = MagicMock()
         doc.exists = True
-        doc.to_dict.return_value = {"job_id": "test-job-id", "status": "Pending"}
+        doc.to_dict.return_value = {"job_id": "test-job-id", "status": "Queued"}
         return doc
 
     def _failed_firestore(self):
@@ -415,13 +419,13 @@ class TestResultsPage:
         assert b"/results/test-job-id" in resp.data
 
     def test_results_page_shows_pending_state(self):
-        """While job is Pending, the page indicates it is not yet complete."""
+        """While job is Queued, the page indicates it is not yet complete."""
         MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = (
             self._pending_firestore()
         )
         resp = client.get("/results/test-job-id")
         data_lower = resp.data.lower()
-        assert b"pending" in data_lower or b"running" in data_lower or b"polling" in data_lower
+        assert b"queued" in data_lower or b"running" in data_lower or b"polling" in data_lower
 
     def test_results_page_shows_error_for_failed_job(self):
         """When the job status is Failed, the page contains an error message."""

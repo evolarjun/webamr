@@ -1,4 +1,6 @@
 - After GFF file add an Annotation format option dropdown. 
-- Add plus option
+- Add plus option instead of just universal
 - add links from reference sequence and node to browsers
-
+- Add an optional job name
+- Add a report that includes the input filenames and the AMRFinderPlus command-line
+- Add a link to STDERR from AMRFinderPlus

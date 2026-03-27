@@ -142,7 +142,7 @@ cached_software_version = None
 
 @app.route("/")
 def index():
-    print("Inside index!")
+    # print("Inside index!")
     global cached_db_version, cached_software_version
     organism_select_options = organism_select()
     
@@ -155,8 +155,8 @@ def index():
                 cached_db_version = blob.download_as_string().decode('utf-8').strip()
             else:
                 return render_template('index.html', organism_select=organism_select_options, 
-                    database_version="Pending (Worker starting up...)", 
-                    software_version=cached_software_version or "Pending (Worker starting up...)")
+                    database_version="Queued (Worker starting up...)", 
+                    software_version=cached_software_version or "Queued (Worker starting up...)")
         except Exception as e:
             print(f"Error fetching DB version: {e}")
             # Don't cache error/unknown so we can retry
@@ -176,7 +176,7 @@ def index():
             else:
                 return render_template('index.html', organism_select=organism_select_options, 
                     database_version=db_v, 
-                    software_version="Pending (Worker starting up...)")
+                    software_version="Queued (Worker starting up...)")
         except Exception as e:
             print(f"Error fetching software version: {e}")
             soft_v = "Unknown"
@@ -296,12 +296,12 @@ def analyze_file():
         # Capture IP address for analytics
         client_ip = get_remote_address()
 
-        # 1. Update DB state to pending
+        # 1. Update DB state to queued
         db = get_firestore_client()
         doc_ref = db.collection("amr_jobs").document(user_id)
         doc_ref.set({
             "job_id": user_id,
-            "status": "Pending",
+            "status": "Queued",
             "gcs_uri": gcs_uri,
             "parameters": params,
             "result_uri": None,
