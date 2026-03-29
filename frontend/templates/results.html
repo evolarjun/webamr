@@ -127,7 +127,7 @@
         fetch('/get-results/' + jobId)
           .then(response => {
             if (response.status === 204) {
-              if (statusMsg) statusMsg.innerHTML = '<p>Status: <strong>Running</strong> — still polling…</p>';
+              if (statusMsg) statusMsg.innerHTML = '<p>Status: <strong>Running</strong> — polling…</p>';
               return null;
             }
             return response.json();

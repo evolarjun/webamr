@@ -46,142 +46,12 @@
     <button type="submit">Run AMRFinderPlus</button>
     <button type="reset">Reset</button>
   </form>
-  <div id="share-link-div"></div>
-  <div id="results">
-  </div>
-  <div id="poll-results"></div>
+  <div id="status-msg"></div>
 
   <script>
     const form = document.getElementById('upload-form');
-    const resultsDiv = document.getElementById('results');
-    const shareLinkDiv = document.getElementById('share-link-div');
-    let timerInterval;
-    let elapsedTime = 0;
+    const statusMsg = document.getElementById('status-msg');
 
-    /* ── Column sorting ─────────────────────────────────────────── */
-    function sortTable(table, columnIndex, ascending) {
-      const tbody = table.querySelector('tbody');
-      const rows = Array.from(tbody.querySelectorAll('tr'));
-
-      rows.sort((a, b) => {
-        const aText = (a.children[columnIndex] || {}).textContent || '';
-        const bText = (b.children[columnIndex] || {}).textContent || '';
-        const aNum = parseFloat(aText);
-        const bNum = parseFloat(bText);
-
-        if (!isNaN(aNum) && !isNaN(bNum)) {
-          return ascending ? aNum - bNum : bNum - aNum;
-        }
-        const cmp = aText.localeCompare(bText, undefined, { sensitivity: 'base' });
-        return ascending ? cmp : -cmp;
-      });
-
-      rows.forEach(row => tbody.appendChild(row));
-    }
-
-    function initSortHeaders() {
-      const table = document.querySelector('#results table');
-      if (!table) return;
-
-      const headers = table.querySelectorAll('thead th');
-      headers.forEach((th, index) => {
-        if (th.dataset.sortBound) return;
-        th.dataset.sortBound = 'true';
-
-        th.addEventListener('click', () => {
-          const currentDir = th.dataset.sortDir;
-          const ascending = currentDir !== 'asc';
-
-          headers.forEach(h => { h.dataset.sortDir = ''; h.classList.remove('sort-asc', 'sort-desc'); });
-          th.dataset.sortDir = ascending ? 'asc' : 'desc';
-          th.classList.add(ascending ? 'sort-asc' : 'sort-desc');
-
-          sortTable(table, index, ascending);
-        });
-      });
-    }
-
-    function downloadResults(userId) {
-      fetch('/output/' + userId)
-        .then(response => response.blob())
-        .then(blob => {
-          const url = window.URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.style.display = 'none';
-          a.href = url;
-          a.download = 'amr_results.txt';
-          document.body.appendChild(a);
-          a.click();
-          window.URL.revokeObjectURL(url);
-        })
-        .catch(error => console.error('Error downloading results:', error));
-    }
-
-    function pollForResults(userId) {
-      const pollResultsDiv = document.getElementById('poll-results');
-      let pollInterval = setInterval(() => {
-        fetch(`/get-results/${userId}`)
-          .then(response => {
-            if (response.status === 204) {
-              // No results yet — keep polling
-              pollResultsDiv.innerHTML = `<p>No result yet. Still Polling...</p>`;
-              return null;
-            }
-            return response.json();
-          })
-          .then(data => {
-            if (!data) return; // 204 case, skip processing
-
-            if (data.error) {
-              // Job failed — stop timer and show error
-              clearInterval(timerInterval);
-              clearInterval(pollInterval);
-              let minutes = Math.floor(elapsedTime / 60000);
-              let seconds = Math.floor((elapsedTime % 60000) / 1000);
-              let formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-              resultsDiv.innerHTML = `<p>Elapsed time: ${formattedTime}</p><p>ERROR: ${data.error}</p>`;
-              return;
-            }
-
-            if (data.result) {
-              // Stop the timer now that we have final results
-              clearInterval(timerInterval);
-              clearInterval(pollInterval);
-              pollResultsDiv.innerHTML = '';
-              let minutes = Math.floor(elapsedTime / 60000);
-              let seconds = Math.floor((elapsedTime % 60000) / 1000);
-              let formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-              // Add download button
-              const downloadButton = document.createElement('button');
-              downloadButton.textContent = 'Download Results';
-              downloadButton.style.marginBottom = '10px';
-              downloadButton.addEventListener('click', () => {
-                downloadResults(userId); // Call downloadResults with userId
-              });
-
-              // Display the result content with final elapsed time
-              resultsDiv.innerHTML = `<p>Elapsed time: ${formattedTime}</p>`;
-              resultsDiv.appendChild(downloadButton);
-              resultsDiv.insertAdjacentHTML('beforeend', data.result);
-
-              // Add stderr link after the results table
-              if (data.stderr_available) {
-                const stderrLink = document.createElement('p');
-                stderrLink.innerHTML = `<a href="/stderr/${userId}" target="_blank">Download stderr log</a>`;
-                resultsDiv.appendChild(stderrLink);
-              }
-              
-              // Attach sort handlers to the newly injected table
-              initSortHeaders();
-            }
-          })
-          .catch(error => {
-            console.error('Error polling for results:', error);
-            // Don't stop polling on transient network errors — keep trying
-          });
-
-      }, 10000); // Poll every 10 seconds
-    }
     function validateForm() {
       const nucFile = form.elements['nuc_file'].files[0];
       const protFile = form.elements['prot_file'].files[0];
@@ -191,7 +61,7 @@
       if ((nucFile && nucFile.size > MAX_SIZE) ||
         (protFile && protFile.size > MAX_SIZE) ||
         (gffFile && gffFile.size > MAX_SIZE)) {
-        resultsDiv.innerHTML = '<p class="error">File size exceeds the 10MB limit. Please upload smaller files.</p>';
+        statusMsg.innerHTML = '<p class="error">File size exceeds the 10MB limit. Please upload smaller files.</p>';
         return false;
       }
 
@@ -202,18 +72,17 @@
       } else if (nucFile && protFile && gffFile) {
         return true; // All three files provided
       } else {
-        resultsDiv.innerHTML = '<p class="error">Please upload either only a nucleotide file, only a protein file, or all three files (nucleotide, protein, and GFF).</p>';
+        statusMsg.innerHTML = '<p class="error">Please upload either only a nucleotide file, only a protein file, or all three files (nucleotide, protein, and GFF).</p>';
         return false; // Invalid file combination
       }
     }
 
     form.addEventListener('submit', (event) => {
       event.preventDefault();
-      resultsDiv.innerHTML = ''; // Clear previous results
+      statusMsg.innerHTML = '';
 
-      // Validate the form before building FormData
       if (!validateForm()) {
-        return; // Prevent form submission if validation fails
+        return;
       }
 
       const nucFile = form.elements['nuc_file'].files[0];
@@ -221,34 +90,22 @@
       const gffFile = form.elements['gff_file'].files[0];
 
       const formData = new FormData();
-      if (nucFile) {
-        formData.append('nuc_file', nucFile);
-      }
-      if (protFile) {
-        formData.append('prot_file', protFile);
-      }
-      if (gffFile) {
-        formData.append('gff_file', gffFile);
-      }
+      if (nucFile) formData.append('nuc_file', nucFile);
+      if (protFile) formData.append('prot_file', protFile);
+      if (gffFile) formData.append('gff_file', gffFile);
       formData.append('annotation_format', form.elements['annotation_format'].value || 'standard');
       formData.append('organism', form.elements['organism'].value);
-      // Start the timer
-      elapsedTime = 0;
-      timerInterval = setInterval(() => {
-        elapsedTime += 1000;
-        let minutes = Math.floor(elapsedTime / 60000);
-        let seconds = Math.floor((elapsedTime % 60000) / 1000);
-        let formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-        resultsDiv.innerHTML = `<p>Analyzing with AMRFinderPlus it may take 5-10 minutes for a whole genome... <br />Elapsed time: ${formattedTime}</p>`;
-      }, 1000);
 
+      // Disable the submit button and show upload progress
+      const submitButton = form.querySelector('button[type="submit"]');
+      submitButton.disabled = true;
+      statusMsg.innerHTML = '<p>Uploading files…</p>';
 
       fetch('/analyze', {
         method: 'POST',
         body: formData
       })
         .then(async response => {
-          // Don't stop the timer here - keep it running during polling
           let data;
           try {
             data = await response.json();
@@ -256,44 +113,19 @@
             const text = await response.text();
             throw new Error(`Server returned non-JSON response: ${text}`);
           }
-
           if (!response.ok) {
             throw new Error(data.error || 'Unknown Server Error');
           }
           return data;
         })
         .then(data => {
-          if (data.result && data.result.startsWith('error:')) {
-            // Stop the timer on error
-            clearInterval(timerInterval);
-            let minutes = Math.floor(elapsedTime / 60000);
-            let seconds = Math.floor((elapsedTime % 60000) / 1000);
-            let formattedTime = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-            const errorContent = data.result.substring(7); // Remove "error: " prefix
-            resultsDiv.innerHTML = `<p>Elapsed time: ${formattedTime}</p><p>ERROR:<br /><pre>\n${errorContent}\n</pre></p>`;
-          } else if (data.result) {
-            // Keep timer running - it will be stopped when pollForResults gets the final result
-            const shareUrl = window.location.origin + (data.results_url || `/results/${data.user_id}`);
-            shareLinkDiv.innerHTML = `<p>📎 Share / bookmark results (results will be retained for 1 week) <a href="${shareUrl}" target="_blank">${shareUrl}</a></p>`;
-            pollForResults(data.user_id);
-          }
+          // Redirect to the dedicated results page
+          window.location.href = data.results_url || `/results/${data.user_id}`;
         })
         .catch(error => {
-          // Stop the timer
-          clearInterval(timerInterval);
+          submitButton.disabled = false;
           console.error('Error:', error);
-          // Display the full error message in a <pre> tag
-          resultsDiv.innerHTML = `<p>ERROR:</p><pre>${error.message || error.toString()}</pre>`;
-
-          // Add a button to copy the error to the clipboard
-          const copyButton = document.createElement('button');
-          copyButton.textContent = 'Copy Error';
-          copyButton.addEventListener('click', () => {
-            navigator.clipboard.writeText(JSON.stringify(error, null, 2))
-              .then(() => alert('Error copied to clipboard!'))
-              .catch(err => console.error('Failed to copy error: ', err));
-          });
-          resultsDiv.appendChild(copyButton);
+          statusMsg.innerHTML = `<p class="error">ERROR: ${error.message || error.toString()}</p>`;
         });
     });
   </script>
