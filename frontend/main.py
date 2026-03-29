@@ -375,7 +375,8 @@ def results_page(job_id):
         status=status,
         error_message=error_message,
         result_html=result_html,
-        stderr_available=stderr_available
+        stderr_available=stderr_available,
+        created_at=job_data.get("created_at").isoformat() if job_data.get("created_at") else None
     )
 
 

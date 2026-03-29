@@ -1,4 +1,3 @@
-- After GFF file add an Annotation format option dropdown. 
 - Add plus option instead of just universal
 - add links from reference sequence and node to browsers
 - Add an optional job name
