@@ -391,6 +391,9 @@ class TestGetResults:
 # ---------------------------------------------------------------------------
 
 class TestOutput:
+    def setup_method(self):
+        MOCK_STORAGE.bucket.return_value.blob.side_effect = None
+
     def test_returns_tsv_attachment_when_file_exists(self):
         tsv = b"col1\tcol2\nval1\tval2\n"
         MOCK_STORAGE.bucket.return_value.blob.return_value = _make_blob(
@@ -412,6 +415,9 @@ class TestOutput:
 # ---------------------------------------------------------------------------
 
 class TestStderrOutput:
+    def setup_method(self):
+        MOCK_STORAGE.bucket.return_value.blob.side_effect = None
+
     def test_returns_stderr_attachment_when_file_exists(self):
         MOCK_STORAGE.bucket.return_value.blob.return_value = _make_blob(
             exists=True, content=b"some stderr log\n"
