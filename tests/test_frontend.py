@@ -356,6 +356,35 @@ class TestGetResults:
         assert resp.status_code == 500
         assert "failed" in resp.get_json()["error"].lower()
 
+    def test_hierarchy_node_is_linked(self):
+        content = (
+            b"Protein identifier\tHierarchy node\n"
+            b"seq1\tWP_000000001.1\n"
+        )
+        blob = _make_blob(exists=True, content=content)
+        stderr_blob = _make_blob(exists=False)
+        MOCK_STORAGE.bucket.return_value.blob.side_effect = lambda name: (
+            stderr_blob if "stderr" in name else blob
+        )
+        body = client.get("/get-results/test-node-job").get_json()
+        expected_link = 'https://www.ncbi.nlm.nih.gov/pathogens/genehierarchy/#node_id:WP_000000001.1'
+        assert expected_link in body["result"]
+        assert 'target="_blank"' in body["result"]
+
+    def test_hierarchy_node_na_is_not_linked(self):
+        content = (
+            b"Protein identifier\tHierarchy node\n"
+            b"seq1\tN/A\n"
+        )
+        blob = _make_blob(exists=True, content=content)
+        stderr_blob = _make_blob(exists=False)
+        MOCK_STORAGE.bucket.return_value.blob.side_effect = lambda name: (
+            stderr_blob if "stderr" in name else blob
+        )
+        body = client.get("/get-results/test-na-job").get_json()
+        assert 'https://www.ncbi.nlm.nih.gov/pathogens/genehierarchy/' not in body["result"]
+        assert '<td>N/A</td>' in body["result"]
+
 
 # ---------------------------------------------------------------------------
 # Tests: GET /output/<user_id>

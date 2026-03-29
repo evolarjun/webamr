@@ -92,8 +92,21 @@ def tabulize(tab_delimited):
     Returns:
         A string containing the HTML table.
     """
+    if not tab_delimited:
+        return ""
     lines = tab_delimited.decode('utf-8').strip().split('\n')
+    if not lines or not lines[0]:
+        return ""
+        
     headers = lines[0].split('\t')
+    
+    # Identify Hierarchy node column for special linking
+    hierarchy_node_idx = -1
+    for i, h in enumerate(headers):
+        if h.strip().lower() == "hierarchy node":
+            hierarchy_node_idx = i
+            break
+
     rows = [line.split('\t') for line in lines[1:]]
     html = '<table><thead><tr>'
     for header in headers:
@@ -101,8 +114,13 @@ def tabulize(tab_delimited):
     html += '</tr></thead><tbody>\n'
     for row in rows:
         html += '<tr>'
-        for cell in row:
-            html += f'<td>{cell}</td>'
+        for i, cell in enumerate(row):
+            content = cell
+            # Only link if it's the Hierarchy node column and has a valid-looking value
+            if i == hierarchy_node_idx and cell.strip() and cell.strip().lower() != "n/a":
+                node_id = cell.strip()
+                content = f'<a href="https://www.ncbi.nlm.nih.gov/pathogens/genehierarchy/#node_id:{node_id}" target="_blank">{node_id}</a>'
+            html += f'<td>{content}</td>'
         html += '</tr>\n'
     html += '</tbody></table>'
     return html
