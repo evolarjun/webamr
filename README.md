@@ -1,7 +1,7 @@
 # AMRFinderPlus Web Interface (WebAMR)
 
 > [!WARNING]
-> This application is experimental. It may fail or produce unexpected results. Please do not use it in production without validation.
+> This application is an experimental side project. It may fail or produce unexpected results. 
 
 This application provides a web-based UI and scalable cloud-native backend for running [AMRFinderPlus](https://github.com/ncbi/amr/wiki), a tool by the NCBI for identifying antimicrobial resistance (AMR) genes and point mutations (plus some virulence and biocide/stress resistance genes) in assembled nucleotide and/or protein sequences. Currently running at https://amr.arjunp.net.
 
