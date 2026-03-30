@@ -1,4 +1,4 @@
-# Deployment Guide for AMRFinderPlus Cloud-Native Architecture
+# Deployment Guide for webamr GCP interface
 
 This guide assumes you have the Google Cloud CLI (`gcloud`) installed and authenticated, and a GCP project ready.
 
