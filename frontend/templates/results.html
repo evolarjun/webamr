@@ -10,22 +10,20 @@
 </head>
 
 <body>
-  <h1><a href="/">AMRFinderPlus</a> — Job Results</h1>
+  <h1>
+    <a href="/">AMRFinderPlus</a> - Job Results{% if job_name %}: {{ job_name }}{% endif %}
+  </h1>
 
   <p>
-    <strong>Job ID:</strong> <code id="job-id">{{ job_id }}</code>
+    <strong>Job ID:</strong>
+    <a id="share-link" href="/results/{{ job_id }}"><code id="job-id">{{ job_id }}</code></a>
+    &nbsp;<button onclick="copyLink()" title="Copy sharable link">Copy sharable link</button>
   </p>
   {% if job_name %}
   <p>
     <strong>Job name:</strong> <code id="job-name">{{ job_name }}</code>
   </p>
   {% endif %}
-
-  <p>
-    <strong>Shareable link:</strong>
-    <a id="share-link" href="/results/{{ job_id }}">/results/{{ job_id }}</a>
-    &nbsp;<button onclick="copyLink()">Copy</button>
-  </p>
 
   {% if status == "Failed" %}
   <p class="error"><strong>Job failed:</strong> {{ error_message }}</p>

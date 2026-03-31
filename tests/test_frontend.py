@@ -556,6 +556,28 @@ class TestResultsPage:
         # The page should advertise a shareable URL pointing back to itself
         assert b"/results/test-job-id" in resp.data
 
+    def test_results_page_heading_includes_job_name_when_present(self):
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = (
+            self._pending_firestore()
+        )
+        resp = client.get("/results/test-job-id")
+        assert b"Job Results: Demo Job" in resp.data
+
+    def test_results_page_job_id_is_link_to_results_page(self):
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = (
+            self._pending_firestore()
+        )
+        resp = client.get("/results/test-job-id")
+        assert b'<a id="share-link" href="/results/test-job-id"><code id="job-id">test-job-id</code></a>' in resp.data
+
+    def test_results_page_copy_button_title_is_copy_sharable_link(self):
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = (
+            self._pending_firestore()
+        )
+        resp = client.get("/results/test-job-id")
+        assert b'title="Copy sharable link"' in resp.data
+        assert b">Copy sharable link</button>" in resp.data
+
     def test_results_page_shows_job_name_when_present(self):
         MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = (
             self._pending_firestore()
