@@ -53,6 +53,7 @@ os.chdir(FRONTEND_DIR)
 import main as frontend_main  # noqa: E402
 
 os.chdir(_original_cwd)
+frontend_main.limiter.enabled = False
 
 # The worker calls upload_versions() at module level (uploads db/software
 # version to GCS on cold-start). Patch it to a no-op for tests since amrfinder
@@ -82,7 +83,7 @@ FAKE_AMR_TSV = (
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _submit_job(organism="", annotation_format="standard"):
+def _submit_job(organism="", annotation_format="standard", job_name=""):
     """
     Submit a FASTA file via the frontend, intercepting the Pub/Sub message.
     Returns (user_id, captured_pubsub_payload_dict).
@@ -96,6 +97,7 @@ def _submit_job(organism="", annotation_format="standard"):
     data = {
         "organism": organism,
         "annotation_format": annotation_format,
+        "job_name": job_name,
         "nuc_file": (io.BytesIO(fasta_content), "test_sample.fasta"),
     }
 
@@ -125,12 +127,12 @@ def _forward_to_worker(pubsub_payload, mock_amr_output=FAKE_AMR_TSV):
         "subscription": "projects/test/subscriptions/test-sub",
     }
 
-    def fake_run_amrfinder(input_fasta, output_tsv, stderr_path, params):
+    def fake_run_amrfinder(input_fasta, output_tsv, stderr_path, nucleotide_path, protein_path, params):
         """Write fake TSV output the same way the real amrfinder would."""
         with open(output_tsv, "w") as f:
             f.write(mock_amr_output)
         with open(stderr_path, "w") as f:
-            f.write("AMRFinderPlus mock — integration test\n")
+            f.write("AMRFinderPlus mock - integration test\n")
         return mock_amr_output
 
     with patch.object(worker_main, "run_amrfinder", side_effect=fake_run_amrfinder):
@@ -236,12 +238,23 @@ class TestEndToEnd:
             _cleanup_gcs(user_id)
             _cleanup_firestore(user_id)
 
+    def test_submit_with_job_name(self):
+        """Submit with job_name and verify it is included in the payload."""
+        user_id, payload = _submit_job(job_name="Integration Job_1")
+        try:
+            assert payload.get("job_name") == "Integration Job_1"
+            worker_resp = _forward_to_worker(payload)
+            assert worker_resp.status_code == 200
+        finally:
+            _cleanup_gcs(user_id)
+            _cleanup_firestore(user_id)
+
     def test_failed_job_reports_error(self):
         """When the worker fails, the frontend should report the error."""
         user_id, payload = _submit_job()
         try:
             # Make run_amrfinder raise an exception
-            def failing_amrfinder(input_fasta, output_tsv, stderr_path, params):
+            def failing_amrfinder(input_fasta, output_tsv, stderr_path, nucleotide_path, protein_path, params):
                 with open(stderr_path, "w") as f:
                     f.write("FATAL: database not found\n")
                 raise Exception("AMRFinderPlus failed: database not found")

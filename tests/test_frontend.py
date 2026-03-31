@@ -159,8 +159,8 @@ class TestAnalyze:
         # Firestore set succeeds
         MOCK_FIRESTORE.collection.return_value.document.return_value = MagicMock()
 
-    def _post_analyze(self, nuc_file=True, prot_file=False, organism="", annotation_format="standard", extra_data=None):
-        data = {"organism": organism, "annotation_format": annotation_format}
+    def _post_analyze(self, nuc_file=True, prot_file=False, organism="", annotation_format="standard", job_name="", extra_data=None):
+        data = {"organism": organism, "annotation_format": annotation_format, "job_name": job_name}
         if extra_data:
             data.update(extra_data)
         if nuc_file:
@@ -231,6 +231,13 @@ class TestAnalyze:
         message = json.loads(call_args[0][1].decode("utf-8"))
         assert message["parameters"].get("annotation_format") == "prokka"
 
+    def test_job_name_included_in_pubsub_message(self):
+        MOCK_PUBLISHER.publish.reset_mock()
+        self._post_analyze(job_name="Sample Job_1")
+        call_args = MOCK_PUBLISHER.publish.call_args
+        message = json.loads(call_args[0][1].decode("utf-8"))
+        assert message.get("job_name") == "Sample Job_1"
+
     def test_firestore_doc_set_to_pending(self):
         mock_doc = MagicMock()
         MOCK_FIRESTORE.collection.return_value.document.return_value = mock_doc
@@ -243,6 +250,23 @@ class TestAnalyze:
         # Ensure expire_at is roughly 90 days after created_at
         delta = set_data["expire_at"] - set_data["created_at"]
         assert 89 < delta.days <= 90
+
+    def test_firestore_doc_includes_job_name(self):
+        mock_doc = MagicMock()
+        MOCK_FIRESTORE.collection.return_value.document.return_value = mock_doc
+        self._post_analyze(job_name="My Run-01")
+        set_data = mock_doc.set.call_args[0][0]
+        assert set_data["job_name"] == "My Run-01"
+
+    def test_invalid_job_name_characters_return_400(self):
+        resp = self._post_analyze(job_name="bad@name")
+        assert resp.status_code == 400
+        assert "Job name can only contain" in resp.get_json()["error"]
+
+    def test_job_name_too_long_returns_400(self):
+        resp = self._post_analyze(job_name=("a" * 101))
+        assert resp.status_code == 400
+        assert "100 characters" in resp.get_json()["error"]
 
     def test_no_file_returns_400(self):
         resp = client.post("/analyze", data={}, content_type="multipart/form-data")
@@ -487,7 +511,7 @@ class TestResultsPage:
         """Return a mock Firestore doc representing a queued job."""
         doc = MagicMock()
         doc.exists = True
-        doc.to_dict.return_value = {"job_id": "test-job-id", "status": "Queued"}
+        doc.to_dict.return_value = {"job_id": "test-job-id", "status": "Queued", "job_name": "Demo Job"}
         return doc
 
     def _failed_firestore(self):
@@ -531,6 +555,22 @@ class TestResultsPage:
         assert b"test-job-id" in resp.data
         # The page should advertise a shareable URL pointing back to itself
         assert b"/results/test-job-id" in resp.data
+
+    def test_results_page_shows_job_name_when_present(self):
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = (
+            self._pending_firestore()
+        )
+        resp = client.get("/results/test-job-id")
+        assert b"Job name:" in resp.data
+        assert b"Demo Job" in resp.data
+
+    def test_results_page_omits_job_name_when_absent(self):
+        doc = MagicMock()
+        doc.exists = True
+        doc.to_dict.return_value = {"job_id": "test-job-id", "status": "Queued"}
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = doc
+        resp = client.get("/results/test-job-id")
+        assert b"Job name:" not in resp.data
 
     def test_results_page_shows_pending_state(self):
         """While job is Queued, the page indicates it is not yet complete."""

@@ -230,6 +230,14 @@ def analyze_file():
     if prot_file and prot_file.filename == '':
         return jsonify({'error': 'No protein file selected'}), 400
 
+    raw_job_name = request.form.get("job_name", "")
+    job_name = raw_job_name.strip()
+    if job_name:
+        if len(job_name) > 100:
+            return jsonify({'error': 'Job name must be 100 characters or fewer.'}), 400
+        if not re.fullmatch(r"[A-Za-z0-9 _-]+", job_name):
+            return jsonify({'error': 'Job name can only contain letters, numbers, spaces, underscores, and hyphens.'}), 400
+
     # Basic command structure
     command = [amrfinder_path, "--plus", "--print_node", "-o", upload_folder + "/output.amrfinder"]
 
@@ -327,6 +335,7 @@ def analyze_file():
         doc_ref = db.collection("amr_jobs").document(user_id)
         doc_ref.set({
             "job_id": user_id,
+            "job_name": job_name if job_name else None,
             "status": "Queued",
             "gcs_uri": gcs_uri,
             "parameters": params,
@@ -345,7 +354,8 @@ def analyze_file():
         message_data = {
             "job_id": user_id,
             "gcs_uri": gcs_uri,
-            "parameters": params
+            "parameters": params,
+            "job_name": job_name if job_name else None
         }
         send_pubsub_message(json.dumps(message_data))
 
@@ -400,6 +410,7 @@ def results_page(job_id):
     return render_template(
         'results.html',
         job_id=job_id,
+        job_name=job_data.get("job_name"),
         status=status,
         error_message=error_message,
         result_html=result_html,

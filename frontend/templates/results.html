@@ -15,6 +15,11 @@
   <p>
     <strong>Job ID:</strong> <code id="job-id">{{ job_id }}</code>
   </p>
+  {% if job_name %}
+  <p>
+    <strong>Job name:</strong> <code id="job-name">{{ job_name }}</code>
+  </p>
+  {% endif %}
 
   <p>
     <strong>Shareable link:</strong>
