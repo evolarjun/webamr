@@ -31,6 +31,12 @@
     {% if stderr_available %}
     <p><a href="/stderr/{{ job_id }}" target="_blank">Download stderr log</a></p>
     {% endif %}
+    {% if nucleotide_available %}
+    <p><a href="/nucleotide/{{ job_id }}" target="_blank">Download Nucleotide FASTA</a></p>
+    {% endif %}
+    {% if protein_available %}
+    <p><a href="/protein/{{ job_id }}" target="_blank">Download Protein FASTA</a></p>
+    {% endif %}
   </div>
   {% else %}
   <div id="status-msg">
@@ -180,6 +186,16 @@
                 const stderrLink = document.createElement('p');
                 stderrLink.innerHTML = '<a href="/stderr/' + jobId + '" target="_blank">Download stderr log</a>';
                 resultsDiv.appendChild(stderrLink);
+              }
+              if (data.nucleotide_available) {
+                const nucLink = document.createElement('p');
+                nucLink.innerHTML = '<a href="/nucleotide/' + jobId + '" target="_blank">Download Nucleotide FASTA</a>';
+                resultsDiv.appendChild(nucLink);
+              }
+              if (data.protein_available) {
+                const protLink = document.createElement('p');
+                protLink.innerHTML = '<a href="/protein/' + jobId + '" target="_blank">Download Protein FASTA</a>';
+                resultsDiv.appendChild(protLink);
               }
 
               // Attach sort handlers to the newly injected table

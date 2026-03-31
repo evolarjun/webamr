@@ -375,6 +375,8 @@ def results_page(job_id):
     
     result_html = None
     stderr_available = False
+    nucleotide_available = False
+    protein_available = False
     
     if status == "Completed":
         try:
@@ -384,6 +386,8 @@ def results_page(job_id):
             if blob.exists():
                 result_html = tabulize(blob.download_as_bytes())
             stderr_available = bucket.blob(f'results/{job_id}_stderr.txt').exists()
+            nucleotide_available = bucket.blob(f'results/{job_id}_nucleotide.fna').exists()
+            protein_available = bucket.blob(f'results/{job_id}_protein.faa').exists()
         except Exception as e:
             print(f"Error fetching results from GCS for completed job {job_id}: {e}")
 
@@ -394,6 +398,8 @@ def results_page(job_id):
         error_message=error_message,
         result_html=result_html,
         stderr_available=stderr_available,
+        nucleotide_available=nucleotide_available,
+        protein_available=protein_available,
         created_at=job_data.get("created_at").isoformat() if job_data.get("created_at") else None
     )
 
@@ -405,10 +411,12 @@ def return_results(user_id):
     bucket = storage_client.bucket(OUTPUT_BUCKET)
     blob = bucket.blob(f'results/{user_id}.tsv')
     stderr_available = bool(bucket.blob(f'results/{user_id}_stderr.txt').exists())
+    nucleotide_available = bool(bucket.blob(f'results/{user_id}_nucleotide.fna').exists())
+    protein_available = bool(bucket.blob(f'results/{user_id}_protein.faa').exists())
     if blob.exists():
         print("File exists")
         results = tabulize(blob.download_as_bytes())
-        return jsonify({'result': results, 'user_id': user_id, 'stderr_available': stderr_available}), 200
+        return jsonify({'result': results, 'user_id': user_id, 'stderr_available': stderr_available, 'nucleotide_available': nucleotide_available, 'protein_available': protein_available}), 200
     else:
         # Check if the job failed in Firestore
         try:
@@ -467,6 +475,48 @@ def stderr_output(user_id):
     except Exception as e:
         print(f"Error serving stderr: {e}")
         return jsonify({'error': 'Failed to retrieve stderr log.'}), 500
+
+@app.route('/nucleotide/<user_id>')
+def nucleotide_output(user_id):
+    try:
+        storage_client = get_storage_client()
+        bucket = storage_client.bucket(OUTPUT_BUCKET)
+        blob = bucket.blob(f'results/{user_id}_nucleotide.fna')
+
+        if not blob.exists():
+            return jsonify({'error': 'AMRFinderPlus nucleotide fasta is no longer available.'}), 404
+
+        file_bytes = blob.download_as_bytes()
+        return send_file(
+            io.BytesIO(file_bytes),
+            as_attachment=True,
+            download_name=f"amrfinder_{user_id}_nucleotide.fna",
+            mimetype="text/plain"
+        ), 200
+    except Exception as e:
+        print(f"Error serving nucleotide fasta: {e}")
+        return jsonify({'error': 'Failed to retrieve nucleotide fasta.'}), 500
+
+@app.route('/protein/<user_id>')
+def protein_output(user_id):
+    try:
+        storage_client = get_storage_client()
+        bucket = storage_client.bucket(OUTPUT_BUCKET)
+        blob = bucket.blob(f'results/{user_id}_protein.faa')
+
+        if not blob.exists():
+            return jsonify({'error': 'AMRFinderPlus protein fasta is no longer available.'}), 404
+
+        file_bytes = blob.download_as_bytes()
+        return send_file(
+            io.BytesIO(file_bytes),
+            as_attachment=True,
+            download_name=f"amrfinder_{user_id}_protein.faa",
+            mimetype="text/plain"
+        ), 200
+    except Exception as e:
+        print(f"Error serving protein fasta: {e}")
+        return jsonify({'error': 'Failed to retrieve protein fasta.'}), 500
 
 @app.route('/favicon.ico')
 def favicon():

@@ -318,7 +318,7 @@ class TestGetResults:
         blob = _make_blob(exists=True, content=self.TSV_CONTENT)
         stderr_blob = _make_blob(exists=False)
         MOCK_STORAGE.bucket.return_value.blob.side_effect = lambda name: (
-            stderr_blob if "stderr" in name else blob
+            blob if "results/test-job-id.tsv" in name else stderr_blob
         )
         resp = client.get("/get-results/test-job-id")
         assert resp.status_code == 200
@@ -327,7 +327,7 @@ class TestGetResults:
         blob = _make_blob(exists=True, content=self.TSV_CONTENT)
         stderr_blob = _make_blob(exists=False)
         MOCK_STORAGE.bucket.return_value.blob.side_effect = lambda name: (
-            stderr_blob if "stderr" in name else blob
+            blob if "results/" in name and name.endswith(".tsv") else stderr_blob
         )
         body = client.get("/get-results/test-job-id").get_json()
         assert "<table>" in body["result"]
@@ -364,7 +364,7 @@ class TestGetResults:
         blob = _make_blob(exists=True, content=content)
         stderr_blob = _make_blob(exists=False)
         MOCK_STORAGE.bucket.return_value.blob.side_effect = lambda name: (
-            stderr_blob if "stderr" in name else blob
+            blob if "results/" in name and name.endswith(".tsv") else stderr_blob
         )
         body = client.get("/get-results/test-node-job").get_json()
         expected_link = 'https://www.ncbi.nlm.nih.gov/pathogens/genehierarchy/#node_id:WP_000000001.1'
@@ -379,7 +379,7 @@ class TestGetResults:
         blob = _make_blob(exists=True, content=content)
         stderr_blob = _make_blob(exists=False)
         MOCK_STORAGE.bucket.return_value.blob.side_effect = lambda name: (
-            stderr_blob if "stderr" in name else blob
+            blob if "results/" in name and name.endswith(".tsv") else stderr_blob
         )
         body = client.get("/get-results/test-na-job").get_json()
         assert 'https://www.ncbi.nlm.nih.gov/pathogens/genehierarchy/' not in body["result"]
@@ -429,6 +429,50 @@ class TestStderrOutput:
     def test_returns_404_when_stderr_missing(self):
         MOCK_STORAGE.bucket.return_value.blob.return_value = _make_blob(exists=False)
         resp = client.get("/stderr/nonexistent-job")
+        assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Tests: GET /nucleotide/<user_id>
+# ---------------------------------------------------------------------------
+
+class TestNucleotideOutput:
+    def setup_method(self):
+        MOCK_STORAGE.bucket.return_value.blob.side_effect = None
+
+    def test_returns_nuc_attachment_when_file_exists(self):
+        MOCK_STORAGE.bucket.return_value.blob.return_value = _make_blob(
+            exists=True, content=b">nuc\nATCG\n"
+        )
+        resp = client.get("/nucleotide/test-job-id")
+        assert resp.status_code == 200
+        assert "attachment" in resp.headers.get("Content-Disposition", "")
+
+    def test_returns_404_when_nuc_missing(self):
+        MOCK_STORAGE.bucket.return_value.blob.return_value = _make_blob(exists=False)
+        resp = client.get("/nucleotide/nonexistent-job")
+        assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Tests: GET /protein/<user_id>
+# ---------------------------------------------------------------------------
+
+class TestProteinOutput:
+    def setup_method(self):
+        MOCK_STORAGE.bucket.return_value.blob.side_effect = None
+
+    def test_returns_prot_attachment_when_file_exists(self):
+        MOCK_STORAGE.bucket.return_value.blob.return_value = _make_blob(
+            exists=True, content=b">prot\nMAGY\n"
+        )
+        resp = client.get("/protein/test-job-id")
+        assert resp.status_code == 200
+        assert "attachment" in resp.headers.get("Content-Disposition", "")
+
+    def test_returns_404_when_prot_missing(self):
+        MOCK_STORAGE.bucket.return_value.blob.return_value = _make_blob(exists=False)
+        resp = client.get("/protein/nonexistent-job")
         assert resp.status_code == 404
 
 

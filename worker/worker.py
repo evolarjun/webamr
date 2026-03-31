@@ -73,9 +73,12 @@ def upload_blob(local_path, destination_blob_name):
     return f"gs://{OUTPUT_BUCKET}/{destination_blob_name}"
 
 
-def run_amrfinder(input_fasta, output_tsv, stderr_path, params):
+def run_amrfinder(input_fasta, output_tsv, stderr_path, nucleotide_path, protein_path, params):
     """Build and execute the amrfinder command."""
     cmd = ["amrfinder", "-n", input_fasta, "-o", output_tsv]
+
+    cmd.extend(["--nucleotide_output", nucleotide_path])
+    cmd.extend(["--protein_output", protein_path])
 
     if params.get("plus_flag"):
         cmd.append("--plus")
@@ -184,15 +187,23 @@ def handle_pubsub_push():
     local_input = f"/tmp/{job_id}_input.fasta"
     local_output = f"/tmp/{job_id}_output.tsv"
     local_stderr = f"/tmp/{job_id}_stderr.txt"
+    local_nuc = f"/tmp/{job_id}_nucleotide.fna"
+    local_prot = f"/tmp/{job_id}_protein.faa"
 
     try:
         print(f"[{job_id}] Updating status to Processing...")
         doc_ref.update({"status": "Processing"})
         download_blob(gcs_uri, local_input)
-        run_amrfinder(local_input, local_output, local_stderr, params)
+        run_amrfinder(local_input, local_output, local_stderr, local_nuc, local_prot, params)
 
         result_uri = upload_blob(local_output, f"results/{job_id}.tsv")
         stderr_uri = upload_blob(local_stderr, f"results/{job_id}_stderr.txt")
+
+        if os.path.exists(local_nuc):
+            upload_blob(local_nuc, f"results/{job_id}_nucleotide.fna")
+        if os.path.exists(local_prot):
+            upload_blob(local_prot, f"results/{job_id}_protein.faa")
+
         doc_ref.update({"status": "Completed", "result_uri": result_uri, "stderr_uri": stderr_uri})
         print(f"Job {job_id} completed successfully.")
 
@@ -212,7 +223,7 @@ def handle_pubsub_push():
             print(f"Failed to update firestore with error status: {db_err}")
 
     finally:
-        for path in [local_input, local_output, local_stderr]:
+        for path in [local_input, local_output, local_stderr, local_nuc, local_prot]:
             if os.path.exists(path):
                 try:
                     os.remove(path)

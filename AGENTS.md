@@ -17,7 +17,7 @@ This project uses a decoupled, event-driven architecture on Google Cloud Platfor
 
 ## Development Conventions
 
-*   **Language**: Python 3.11+
+*   **Language**: Python 3.12+
 *   **Web Framework**: Flask
 *   **Frontend UI**: Vanilla JavaScript, HTML, and CSS (no React/Vue/complex frameworks). Focus on clean, responsive, and simple UI.
 *   **Asynchronous Polling**: The frontend uses JS polling (`/get-results/<job_id>`) to check Firestore for job completion instead of WebSockets.
@@ -26,7 +26,7 @@ This project uses a decoupled, event-driven architecture on Google Cloud Platfor
 
 ## Testing Strategy (IMPORTANT)
 
-This project strictly follows TDD (Test-Driven Development). **Always write or update tests when modifying functionality.**
+This project strictly follows TDD (Test-Driven Development). **Always write or update tests when modifying functionality and make sure they are passing before declaring done.**
 
 ### Unit Tests (Fast, No GCP/Docker required)
 Unit tests use `unittest.mock` to mock all GCP services (Firestore, GCS, Pub/Sub) and the `amrfinder` binary.
@@ -48,3 +48,10 @@ pytest tests/test_integration.py -v
 *   **To test rate limits**: We use `Flask-Limiter`. It is disabled during testing via `main.limiter.enabled = False`.
 *   **To update dependencies**: Update `requirements.txt` in both `frontend/` and `worker/` directories.
 *   **To view exact configurations**: Check `DEPLOYMENT.md` for the exact `gcloud` and `gsutil` commands used to construct this environment.
+
+## Output
+- No em dashes, smart quotes, or Unicode. ASCII only.
+- Be concise. If unsure, say so. Never guess.
+
+## Override Rule
+User instructions always override this file.
