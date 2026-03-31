@@ -77,8 +77,10 @@ def run_amrfinder(input_fasta, output_tsv, stderr_path, nucleotide_path, protein
     """Build and execute the amrfinder command."""
     cmd = ["amrfinder", "-n", input_fasta, "-o", output_tsv]
 
-    cmd.extend(["--nucleotide_output", nucleotide_path])
-    cmd.extend(["--protein_output", protein_path])
+    if params.get("has_nucleotide"):
+        cmd.extend(["--nucleotide_output", nucleotide_path])
+    if params.get("has_protein"):
+        cmd.extend(["--protein_output", protein_path])
 
     if params.get("plus_flag"):
         cmd.append("--plus")
@@ -196,13 +198,13 @@ def handle_pubsub_push():
         download_blob(gcs_uri, local_input)
         run_amrfinder(local_input, local_output, local_stderr, local_nuc, local_prot, params)
 
-        result_uri = upload_blob(local_output, f"results/{job_id}.tsv")
-        stderr_uri = upload_blob(local_stderr, f"results/{job_id}_stderr.txt")
+        result_uri = upload_blob(local_output, f"results/{job_id}/results.tsv")
+        stderr_uri = upload_blob(local_stderr, f"results/{job_id}/stderr.txt")
 
         if os.path.exists(local_nuc):
-            upload_blob(local_nuc, f"results/{job_id}_nucleotide.fna")
+            upload_blob(local_nuc, f"results/{job_id}/nucleotide.fna")
         if os.path.exists(local_prot):
-            upload_blob(local_prot, f"results/{job_id}_protein.faa")
+            upload_blob(local_prot, f"results/{job_id}/protein.faa")
 
         doc_ref.update({"status": "Completed", "result_uri": result_uri, "stderr_uri": stderr_uri})
         print(f"Job {job_id} completed successfully.")
@@ -213,7 +215,7 @@ def handle_pubsub_push():
         stderr_uri = None
         if os.path.exists(local_stderr):
             try:
-                stderr_uri = upload_blob(local_stderr, f"results/{job_id}_stderr.txt")
+                stderr_uri = upload_blob(local_stderr, f"results/{job_id}/stderr.txt")
             except Exception as upload_err:
                 print(f"Failed to upload stderr: {upload_err}")
                 

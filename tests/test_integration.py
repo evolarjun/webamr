@@ -160,7 +160,7 @@ def _cleanup_gcs(user_id):
 
     for bucket_name, prefix in [
         (input_bucket_name, f"{user_id}/"),
-        (output_bucket_name, f"results/{user_id}"),
+        (output_bucket_name, f"results/{user_id}/"),
     ]:
         try:
             bucket = client.bucket(bucket_name)

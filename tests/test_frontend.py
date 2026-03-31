@@ -318,7 +318,7 @@ class TestGetResults:
         blob = _make_blob(exists=True, content=self.TSV_CONTENT)
         stderr_blob = _make_blob(exists=False)
         MOCK_STORAGE.bucket.return_value.blob.side_effect = lambda name: (
-            blob if "results/test-job-id.tsv" in name else stderr_blob
+            blob if "results/test-job-id/results.tsv" in name else stderr_blob
         )
         resp = client.get("/get-results/test-job-id")
         assert resp.status_code == 200
@@ -327,7 +327,7 @@ class TestGetResults:
         blob = _make_blob(exists=True, content=self.TSV_CONTENT)
         stderr_blob = _make_blob(exists=False)
         MOCK_STORAGE.bucket.return_value.blob.side_effect = lambda name: (
-            blob if "results/" in name and name.endswith(".tsv") else stderr_blob
+            blob if "results/" in name and name.endswith("results.tsv") else stderr_blob
         )
         body = client.get("/get-results/test-job-id").get_json()
         assert "<table>" in body["result"]
@@ -364,7 +364,7 @@ class TestGetResults:
         blob = _make_blob(exists=True, content=content)
         stderr_blob = _make_blob(exists=False)
         MOCK_STORAGE.bucket.return_value.blob.side_effect = lambda name: (
-            blob if "results/" in name and name.endswith(".tsv") else stderr_blob
+            blob if "results/" in name and name.endswith("results.tsv") else stderr_blob
         )
         body = client.get("/get-results/test-node-job").get_json()
         expected_link = 'https://www.ncbi.nlm.nih.gov/pathogens/genehierarchy/#node_id:WP_000000001.1'
@@ -379,7 +379,7 @@ class TestGetResults:
         blob = _make_blob(exists=True, content=content)
         stderr_blob = _make_blob(exists=False)
         MOCK_STORAGE.bucket.return_value.blob.side_effect = lambda name: (
-            blob if "results/" in name and name.endswith(".tsv") else stderr_blob
+            blob if "results/" in name and name.endswith("results.tsv") else stderr_blob
         )
         body = client.get("/get-results/test-na-job").get_json()
         assert 'https://www.ncbi.nlm.nih.gov/pathogens/genehierarchy/' not in body["result"]

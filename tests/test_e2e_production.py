@@ -63,7 +63,7 @@ def _cleanup_gcs(job_id: str):
     client = storage.Client(project=PROJECT_ID)
     for bucket_name, prefix in [
         (INPUT_BUCKET, f"{job_id}/"),
-        (OUTPUT_BUCKET, f"results/{job_id}"),
+        (OUTPUT_BUCKET, f"results/{job_id}/"),
     ]:
         try:
             bucket = client.bucket(bucket_name)

@@ -302,7 +302,13 @@ def analyze_file():
             
         gcs_uri = f"gs://{BUCKET_NAME}/{user_id}/{main_filename}"
         
-        params = {"print_node": True, "plus_flag": True, "annotation_format": annotation_format}
+        params = {
+            "print_node": True, 
+            "plus_flag": True, 
+            "annotation_format": annotation_format,
+            "has_nucleotide": bool(nuc_file),
+            "has_protein": bool(prot_file)
+        }
         if organism_value:
             params["organism"] = organism_value
 
@@ -382,12 +388,12 @@ def results_page(job_id):
         try:
             storage_client = get_storage_client()
             bucket = storage_client.bucket(OUTPUT_BUCKET)
-            blob = bucket.blob(f'results/{job_id}.tsv')
+            blob = bucket.blob(f'results/{job_id}/results.tsv')
             if blob.exists():
                 result_html = tabulize(blob.download_as_bytes())
-            stderr_available = bucket.blob(f'results/{job_id}_stderr.txt').exists()
-            nucleotide_available = bucket.blob(f'results/{job_id}_nucleotide.fna').exists()
-            protein_available = bucket.blob(f'results/{job_id}_protein.faa').exists()
+            stderr_available = bucket.blob(f'results/{job_id}/stderr.txt').exists()
+            nucleotide_available = bucket.blob(f'results/{job_id}/nucleotide.fna').exists()
+            protein_available = bucket.blob(f'results/{job_id}/protein.faa').exists()
         except Exception as e:
             print(f"Error fetching results from GCS for completed job {job_id}: {e}")
 
@@ -409,10 +415,10 @@ def return_results(user_id):
     """Returns the results of the analysis if they're available"""
     storage_client = get_storage_client()
     bucket = storage_client.bucket(OUTPUT_BUCKET)
-    blob = bucket.blob(f'results/{user_id}.tsv')
-    stderr_available = bool(bucket.blob(f'results/{user_id}_stderr.txt').exists())
-    nucleotide_available = bool(bucket.blob(f'results/{user_id}_nucleotide.fna').exists())
-    protein_available = bool(bucket.blob(f'results/{user_id}_protein.faa').exists())
+    blob = bucket.blob(f'results/{user_id}/results.tsv')
+    stderr_available = bool(bucket.blob(f'results/{user_id}/stderr.txt').exists())
+    nucleotide_available = bool(bucket.blob(f'results/{user_id}/nucleotide.fna').exists())
+    protein_available = bool(bucket.blob(f'results/{user_id}/protein.faa').exists())
     if blob.exists():
         print("File exists")
         results = tabulize(blob.download_as_bytes())
@@ -438,7 +444,7 @@ def output(user_id):
     try:
         storage_client = get_storage_client()
         bucket = storage_client.bucket(OUTPUT_BUCKET)
-        blob = bucket.blob(f'results/{user_id}.tsv')
+        blob = bucket.blob(f'results/{user_id}/results.tsv')
         
         if not blob.exists():
             return jsonify({'error': 'AMRFinderPlus output file is no longer available.'}), 404
@@ -460,7 +466,7 @@ def stderr_output(user_id):
     try:
         storage_client = get_storage_client()
         bucket = storage_client.bucket(OUTPUT_BUCKET)
-        blob = bucket.blob(f'results/{user_id}_stderr.txt')
+        blob = bucket.blob(f'results/{user_id}/stderr.txt')
 
         if not blob.exists():
             return jsonify({'error': 'AMRFinderPlus stderr log is no longer available.'}), 404
@@ -481,7 +487,7 @@ def nucleotide_output(user_id):
     try:
         storage_client = get_storage_client()
         bucket = storage_client.bucket(OUTPUT_BUCKET)
-        blob = bucket.blob(f'results/{user_id}_nucleotide.fna')
+        blob = bucket.blob(f'results/{user_id}/nucleotide.fna')
 
         if not blob.exists():
             return jsonify({'error': 'AMRFinderPlus nucleotide fasta is no longer available.'}), 404
@@ -502,7 +508,7 @@ def protein_output(user_id):
     try:
         storage_client = get_storage_client()
         bucket = storage_client.bucket(OUTPUT_BUCKET)
-        blob = bucket.blob(f'results/{user_id}_protein.faa')
+        blob = bucket.blob(f'results/{user_id}/protein.faa')
 
         if not blob.exists():
             return jsonify({'error': 'AMRFinderPlus protein fasta is no longer available.'}), 404

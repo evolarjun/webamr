@@ -104,10 +104,10 @@ class TestUploadBlob:
         worker.storage_client.bucket.return_value = mock_bucket
         mock_bucket.blob.return_value = mock_blob
 
-        result = worker.upload_blob("/tmp/results.tsv", "results/job-123.tsv")
+        result = worker.upload_blob("/tmp/results.tsv", "results/job-123/results.tsv")
 
         mock_blob.upload_from_filename.assert_called_once_with("/tmp/results.tsv")
-        assert result == f"gs://{worker.OUTPUT_BUCKET}/results/job-123.tsv"
+        assert result == f"gs://{worker.OUTPUT_BUCKET}/results/job-123/results.tsv"
 
 
 # ---------------------------------------------------------------------------
@@ -123,6 +123,26 @@ class TestRunAmrfinder:
         assert cmd[:3] == ["amrfinder", "-n", "/tmp/in.fasta"]
         assert "-o" in cmd
         assert "/tmp/out.tsv" in cmd
+        assert "--nucleotide_output" not in cmd
+        assert "--protein_output" not in cmd
+
+    @patch("worker.subprocess.run")
+    def test_has_nucleotide_flag(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        worker.run_amrfinder("/tmp/in.fasta", "/tmp/out.tsv", "/tmp/stderr.txt", "/tmp/nuc.fna", "/tmp/prot.faa", {"has_nucleotide": True})
+        cmd = mock_run.call_args[0][0]
+        assert "--nucleotide_output" in cmd
+        assert "/tmp/nuc.fna" in cmd
+        assert "--protein_output" not in cmd
+
+    @patch("worker.subprocess.run")
+    def test_has_protein_flag(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        worker.run_amrfinder("/tmp/in.fasta", "/tmp/out.tsv", "/tmp/stderr.txt", "/tmp/nuc.fna", "/tmp/prot.faa", {"has_protein": True})
+        cmd = mock_run.call_args[0][0]
+        assert "--protein_output" in cmd
+        assert "/tmp/prot.faa" in cmd
+        assert "--nucleotide_output" not in cmd
 
     @patch("worker.subprocess.run")
     def test_plus_flag_added(self, mock_run):
@@ -227,7 +247,7 @@ class TestHandlePubsubPush:
         assert resp.status_code == 200
         assert b"gcs_uri" in resp.data
 
-    @patch("worker.upload_blob", return_value="gs://output/results/job-params.tsv")
+    @patch("worker.upload_blob", return_value="gs://output/results/job-params/results.tsv")
     @patch("worker.run_amrfinder")
     @patch("worker.download_blob")
     def test_non_dict_parameters_defaults_to_empty(self, mock_dl, mock_run, mock_ul):
@@ -242,7 +262,7 @@ class TestHandlePubsubPush:
         _, _, _, _, _, called_params = mock_run.call_args[0]
         assert called_params == {}
 
-    @patch("worker.upload_blob", return_value="gs://output/results/job-abc.tsv")
+    @patch("worker.upload_blob", return_value="gs://output/results/job-abc/results.tsv")
     @patch("worker.run_amrfinder")
     @patch("worker.download_blob")
     def test_successful_job_returns_200(self, mock_dl, mock_run, mock_ul):
@@ -250,7 +270,7 @@ class TestHandlePubsubPush:
         resp = flask_client.post("/", json=_make_push_body())
         assert resp.status_code == 200
 
-    @patch("worker.upload_blob", return_value="gs://output/results/job-abc.tsv")
+    @patch("worker.upload_blob", return_value="gs://output/results/job-abc/results.tsv")
     @patch("worker.run_amrfinder")
     @patch("worker.download_blob")
     def test_successful_job_updates_status_to_completed(self, mock_dl, mock_run, mock_ul):
@@ -285,7 +305,7 @@ class TestHandlePubsubPush:
         resp = flask_client.post("/", json=_make_push_body())
         assert resp.status_code == 200
 
-    @patch("worker.upload_blob", return_value="gs://output/results/job-abc.tsv")
+    @patch("worker.upload_blob", return_value="gs://output/results/job-abc/results.tsv")
     @patch("worker.run_amrfinder")
     @patch("worker.download_blob")
     @patch("worker.os.path.exists", return_value=True)

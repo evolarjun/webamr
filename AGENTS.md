@@ -26,7 +26,7 @@ This project uses a decoupled, event-driven architecture on Google Cloud Platfor
 
 ## Testing Strategy (IMPORTANT)
 
-This project strictly follows TDD (Test-Driven Development). **Always write or update tests when modifying functionality and make sure they are passing before declaring done.**
+This project strictly follows TDD (Test-Driven Development). **Always write or update tests when modifying functionality. Make sure to run tests before declaring done.**
 
 ### Unit Tests (Fast, No GCP/Docker required)
 Unit tests use `unittest.mock` to mock all GCP services (Firestore, GCS, Pub/Sub) and the `amrfinder` binary.
