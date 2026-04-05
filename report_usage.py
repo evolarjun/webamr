@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-report_usage.py — Queries Firestore and outputs a tab-delimited usage report.
+report_usage.py Queries Firestore and outputs a tab-delimited usage report.
 
 Usage:
     source set_variables.sh
@@ -42,7 +42,7 @@ def main():
         docs.sort(key=get_sort_key, reverse=True)
 
         # Print header (tab-delimited)
-        header = ["date", "status", "ip_address", "nuc_size_bytes", "prot_size_bytes", "gff_size_bytes", "organism", "job_id"]
+        header = ["date", "status", "ip_address", "nuc_size_bytes", "prot_size_bytes", "gff_size_bytes", "organism", "job_id", "results"]
         print("\t".join(header))
 
         for doc in docs:
@@ -80,7 +80,8 @@ def main():
                 str(prot_size),
                 str(gff_size),
                 str(organism),
-                str(doc.id)
+                str(doc.id),
+                "https://amr.arjunp.net/results/" + str(doc.id)
             ]
             print("\t".join(row))
             

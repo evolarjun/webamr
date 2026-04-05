@@ -442,13 +442,15 @@ class TestStderrOutput:
     def setup_method(self):
         MOCK_STORAGE.bucket.return_value.blob.side_effect = None
 
-    def test_returns_stderr_attachment_when_file_exists(self):
+    def test_returns_stderr_in_browser_when_file_exists(self):
         MOCK_STORAGE.bucket.return_value.blob.return_value = _make_blob(
             exists=True, content=b"some stderr log\n"
         )
         resp = client.get("/stderr/test-job-id")
         assert resp.status_code == 200
-        assert "attachment" in resp.headers.get("Content-Disposition", "")
+        # No longer an attachment; opens in browser
+        assert "attachment" not in resp.headers.get("Content-Disposition", "")
+        assert resp.mimetype == "text/plain"
 
     def test_returns_404_when_stderr_missing(self):
         MOCK_STORAGE.bucket.return_value.blob.return_value = _make_blob(exists=False)

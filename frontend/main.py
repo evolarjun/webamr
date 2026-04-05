@@ -347,6 +347,9 @@ def analyze_file():
             "nuc_file_size_bytes": nuc_size,
             "prot_file_size_bytes": prot_size,
             "gff_file_size_bytes": gff_size,
+            "nuc_filename": nuc_file.filename if nuc_file else None,
+            "prot_filename": prot_file.filename if prot_file else None,
+            "gff_filename": gff_file.filename if gff_file else None,
             "ip_address": client_ip
         })
 
@@ -413,6 +416,9 @@ def results_page(job_id):
         job_name=job_data.get("job_name"),
         status=status,
         error_message=error_message,
+        nuc_filename=job_data.get("nuc_filename"),
+        prot_filename=job_data.get("prot_filename"),
+        gff_filename=job_data.get("gff_filename"),
         result_html=result_html,
         stderr_available=stderr_available,
         nucleotide_available=nucleotide_available,
@@ -485,8 +491,7 @@ def stderr_output(user_id):
         file_bytes = blob.download_as_bytes()
         return send_file(
             io.BytesIO(file_bytes),
-            as_attachment=True,
-            download_name=f"amrfinder_{user_id}_stderr.txt",
+            as_attachment=False,
             mimetype="text/plain"
         ), 200
     except Exception as e:

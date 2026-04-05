@@ -17,23 +17,40 @@
   <p>
     <strong>Job ID:</strong>
     <a id="share-link" href="/results/{{ job_id }}"><code id="job-id">{{ job_id }}</code></a>
-    &nbsp;<button onclick="copyLink()" title="Copy sharable link">Copy sharable link</button>
+    &nbsp;<button onclick="copyLink()" title="Copy link">Copy link</button>
   </p>
   {% if job_name %}
   <p>
     <strong>Job name:</strong> <code id="job-name">{{ job_name }}</code>
   </p>
   {% endif %}
-
+  <strong>Inputs:</strong>
+  <ul>
+      {% if nuc_filename %}
+      <li>
+        <strong>Nucleotide file:</strong> {{ nuc_filename }}
+      </li>
+      {% endif %}
+      {% if prot_filename %}
+      <li>
+        <strong>Protein file:</strong> {{ prot_filename }}
+      </li>
+      {% endif %}
+      {% if gff_filename %}
+      <li>
+        <strong>GFF file:</strong> {{ gff_filename }}
+      </li>
+      {% endif %}
+  </ul>
   {% if status == "Failed" %}
   <p class="error"><strong>Job failed:</strong> {{ error_message }}</p>
   {% elif status == "Completed" and result_html %}
   <div id="results">
     <button onclick="downloadResults('{{ job_id }}')" style="margin-bottom: 10px;">Download Results</button>
-    {{ result_html | safe }}
     {% if stderr_available %}
-    <p><a href="/stderr/{{ job_id }}" target="_blank">Download stderr log</a></p>
+    &nbsp;<a href="/stderr/{{ job_id }}" target="_blank">View STDERR log</a>
     {% endif %}
+    {{ result_html | safe }}
     {% if nucleotide_available %}
     <p><a href="/nucleotide/{{ job_id }}" target="_blank">Download Nucleotide FASTA</a></p>
     {% endif %}
@@ -183,13 +200,13 @@
 
               resultsDiv.innerHTML = '';
               resultsDiv.appendChild(downloadButton);
-              resultsDiv.insertAdjacentHTML('beforeend', data.result);
 
               if (data.stderr_available) {
-                const stderrLink = document.createElement('p');
-                stderrLink.innerHTML = '<a href="/stderr/' + jobId + '" target="_blank">Download stderr log</a>';
-                resultsDiv.appendChild(stderrLink);
+                resultsDiv.insertAdjacentHTML('beforeend', '&nbsp;<a href="/stderr/' + jobId + '" target="_blank">View STDERR log</a>');
               }
+
+              resultsDiv.insertAdjacentHTML('beforeend', data.result);
+
               if (data.nucleotide_available) {
                 const nucLink = document.createElement('p');
                 nucLink.innerHTML = '<a href="/nucleotide/' + jobId + '" target="_blank">Download Nucleotide FASTA</a>';
