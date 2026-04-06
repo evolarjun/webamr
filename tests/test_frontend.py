@@ -577,8 +577,8 @@ class TestResultsPage:
             self._pending_firestore()
         )
         resp = client.get("/results/test-job-id")
-        assert b'title="Copy sharable link"' in resp.data
-        assert b">Copy sharable link</button>" in resp.data
+        assert b'title="Copy link"' in resp.data
+        assert b">Copy link</button>" in resp.data
 
     def test_results_page_shows_job_name_when_present(self):
         MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = (
