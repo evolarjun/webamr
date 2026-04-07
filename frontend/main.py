@@ -208,6 +208,10 @@ def index():
     return render_template('index.html', organism_select=organism_select_options, 
         database_version=db_v, software_version=soft_v)
 
+@app.route("/docs")
+def documentation():
+    return render_template("documentation.html")
+
 @app.errorhandler(404)
 def page_not_found(error):
     return render_template('404.html', url=request.url), 404

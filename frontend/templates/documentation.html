@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Documentation — WebAMR</title>
+  <link rel="stylesheet" href="static/css/style.css">
+  <link rel="icon" href="static/favicon.ico" type="image/x-icon">
+</head>
+
+<body>
+  <h1>WebAMR Input Settings Documentation</h1>
+  <p><a href="/">← Back to Home</a></p>
+
+  <section id="job-name">
+    <h2>Job Name (Optional)</h2>
+    <p>A user-defined name to help you identify and organize your analysis results. This name will appear on the results
+      page and in the output filenames. This is a WebAMR-specific identifier and does not correspond to an AMRFinderPlus
+      command-line option.</p>
+  </section>
+
+  <section id="nucleotide-file">
+    <h2>Select an assembled nucleotide file (<code>-n</code>, <code>--nucleotide</code>)</h2>
+    <p>An assembled nucleotide FASTA file. This file must contain the DNA sequence of the organism being analyzed.
+      AMRFinderPlus searches this sequence to identify antimicrobial resistance (AMR) genes using protein-to-nucleotide
+      alignments (blastx). This is highly recommended for accurate detection of AMR genes.</p>
+    <p>See the official documentation for <a
+        href="https://github.com/ncbi/amr/wiki/Running-AMRFinderPlus#-p-protein_fasta-and--n-nucleotide_fasta"
+        target="_blank">Input FASTA files</a>.</p>
+  </section>
+
+  <section id="protein-file">
+    <h2>Select a protein file (<code>-p</code>, <code>--protein</code>)</h2>
+    <p>A protein FASTA file containing amino acid sequences of the genes in the organism. AMRFinderPlus uses this file
+      to identify AMR genes by comparing them to its curated database of known resistance proteins (blastp). Providing
+      a protein file alongside a GFF file allows for more precise coordinate reporting.</p>
+    <p>See the official documentation for <a
+        href="https://github.com/ncbi/amr/wiki/Running-AMRFinderPlus#-p-protein_fasta-and--n-nucleotide_fasta"
+        target="_blank">Input FASTA files</a>.</p>
+  </section>
+
+  <section id="gff-file">
+    <h2>Select a GFF file (<code>-g</code>, <code>--gff</code>)</h2>
+    <p>A GFF3 format file containing gene annotations. This file provides the genomic coordinates and identifiers for
+      the genes in the nucleotide sequence. If you provide a GFF file, you should also provide the corresponding
+      nucleotide and protein files to enable full AMRFinderPlus functionality.</p>
+    <p>See the official documentation for <a href="https://github.com/ncbi/amr/wiki/Running-AMRFinderPlus#-g-gff_file"
+        target="_blank">GFF files</a>.</p>
+  </section>
+
+  <section id="annotation-format">
+    <h2>Annotation Format (<code>--annotation_format</code>)</h2>
+    <p>Specifies the software or pipeline used to generate the gene annotations (GFF and protein files). This is
+      essential for AMRFinderPlus to correctly parse the sequence headers and coordinates. Supported formats include:
+    </p>
+    <ul>
+      <li><strong>bakta</strong>: From the Bakta annotation pipeline.</li>
+      <li><strong>prokka</strong>: From the Prokka annotation pipeline.</li>
+      <li><strong>pgap</strong>: From the NCBI Prokaryotic Genome Annotation Pipeline.</li>
+      <li><strong>standard</strong>: (default) Use for files downloaded from NCBI resources.</li>
+      <li>...and others (genbank, microscope, patric, prodigal, pseudomonasdb, rast).</li>
+    </ul>
+    <p>The official documentation for the <a
+        href="https://github.com/ncbi/amr/wiki/Running-AMRFinderPlus#the---annotation_format-format-option"
+        target="_blank">--annotation_format option</a> contains more information.</p>
+  </section>
+
+  <section id="organism-group">
+    <h2>Organism group (optional) (<code>-O</code>, <code>--organism</code>)</h2>
+    <p>Specifies the taxonomic group of the organism being analyzed (e.g., <em>Escherichia</em>, <em>Salmonella</em>,
+      <em>Staphylococcus aureus</em>). Providing an organism group allows AMRFinderPlus to use organism-specific curated
+      thresholds and search for known point mutations that confer resistance, significantly improving the accuracy and
+      completeness of the results.</p>
+    <p>If "None" is selected, AMRFinderPlus will only perform a general search against its core database.</p>
+    <p>See the official documentation for the <a
+        href="https://github.com/ncbi/amr/wiki/Running-AMRFinderPlus#--organism-option" target="_blank">--organism
+        option</a>.</p>
+  </section>
+
+  <section id="limits">
+    <h2>File Size and Usage Limits</h2>
+    <p>Currently, WebAMR has a <strong>10 MB</strong> file size limit for each upload. This tool is designed to analyze
+      one bacterial genome at a time. Larger submissions or multiple genomes may fail or be rejected.</p>
+  </section>
+
+  <p><a href="/">← Back to Home</a></p>
+</body>
+
+</html>

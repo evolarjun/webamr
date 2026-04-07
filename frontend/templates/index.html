@@ -11,20 +11,21 @@
 
 <body>
   <h1>Upload your files to run <a href="https://github.com/ncbi/amr/wiki">AMRFinderPlus</a></h1>
-  This is designed to run a bacterial genome at a time. Larger submissions will probably fail. <br />
-  <span style="color: red;">This is a personal experimental side-project and may fail.</span><span>This software does not reflect the priorities or opinions of my employer, and use of the results is at your own risk.</span>
+  <span style="color: red;">This is a personal experimental side-project and may fail.</span><span>This software does
+    not reflect the priorities or opinions of my employer, and use of the results is at your own risk.</span>
   <p></p>
   <pre>AMRFinderPlus <a href="https://github.com/ncbi/amr/releases/tag/amrfinder_v{{ software_version }}"></a>{{ software_version }}</a> database version {{ database_version }}</pre>
   <form id="upload-form" action="/analyze" method="POST" enctype="multipart/form-data">
-    <label for="job_name">Job name (optional):</label>
+    <label for="job_name"><a href="/docs#job-name">Job name</a> (optional):</label>
     <input type="text" name="job_name" id="job_name" maxlength="100"> <br>
-    <label for="file">Select an assembled nucleotide file:</label>
+    <label for="file">Select an assembled <a href="/docs#nucleotide-file">nucleotide file</a>:</label>
     <input type="file" name="nuc_file"> <br>
-    <label for="file">Select a protein file:</label>
+    <label for="file">Select a <a href="/docs#protein-file">protein file</a>:</label>
     <input type="file" name="prot_file"> <br>
-    <label for="gff_file">Select a GFF file:</label>
+    <label for="gff_file">Select a <a href="/docs#gff-file">GFF file</a>:</label>
     <input type="file" name="gff_file" id="gff_file">
-    <label for="annotation_format" style="margin-left: 15px;">Annotation format:</label>
+    <label for="annotation_format" style="margin-left: 15px;"><a href="/docs#annotation-format">Annotation
+        format</a>:</label>
     <select id="annotation_format" name="annotation_format">
       <option value="bakta">bakta</option>
       <option value="genbank">genbank</option>
@@ -37,7 +38,7 @@
       <option value="rast">rast</option>
       <option value="standard" selected>standard</option>
     </select> <br>
-    <label for="organism">Organism group (optional):</label>
+    <label for="organism"><a href="/docs#organism-group">Organism group</a> (optional):</label>
 
     <select id="organism" name="organism">
       <option value="">None</option>
