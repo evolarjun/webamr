@@ -4,27 +4,32 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Documentation — WebAMR</title>
+  <title>Documentation -- WebAMR</title>
   <link rel="stylesheet" href="static/css/style.css">
   <link rel="icon" href="static/favicon.ico" type="image/x-icon">
 </head>
 
 <body>
-  <h1>WebAMR Input Settings Documentation</h1>
+  <h1>WebAMR - Web interface for AMRFinderPlus</h1>
   <p><a href="/">← Back to Home</a></p>
+  <p>
+  This is a mostly vibe-coded web interface for <a href="https://github.com/ncbi/amr/wiki">AMRFinderPlus</a> created as a personal side-project. As far as I can tell everything works well, but there is no warranty that this will do what you want. A brief description of the options is below, and results can be downloaded in the native tab-delimited format output by AMRFinderPlus. 
+
+Right now it seems to be working quickly and easily with results coming in a minute or two at most. However, I haven't stress tested it, so performance under load is still unknown.
+  </p>
+
+  <h1>WebAMR Input Settings</h1>
 
   <section id="job-name">
     <h2>Job Name (Optional)</h2>
-    <p>A user-defined name to help you identify and organize your analysis results. This name will appear on the results
-      page and in the output filenames. This is a WebAMR-specific identifier and does not correspond to an AMRFinderPlus
-      command-line option.</p>
+    <p>A user-defined name to help you identify and organize your analysis results. This name will appear on the results page and in the output filenames. 
+    </p>
   </section>
 
   <section id="nucleotide-file">
     <h2>Select an assembled nucleotide file (<code>-n</code>, <code>--nucleotide</code>)</h2>
-    <p>An assembled nucleotide FASTA file. This file must contain the DNA sequence of the organism being analyzed.
-      AMRFinderPlus searches this sequence to identify antimicrobial resistance (AMR) genes using protein-to-nucleotide
-      alignments (blastx). This is highly recommended for accurate detection of AMR genes.</p>
+    <p>An assembled nucleotide FASTA file to search.
+    </p>
     <p>See the official documentation for <a
         href="https://github.com/ncbi/amr/wiki/Running-AMRFinderPlus#-p-protein_fasta-and--n-nucleotide_fasta"
         target="_blank">Input FASTA files</a>.</p>
@@ -32,9 +37,8 @@
 
   <section id="protein-file">
     <h2>Select a protein file (<code>-p</code>, <code>--protein</code>)</h2>
-    <p>A protein FASTA file containing amino acid sequences of the genes in the organism. AMRFinderPlus uses this file
-      to identify AMR genes by comparing them to its curated database of known resistance proteins (blastp). Providing
-      a protein file alongside a GFF file allows for more precise coordinate reporting.</p>
+    <p>A protein FASTA file to search.
+    </p>
     <p>See the official documentation for <a
         href="https://github.com/ncbi/amr/wiki/Running-AMRFinderPlus#-p-protein_fasta-and--n-nucleotide_fasta"
         target="_blank">Input FASTA files</a>.</p>
@@ -52,7 +56,7 @@
   <section id="annotation-format">
     <h2>Annotation Format (<code>--annotation_format</code>)</h2>
     <p>Specifies the software or pipeline used to generate the gene annotations (GFF and protein files). This is
-      essential for AMRFinderPlus to correctly parse the sequence headers and coordinates. Supported formats include:
+      essential for AMRFinderPlus to correctly parse the sequence headers and coordinates when both Protein and Nucleotide files are provided (the recommended way to run AMRFinderPlus). Supported formats include:
     </p>
     <ul>
       <li><strong>bakta</strong>: From the Bakta annotation pipeline.</li>
@@ -70,8 +74,8 @@
     <h2>Organism group (optional) (<code>-O</code>, <code>--organism</code>)</h2>
     <p>Specifies the taxonomic group of the organism being analyzed (e.g., <em>Escherichia</em>, <em>Salmonella</em>,
       <em>Staphylococcus aureus</em>). Providing an organism group allows AMRFinderPlus to use organism-specific curated
-      thresholds and search for known point mutations that confer resistance, significantly improving the accuracy and
-      completeness of the results.</p>
+      thresholds and search for known point mutations that confer resitance
+    </p>
     <p>If "None" is selected, AMRFinderPlus will only perform a general search against its core database.</p>
     <p>See the official documentation for the <a
         href="https://github.com/ncbi/amr/wiki/Running-AMRFinderPlus#--organism-option" target="_blank">--organism
