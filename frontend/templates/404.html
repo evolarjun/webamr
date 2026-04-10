@@ -1,4 +1,3 @@
-html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -14,9 +13,6 @@ html
 <body>
     <h1>Woah, 404 - Not Found</h1>
     <p>The requested URL was not found on this server.</p>
-    <p>URL: <span id="url"></span></p>
-    <script>
-        document.getElementById('url').textContent = window.location.href;
-    </script>
+    <p>URL: <span id="url">{{ url }}</span></p>
 </body>
 </html>

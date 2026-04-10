@@ -1,7 +1,7 @@
 import os
 import io
 import traceback
-from flask import Flask, send_file, request, jsonify, render_template, send_from_directory
+from flask import Flask, send_file, request, jsonify, render_template, send_from_directory, escape
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 import logging
@@ -110,16 +110,18 @@ def tabulize(tab_delimited):
     rows = [line.split('\t') for line in lines[1:]]
     html = '<table><thead><tr>'
     for header in headers:
-        html += f'<th>{header}</th>\n' 
+        html += f'<th>{escape(header)}</th>\n'
     html += '</tr></thead><tbody>\n'
     for row in rows:
         html += '<tr>'
         for i, cell in enumerate(row):
-            content = cell
             # Only link if it's the Hierarchy node column and has a valid-looking value
             if i == hierarchy_node_idx and cell.strip() and cell.strip().lower() != "n/a":
                 node_id = cell.strip()
-                content = f'<a href="https://www.ncbi.nlm.nih.gov/pathogens/genehierarchy/#node_id:{node_id}" target="_blank">{node_id}</a>'
+                escaped_node_id = escape(node_id)
+                content = f'<a href="https://www.ncbi.nlm.nih.gov/pathogens/genehierarchy/#node_id:{escaped_node_id}" target="_blank">{escaped_node_id}</a>'
+            else:
+                content = escape(cell)
             html += f'<td>{content}</td>'
         html += '</tr>\n'
     html += '</tbody></table>'
