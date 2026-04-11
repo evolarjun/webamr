@@ -4,6 +4,7 @@ All GCP clients and subprocess calls are patched so no real GCP or
 amrfinder binary is needed.
 """
 import base64
+import importlib
 import json
 import os
 import sys
@@ -19,14 +20,32 @@ patchers = [
     patch("google.cloud.storage.Client", return_value=MagicMock()),
     patch("google.cloud.firestore.Client", return_value=MagicMock()),
 ]
-for p in patchers:
-    p.start()
+worker = None
+flask_client = None
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "worker"))
-import worker  # noqa: E402
 
-# Flask test client
-flask_client = worker.app.test_client()
+def setup_module(module):
+    """Import worker with patched clients so tests are isolated from other modules."""
+    global worker, flask_client
+
+    for p in patchers:
+        p.start()
+
+    worker_dir = os.path.join(os.path.dirname(__file__), "..", "worker")
+    if worker_dir not in sys.path:
+        sys.path.insert(0, worker_dir)
+
+    # Ensure we do not reuse a previously imported worker module.
+    sys.modules.pop("worker", None)
+    worker = importlib.import_module("worker")
+    flask_client = worker.app.test_client()
+
+
+def teardown_module(module):
+    """Stop patches and remove worker module to prevent cross-test contamination."""
+    sys.modules.pop("worker", None)
+    for p in patchers:
+        p.stop()
 
 
 # ---------------------------------------------------------------------------

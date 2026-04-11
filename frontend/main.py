@@ -171,18 +171,20 @@ def index():
     global cached_db_version, cached_software_version
     organism_select_options = organism_select()
     
-    if not cached_db_version and cached_software_version:
+    if not cached_db_version or cached_software_version:
         try:
             storage_client = get_storage_client()
             bucket = storage_client.bucket(OUTPUT_BUCKET)
-            blob = bucket.blob("config/database_version.txt")
             try:
+                blob = bucket.blob("config/database_version.txt")
                 cached_db_version = blob.download_as_string().decode('utf-8').strip()
-                cached_software_version = blob.download_as_string().decode('utf-8').strip()
                 db_v = cached_db_version
+                blob = bucket.blob("config/software_version.txt")
+                cached_software_version = blob.download_as_string().decode('utf-8').strip()
                 soft_v = cached_software_version
             except NotFound:
-                return render_template('index.html', organism_select=organism_select_options, 
+                return render_template('index.html', 
+                                       organism_select=organism_select_options, 
                     database_version="Run job to refresh", 
                     software_version="Run job to refresh")
         except Exception as e:

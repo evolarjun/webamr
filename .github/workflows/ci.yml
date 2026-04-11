@@ -30,4 +30,4 @@ jobs:
 
       - name: Run unit tests
         run: |
-          pytest tests/test_worker.py tests/test_frontend.py -v
+          pytest tests/test_worker.py tests/test_frontend.py
