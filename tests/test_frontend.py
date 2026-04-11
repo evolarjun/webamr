@@ -10,6 +10,7 @@ import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
+from google.cloud.exceptions import NotFound
 
 # ---------------------------------------------------------------------------
 # Patch GCP client constructors BEFORE importing main so module-level
@@ -51,8 +52,12 @@ def _make_blob(exists=True, content=b"", size=1024):
     """Return a mock GCS blob."""
     b = MagicMock()
     b.exists.return_value = exists
-    b.download_as_string.return_value = content
-    b.download_as_bytes.return_value = content
+    if exists:
+        b.download_as_string.return_value = content
+        b.download_as_bytes.return_value = content
+    else:
+        b.download_as_string.side_effect = NotFound("Blob not found")
+        b.download_as_bytes.side_effect = NotFound("Blob not found")
     b.size = size
     return b
 
