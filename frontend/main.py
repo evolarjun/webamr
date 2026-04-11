@@ -12,6 +12,7 @@ import json
 import shutil
 from datetime import datetime, timedelta
 from google.cloud import storage, pubsub_v1, firestore
+from google.cloud.exceptions import NotFound
 from werkzeug.utils import secure_filename
 from datetime import timezone
 
@@ -170,45 +171,30 @@ def index():
     global cached_db_version, cached_software_version
     organism_select_options = organism_select()
     
-    if not cached_db_version:
+    if not cached_db_version or cached_software_version:
         try:
             storage_client = get_storage_client()
             bucket = storage_client.bucket(OUTPUT_BUCKET)
-            blob = bucket.blob("config/database_version.txt")
-            if blob.exists():
+            try:
+                blob = bucket.blob("config/database_version.txt")
                 cached_db_version = blob.download_as_string().decode('utf-8').strip()
-            else:
-                return render_template('index.html', organism_select=organism_select_options, 
-                    database_version="Queued (Worker starting up...)", 
-                    software_version=cached_software_version or "Queued (Worker starting up...)")
+                db_v = cached_db_version
+                blob = bucket.blob("config/software_version.txt")
+                cached_software_version = blob.download_as_string().decode('utf-8').strip()
+                soft_v = cached_software_version
+            except NotFound:
+                return render_template('index.html', 
+                                       organism_select=organism_select_options, 
+                    database_version="Run job to refresh", 
+                    software_version="Run job to refresh")
         except Exception as e:
             print(f"Error fetching DB version: {e}")
             # Don't cache error/unknown so we can retry
-            db_v = "Unknown"
-        else:
-            db_v = cached_db_version
+            db_v = "Error retrieving version"
+            soft_v = "Error retrieving version"
     else:
         db_v = cached_db_version
-
-    if not cached_software_version:
-        try:
-            storage_client = get_storage_client()
-            bucket = storage_client.bucket(OUTPUT_BUCKET)
-            blob = bucket.blob("config/software_version.txt")
-            if blob.exists():
-                cached_software_version = blob.download_as_string().decode('utf-8').strip()
-            else:
-                return render_template('index.html', organism_select=organism_select_options, 
-                    database_version=db_v, 
-                    software_version="Queued (Worker starting up...)")
-        except Exception as e:
-            print(f"Error fetching software version: {e}")
-            soft_v = "Unknown"
-        else:
-            soft_v = cached_software_version
-    else:
         soft_v = cached_software_version
-
     return render_template('index.html', organism_select=organism_select_options, 
         database_version=db_v, software_version=soft_v)
 
@@ -418,8 +404,10 @@ def results_page(job_id):
             storage_client = get_storage_client()
             bucket = storage_client.bucket(OUTPUT_BUCKET)
             blob = bucket.blob(f'results/{job_id}/results.tsv')
-            if blob.exists():
+            try:
                 result_html = tabulize(blob.download_as_bytes())
+            except NotFound:
+                pass
             stderr_available = bucket.blob(f'results/{job_id}/stderr.txt').exists()
             nucleotide_available = bucket.blob(f'results/{job_id}/nucleotide.fna').exists()
             protein_available = bucket.blob(f'results/{job_id}/protein.faa').exists()
@@ -452,11 +440,11 @@ def return_results(user_id):
     stderr_available = bool(bucket.blob(f'results/{user_id}/stderr.txt').exists())
     nucleotide_available = bool(bucket.blob(f'results/{user_id}/nucleotide.fna').exists())
     protein_available = bool(bucket.blob(f'results/{user_id}/protein.faa').exists())
-    if blob.exists():
-        print("File exists")
+    try:
         results = tabulize(blob.download_as_bytes())
+        print("File exists")
         return jsonify({'result': results, 'user_id': user_id, 'stderr_available': stderr_available, 'nucleotide_available': nucleotide_available, 'protein_available': protein_available}), 200
-    else:
+    except NotFound:
         # Check if the job failed in Firestore
         try:
             db = get_firestore_client()
@@ -479,10 +467,11 @@ def output(user_id):
         bucket = storage_client.bucket(OUTPUT_BUCKET)
         blob = bucket.blob(f'results/{user_id}/results.tsv')
         
-        if not blob.exists():
+        try:
+            file_bytes = blob.download_as_bytes()
+        except NotFound:
             return jsonify({'error': 'AMRFinderPlus output file is no longer available.'}), 404
             
-        file_bytes = blob.download_as_bytes()
         return send_file(
             io.BytesIO(file_bytes),
             as_attachment=True,
@@ -501,10 +490,11 @@ def stderr_output(user_id):
         bucket = storage_client.bucket(OUTPUT_BUCKET)
         blob = bucket.blob(f'results/{user_id}/stderr.txt')
 
-        if not blob.exists():
+        try:
+            file_bytes = blob.download_as_bytes()
+        except NotFound:
             return jsonify({'error': 'AMRFinderPlus stderr log is no longer available.'}), 404
 
-        file_bytes = blob.download_as_bytes()
         return send_file(
             io.BytesIO(file_bytes),
             as_attachment=False,
@@ -521,10 +511,11 @@ def nucleotide_output(user_id):
         bucket = storage_client.bucket(OUTPUT_BUCKET)
         blob = bucket.blob(f'results/{user_id}/nucleotide.fna')
 
-        if not blob.exists():
+        try:
+            file_bytes = blob.download_as_bytes()
+        except NotFound:
             return jsonify({'error': 'AMRFinderPlus nucleotide fasta is no longer available.'}), 404
 
-        file_bytes = blob.download_as_bytes()
         return send_file(
             io.BytesIO(file_bytes),
             as_attachment=True,
@@ -542,10 +533,11 @@ def protein_output(user_id):
         bucket = storage_client.bucket(OUTPUT_BUCKET)
         blob = bucket.blob(f'results/{user_id}/protein.faa')
 
-        if not blob.exists():
+        try:
+            file_bytes = blob.download_as_bytes()
+        except NotFound:
             return jsonify({'error': 'AMRFinderPlus protein fasta is no longer available.'}), 404
 
-        file_bytes = blob.download_as_bytes()
         return send_file(
             io.BytesIO(file_bytes),
             as_attachment=True,

@@ -4,12 +4,14 @@ All GCP clients (storage, pubsub, firestore) are patched before import so
 no real credentials are needed. Tests use Flask's built-in test client.
 """
 import io
+import importlib
 import json
 import os
 import sys
 from unittest.mock import MagicMock, patch
 
 import pytest
+from google.cloud.exceptions import NotFound
 
 # ---------------------------------------------------------------------------
 # Patch GCP client constructors BEFORE importing main so module-level
@@ -24,23 +26,49 @@ patchers = [
     patch("google.cloud.pubsub_v1.PublisherClient", return_value=MOCK_PUBLISHER),
     patch("google.cloud.firestore.Client", return_value=MOCK_FIRESTORE),
 ]
-for p in patchers:
-    p.start()
+main = None
+client = None
+_ORIGINAL_CWD = None
 
-# main.py reads taxgroup.tsv at startup via organism_select() on the first
-# request; point it at the real file so the import doesn't fail.
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "frontend"))
-os.chdir(os.path.join(os.path.dirname(__file__), "..", "frontend"))
 
-import main  # noqa: E402 (imported after patches)
+def setup_module(module):
+    """Set up frontend unit test module with isolated GCP client patches."""
+    global main, client, _ORIGINAL_CWD
 
-main._storage_client = MOCK_STORAGE
-main._firestore_client = MOCK_FIRESTORE
-main._publisher = MOCK_PUBLISHER
+    for p in patchers:
+        p.start()
 
-client = main.app.test_client()
-main.app.config["TESTING"] = True
-main.limiter.enabled = False  # reliably disable limiter globally for unit tests
+    # main.py reads taxgroup.tsv from cwd during request handling; set cwd for import.
+    _ORIGINAL_CWD = os.getcwd()
+    frontend_dir = os.path.join(os.path.dirname(__file__), "..", "frontend")
+    if frontend_dir not in sys.path:
+        sys.path.insert(0, frontend_dir)
+    os.chdir(frontend_dir)
+
+    main = importlib.import_module("main")
+    main._storage_client = MOCK_STORAGE
+    main._firestore_client = MOCK_FIRESTORE
+    main._publisher = MOCK_PUBLISHER
+
+    client = main.app.test_client()
+    main.app.config["TESTING"] = True
+    main.limiter.enabled = False  # reliably disable limiter globally for unit tests
+
+
+def teardown_module(module):
+    """Stop global patches to avoid leaking mocks into other test modules."""
+    # Reset singleton clients and caches that were set to mocks in this module.
+    if main is not None:
+        main._storage_client = None
+        main._firestore_client = None
+        main._publisher = None
+        main.cached_db_version = None
+        main.cached_software_version = None
+    # Ensure later imports (for integration tests) get a fresh module instance.
+    sys.modules.pop("main", None)
+    for p in patchers:
+        p.stop()
+    os.chdir(_ORIGINAL_CWD)
 
 
 # ---------------------------------------------------------------------------
@@ -51,8 +79,12 @@ def _make_blob(exists=True, content=b"", size=1024):
     """Return a mock GCS blob."""
     b = MagicMock()
     b.exists.return_value = exists
-    b.download_as_string.return_value = content
-    b.download_as_bytes.return_value = content
+    if exists:
+        b.download_as_string.return_value = content
+        b.download_as_bytes.return_value = content
+    else:
+        b.download_as_string.side_effect = NotFound("Blob not found")
+        b.download_as_bytes.side_effect = NotFound("Blob not found")
     b.size = size
     return b
 
@@ -112,7 +144,7 @@ class TestIndex:
         MOCK_STORAGE.bucket.return_value.blob.return_value = _make_blob(exists=False)
         resp = client.get("/")
         assert resp.status_code == 200
-        assert b"Queued" in resp.data
+        assert b"Run job to refresh" in resp.data
 
     def test_pending_when_software_blob_missing(self):
         main.cached_db_version = None
@@ -124,7 +156,7 @@ class TestIndex:
         )
         resp = client.get("/")
         assert resp.status_code == 200
-        assert b"Queued" in resp.data
+        assert b"Run job to refresh" in resp.data
 
     def test_unknown_when_db_fetch_raises_exception(self):
         main.cached_db_version = None
@@ -132,7 +164,7 @@ class TestIndex:
         MOCK_STORAGE.bucket.return_value.blob.side_effect = Exception("Storage error")
         resp = client.get("/")
         assert resp.status_code == 200
-        assert b"Unknown" in resp.data
+        assert b"Error retrieving version" in resp.data
 
     def test_unknown_when_software_fetch_raises_exception(self):
         main.cached_db_version = None
@@ -147,7 +179,7 @@ class TestIndex:
         MOCK_STORAGE.bucket.return_value.blob.side_effect = side_effect
         resp = client.get("/")
         assert resp.status_code == 200
-        assert b"Unknown" in resp.data
+        assert b"Error retrieving version" in resp.data
 
 
 # ---------------------------------------------------------------------------
