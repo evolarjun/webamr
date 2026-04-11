@@ -63,6 +63,16 @@ def _fasta_file(name="sample.fasta", content=b">seq1\nATCG\n"):
 
 
 # ---------------------------------------------------------------------------
+# Tests: Error Handlers
+# ---------------------------------------------------------------------------
+
+class TestPageNotFound:
+    def test_page_not_found_renders_404(self):
+        resp = client.get("/this-page-does-not-exist")
+        assert resp.status_code == 404
+        assert b"Woah, 404 - Not Found" in resp.data
+
+# ---------------------------------------------------------------------------
 # Tests: GET /
 # ---------------------------------------------------------------------------
 
