@@ -1,7 +1,8 @@
 import os
 import io
 import traceback
-from flask import Flask, send_file, request, jsonify, render_template, send_from_directory, escape
+from flask import Flask, send_file, request, jsonify, render_template, send_from_directory
+from markupsafe import escape
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 import logging

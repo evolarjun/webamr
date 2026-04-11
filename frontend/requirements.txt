@@ -4,6 +4,7 @@ autopep8
 
 # App
 flask
+markupsafe
 Flask-Limiter
 Werkzeug
 gunicorn
