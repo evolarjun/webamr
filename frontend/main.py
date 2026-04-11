@@ -8,6 +8,7 @@ import logging
 import re
 import uuid
 import json
+import shutil
 from datetime import datetime, timedelta
 from google.cloud import storage, pubsub_v1, firestore
 from werkzeug.utils import secure_filename
@@ -377,6 +378,14 @@ def analyze_file():
         print(f"Server Error in analyze_file: {str(e)}")
         traceback.print_exc()
         return jsonify({'error': f"Failed to submit job: {str(e)}"}), 500
+    finally:
+        # Clean up the local upload directory
+        if os.path.exists(upload_folder):
+            try:
+                shutil.rmtree(upload_folder, ignore_errors=True)
+                print(f"Cleaned up local upload folder: {upload_folder}")
+            except Exception as e:
+                print(f"Failed to clean up local upload folder {upload_folder}: {e}")
 
 
 @app.route('/results/<job_id>')
@@ -547,26 +556,6 @@ def protein_output(user_id):
 @app.route('/favicon.ico')
 def favicon():
     return send_from_directory(app.static_folder, 'favicon.ico', mimetype='image/vnd.microsoft.icon')
-
-# currently this does not run ever. Mostly created by AI and left for future reference.
-# may not work
-def cleanup_uploads():
-    """Deletes files and directories older than 24 hours from the uploads directory."""
-    now = datetime.now()
-    upload_dir = app.config['UPLOAD_FOLDER_BASE']
-    for filename in os.listdir(upload_dir):
-        filepath = os.path.join(upload_dir, filename)
-        if os.path.isdir(filepath):  # Check if it's a directory
-            try:
-                creation_time = datetime.fromtimestamp(os.path.getctime(filepath))
-                if now - creation_time > timedelta(hours=24):
-                    shutil.rmtree(filepath, ignore_errors=True)
-                    logging.info(f"Deleted directory: {filepath}")
-            except OSError as e:
-                logging.error(f"Error deleting directory {filepath}: {e}")
-        elif os.path.isfile(filepath):
-            # (Optional) Add file deletion logic if needed.
-            pass
 
 
 def main():
