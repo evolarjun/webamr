@@ -8,6 +8,7 @@ demand per job, runs AMRFinderPlus, then scales back to zero.
 No streaming pull loop is needed; Pub/Sub handles delivery and retries.
 """
 import os
+import re
 import json
 import base64
 import subprocess
@@ -173,6 +174,10 @@ def handle_pubsub_push():
     if not job_id:
         print(f"Malformed message — job_id must not be empty.")
         return jsonify({"error": "Malformed message, job_id must be a non-empty string"}), 200
+
+    if not re.fullmatch(r"[a-zA-Z0-9-]+", job_id):
+        print(f"Malformed message — job_id contains invalid characters. Got: {job_id!r}")
+        return jsonify({"error": "Malformed message, job_id must be alphanumeric and hyphens only"}), 200
 
     if not isinstance(gcs_uri, str) or not gcs_uri.startswith("gs://"):
         print(f"Malformed message — gcs_uri must start with 'gs://'. Got: {gcs_uri!r}")
