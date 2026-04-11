@@ -76,12 +76,9 @@ def read_file(filename):
   Returns:
     The contents of the file as a string.
   """
-#   try:
   with open(filename, 'r') as file:  # 'r' mode for reading
     contents = file.read()
   return contents
-#   except FileNotFoundError:
-#     return "File not found."
 
 def tabulize(tab_delimited):
     """Converts a tab-delimited string into an HTML table.
