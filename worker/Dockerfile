@@ -1,4 +1,4 @@
-# ── Stage 1: Build AMRFinderPlus + HMMER3 from source ────────────────────────
+# Stage 1: Build AMRFinderPlus + HMMER3 from source 
 FROM ubuntu:24.04 AS builder
 
 RUN apt-get update && apt-get install -y \
@@ -25,13 +25,15 @@ RUN git clone https://github.com/ncbi/amr.git \
   && make -j$(nproc) -O \
   && make install INSTALL_DIR=/amrfinder
 
-# ── Stage 2: Runtime image ────────────────────────────────────────────────────
+# Stage 2: Runtime image 
 FROM ubuntu:24.04
 
 RUN apt-get update && apt-get install -y \
   libcurl4-openssl-dev \
   curl \
   libgomp1 \
+  git \
+  make \
   python3 \
   python3-venv \
   python3-pip \
@@ -68,6 +70,16 @@ COPY requirements.txt .
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 RUN pip3 install --no-cache-dir -r requirements.txt
+
+# Install AMRrules from source (not available on PyPI)
+# Clones the main branch and installs via make dev into the venv
+RUN git clone --depth 1 --branch main \
+    https://github.com/AMRverse/AMRrules.git /opt/amrrules \
+  && cd /opt/amrrules \
+  && make dev
+
+# Download AMRrules rule databases at build time
+RUN amrrules --download-resources
 
 COPY worker.py .
 

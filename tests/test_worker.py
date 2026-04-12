@@ -144,6 +144,7 @@ class TestRunAmrfinder:
         assert "/tmp/out.tsv" in cmd
         assert "--nucleotide_output" not in cmd
         assert "--protein_output" not in cmd
+        assert "--print_node" in cmd  # always included
 
     @patch("worker.subprocess.run")
     def test_has_nucleotide_flag(self, mock_run):
@@ -211,6 +212,32 @@ class TestRunAmrfinder:
         mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="Database error")
         with pytest.raises(Exception, match="AMRFinderPlus failed"):
             worker.run_amrfinder("/tmp/in.fasta", "/tmp/out.tsv", "/tmp/stderr.txt", "/tmp/nuc.fna", "/tmp/prot.faa", {})
+
+
+# ---------------------------------------------------------------------------
+# Tests: run_amrrules
+# ---------------------------------------------------------------------------
+
+class TestRunAmrrules:
+    @patch("worker.subprocess.run")
+    def test_run_amrrules_success(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        interp, summary = worker.run_amrrules("/tmp/in.tsv", "/tmp/out", "s__E coli", "job1", "none")
+        cmd = mock_run.call_args[0][0]
+        assert cmd[:3] == ["amrrules", "--input", "/tmp/in.tsv"]
+        assert "--organism" in cmd
+        assert "s__E coli" in cmd
+        assert "--print-non-amr" in cmd
+        assert "--no-rule-interpretation" in cmd
+        assert "none" in cmd
+        assert interp == "/tmp/out_interpreted.tsv"
+        assert summary == "/tmp/out_genome_summary.tsv"
+
+    @patch("worker.subprocess.run")
+    def test_run_amrrules_failure_raises(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="AMRrules error")
+        with pytest.raises(Exception, match="AMRrules failed"):
+            worker.run_amrrules("/tmp/in.tsv", "/tmp/out", "s__E coli", "job1", "none")
 
 
 # ---------------------------------------------------------------------------
@@ -301,6 +328,42 @@ class TestHandlePubsubPush:
 
         update_calls = [str(c) for c in mock_doc.update.call_args_list]
         assert any("Completed" in s for s in update_calls)
+
+    @patch("worker.upload_blob", return_value="gs://output/file.tsv")
+    @patch("worker.run_amrrules", return_value=("/tmp/i.tsv", "/tmp/s.tsv"))
+    @patch("worker.run_amrfinder")
+    @patch("worker.download_blob")
+    def test_run_amrrules_called_if_organism_provided(self, mock_dl, mock_run, mock_rules, mock_ul):
+        mock_run.return_value = ""
+        mock_doc = MagicMock()
+        worker.db.collection.return_value.document.return_value = mock_doc
+
+        body = _make_push_body(params={"amrrules_organism": "s__E coli", "no_rule_interpretation": "none"})
+        resp = flask_client.post("/", json=body)
+        
+        assert resp.status_code == 200
+        mock_rules.assert_called_once()
+        args = mock_rules.call_args[0]
+        assert args[2] == "s__E coli"
+        assert args[4] == "none"
+        assert mock_ul.call_count >= 3 # results, interp, summary
+
+    @patch("worker.upload_blob", return_value="gs://output/file.tsv")
+    @patch("worker.run_amrrules", side_effect=Exception("amrrules crashed"))
+    @patch("worker.run_amrfinder")
+    @patch("worker.download_blob")
+    def test_amrrules_failure_is_soft_failure(self, mock_dl, mock_run, mock_rules, mock_ul):
+        mock_run.return_value = ""
+        mock_doc = MagicMock()
+        worker.db.collection.return_value.document.return_value = mock_doc
+
+        body = _make_push_body(params={"amrrules_organism": "s__E coli"})
+        resp = flask_client.post("/", json=body)
+        
+        assert resp.status_code == 200
+        update_calls = [str(c) for c in mock_doc.update.call_args_list]
+        assert any("Completed" in s for s in update_calls) # Still completed
+        assert any("amrrules_error" in s for s in update_calls) # But error recorded
 
     @patch("worker.run_amrfinder", side_effect=Exception("amrfinder crashed"))
     @patch("worker.download_blob")

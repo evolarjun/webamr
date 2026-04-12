@@ -86,8 +86,8 @@ def run_amrfinder(input_fasta, output_tsv, stderr_path, nucleotide_path, protein
     if params.get("plus_flag"):
         cmd.append("--plus")
 
-    if params.get("print_node"):
-        cmd.append("--print_node")
+    # Always include --print_node: required by AMRrules and useful for the results table
+    cmd.append("--print_node")
 
     organism = params.get("organism")
     if organism:
@@ -116,6 +116,23 @@ def run_amrfinder(input_fasta, output_tsv, stderr_path, nucleotide_path, protein
         raise Exception(f"AMRFinderPlus failed: {result.stderr}")
 
     return result.stdout
+
+
+def run_amrrules(input_tsv, output_prefix, organism, sample_id, no_rule_interpretation="none"):
+    cmd = [
+        "amrrules",
+        "--input", input_tsv,
+        "--output-prefix", output_prefix,
+        "--organism", organism,
+        "--sample-id", sample_id,
+        "--print-non-amr",
+        "--no-rule-interpretation", no_rule_interpretation,
+    ]
+    print(f"Executing: {' '.join(cmd)}")
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise Exception(f"AMRrules failed: {result.stderr}")
+    return f"{output_prefix}_interpreted.tsv", f"{output_prefix}_genome_summary.tsv"
 
 
 @app.route("/", methods=["POST"])
@@ -211,6 +228,21 @@ def handle_pubsub_push():
         if os.path.exists(local_prot):
             upload_blob(local_prot, f"results/{job_id}/protein.faa")
 
+        amrrules_organism = params.get("amrrules_organism")
+        if amrrules_organism:
+            try:
+                sample_id = payload.get("job_name") or job_id
+                no_rule_interp = params.get("no_rule_interpretation", "none")
+                interp_path, summary_path = run_amrrules(
+                    local_output, f"/tmp/{job_id}_amrrules",
+                    amrrules_organism, sample_id, no_rule_interp
+                )
+                upload_blob(interp_path, f"results/{job_id}/amrrules_interpreted.tsv")
+                upload_blob(summary_path, f"results/{job_id}/amrrules_summary.tsv")
+            except Exception as e:
+                print(f"AMRrules failed for job {job_id}: {e}")
+                doc_ref.update({"amrrules_error": str(e)})
+
         doc_ref.update({"status": "Completed", "result_uri": result_uri, "stderr_uri": stderr_uri})
         print(f"Job {job_id} completed successfully.")
 
@@ -230,7 +262,8 @@ def handle_pubsub_push():
             print(f"Failed to update firestore with error status: {db_err}")
 
     finally:
-        for path in [local_input, local_output, local_stderr, local_nuc, local_prot]:
+        for path in [local_input, local_output, local_stderr, local_nuc, local_prot,
+                     f"/tmp/{job_id}_amrrules_interpreted.tsv", f"/tmp/{job_id}_amrrules_genome_summary.tsv"]:
             if os.path.exists(path):
                 try:
                     os.remove(path)

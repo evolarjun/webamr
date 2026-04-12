@@ -83,6 +83,32 @@ Right now it seems to be working quickly and easily with results coming in a min
         option</a>.</p>
   </section>
 
+  <section id="amrrules-section">
+    <h2>AMRrules Interpretation (optional)</h2>
+    <p>
+      An optional post-processing step that runs <a href="https://github.com/AMRverse/AMRrules" target="_blank">AMRrules</a> on the AMRFinderPlus output to generate organism-specific interpreted AMR reports.
+    </p>
+    <p>
+      AMRrules encodes organism-specific rules for the interpretation of AMR genotype data, curated by experts in the ESGEM-AMR Working Group. This feature is only available for a subset of the organisms supported by AMRFinderPlus.
+    </p>
+    <h3>Unmatched genotype handling</h3>
+    <p>
+      Controls what happens to AMRFinderPlus genotype calls that do not match any AMRrules rule. This controls the <code>--no-rule-interpretation</code> flag for AMRrules.
+    </p>
+    <ul>
+      <li><strong>none</strong>: (default) No phenotype or clinical category is assigned.</li>
+      <li><strong>nwt</strong>: Flag as nonwildtype, but no clinical category is assigned.</li>
+      <li><strong>nwtR</strong>: Flag as nonwildtype and assume resistant.</li>
+      <li><strong>nwtS</strong>: Flag as nonwildtype and assume susceptible.</li>
+    </ul>
+    <h3>Outputs</h3>
+    <p>If requested, two additional files will be generated and available for download on the results page:</p>
+    <ul>
+      <li><strong>Genome Summary Report</strong>: A compact, per-drug summary of resistance predictions.</li>
+      <li><strong>Interpreted Output</strong>: The original AMRFinderPlus TSV with additional columns detailing the matched rules, phenotypes, and clinical categories. Note that this file may have more rows than the AMRFinderPlus output because rows are duplicated for genes that confer resistance to multiple drugs.</li>
+    </ul>
+  </section>
+
   <section id="limits">
     <h2>File Size and Usage Limits</h2>
     <p>Currently, WebAMR has a <strong>10 MB</strong> file size limit for each upload. This tool is designed to analyze

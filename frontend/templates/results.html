@@ -59,6 +59,22 @@
     <p><a href="/protein/{{ job_id }}" target="_blank">Download Protein FASTA</a></p>
     {% endif %}
   </div>
+  {% if run_amrrules %}
+  <div id="amrrules-results">
+    <h2 style="margin-top: 30px;">AMRrules Interpretation</h2>
+    {% if amrrules_error %}
+      <p class="error">AMRrules failed: {{ amrrules_error }}</p>
+      <p>AMRFinderPlus results above are still valid.</p>
+    {% else %}
+      {% if amrrules_summary_available %}
+        <p><a href="/amrrules-summary/{{ job_id }}" target="_blank">Download AMRrules Summary</a></p>
+      {% endif %}
+      {% if amrrules_interpreted_available %}
+        <p><a href="/amrrules-interpreted/{{ job_id }}" target="_blank">Download AMRrules Interpreted</a></p>
+      {% endif %}
+    {% endif %}
+  </div>
+  {% endif %}
   {% else %}
   <div id="status-msg">
     <p>Status: <strong>{{ status }}</strong> — polling… <span id="timer"></span></p>
@@ -217,6 +233,25 @@
                 const protLink = document.createElement('p');
                 protLink.innerHTML = '<a href="/protein/' + jobId + '" target="_blank">Download Protein FASTA</a>';
                 resultsDiv.appendChild(protLink);
+              }
+
+              if (data.run_amrrules) {
+                const amrrulesDiv = document.createElement('div');
+                amrrulesDiv.id = 'amrrules-results';
+                amrrulesDiv.innerHTML = '<h2 style="margin-top: 30px;">AMRrules Interpretation</h2>';
+                
+                if (data.amrrules_error) {
+                  amrrulesDiv.innerHTML += '<p class="error">AMRrules failed: ' + data.amrrules_error + '</p><p>AMRFinderPlus results above are still valid.</p>';
+                } else {
+                  if (data.amrrules_summary_available) {
+                    amrrulesDiv.innerHTML += '<p><a href="/amrrules-summary/' + jobId + '" target="_blank">Download AMRrules Summary</a></p>';
+                  }
+                  if (data.amrrules_interpreted_available) {
+                    amrrulesDiv.innerHTML += '<p><a href="/amrrules-interpreted/' + jobId + '" target="_blank">Download AMRrules Interpreted</a></p>';
+                  }
+                }
+                
+                resultsDiv.parentNode.insertBefore(amrrulesDiv, resultsDiv.nextSibling);
               }
 
               // Attach sort handlers to the newly injected table

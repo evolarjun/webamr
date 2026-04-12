@@ -279,6 +279,29 @@ class TestAnalyze:
         call_args = MOCK_PUBLISHER.publish.call_args
         message = json.loads(call_args[0][1].decode("utf-8"))
         assert message.get("job_name") == "Sample Job_1"
+        
+    def test_run_amrrules_valid_organism(self):
+        MOCK_PUBLISHER.publish.reset_mock()
+        self._post_analyze(organism="Escherichia", extra_data={"run_amrrules": "true"})
+        call_args = MOCK_PUBLISHER.publish.call_args
+        message = json.loads(call_args[0][1].decode("utf-8"))
+        assert message["parameters"].get("amrrules_organism") == "s__Escherichia coli"
+        assert message["parameters"].get("no_rule_interpretation") == "none"
+
+    def test_run_amrrules_invalid_organism(self):
+        MOCK_PUBLISHER.publish.reset_mock()
+        self._post_analyze(organism="Vibrio_cholerae", extra_data={"run_amrrules": "true"})
+        call_args = MOCK_PUBLISHER.publish.call_args
+        message = json.loads(call_args[0][1].decode("utf-8"))
+        assert "amrrules_organism" not in message["parameters"]
+
+    def test_run_amrrules_no_rule_interp(self):
+        MOCK_PUBLISHER.publish.reset_mock()
+        self._post_analyze(organism="Escherichia", extra_data={"run_amrrules": "true", "no_rule_interpretation": "nwtR"})
+        call_args = MOCK_PUBLISHER.publish.call_args
+        message = json.loads(call_args[0][1].decode("utf-8"))
+        assert message["parameters"].get("amrrules_organism") == "s__Escherichia coli"
+        assert message["parameters"].get("no_rule_interpretation") == "nwtR"
 
     def test_firestore_doc_set_to_pending(self):
         mock_doc = MagicMock()
@@ -541,6 +564,37 @@ class TestProteinOutput:
     def test_returns_404_when_prot_missing(self):
         MOCK_STORAGE.bucket.return_value.blob.return_value = _make_blob(exists=False)
         resp = client.get("/protein/nonexistent-job")
+        assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Tests: GET /amrrules-*
+# ---------------------------------------------------------------------------
+
+class TestAMRrulesOutput:
+    def setup_method(self):
+        MOCK_STORAGE.bucket.return_value.blob.side_effect = None
+
+    def test_interpreted_returns_tsv_when_exists(self):
+        MOCK_STORAGE.bucket.return_value.blob.return_value = _make_blob(exists=True, content=b"interpreted")
+        resp = client.get("/amrrules-interpreted/test-job-id")
+        assert resp.status_code == 200
+        assert "attachment" in resp.headers.get("Content-Disposition", "")
+        
+    def test_interpreted_returns_404_when_missing(self):
+        MOCK_STORAGE.bucket.return_value.blob.return_value = _make_blob(exists=False)
+        resp = client.get("/amrrules-interpreted/nonexistent-job")
+        assert resp.status_code == 404
+
+    def test_summary_returns_tsv_when_exists(self):
+        MOCK_STORAGE.bucket.return_value.blob.return_value = _make_blob(exists=True, content=b"summary")
+        resp = client.get("/amrrules-summary/test-job-id")
+        assert resp.status_code == 200
+        assert "attachment" in resp.headers.get("Content-Disposition", "")
+
+    def test_summary_returns_404_when_missing(self):
+        MOCK_STORAGE.bucket.return_value.blob.return_value = _make_blob(exists=False)
+        resp = client.get("/amrrules-summary/nonexistent-job")
         assert resp.status_code == 404
 
 

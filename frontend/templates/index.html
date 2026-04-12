@@ -45,6 +45,22 @@
       <option value="">None</option>
       {{ organism_select | safe }}
     </select> <br />
+
+    <!-- AMRrules options -->
+    <fieldset id="amrrules-section" style="margin-top: 10px; margin-bottom: 10px;">
+      <legend>AMRrules Interpretation</legend>
+      <input type="checkbox" id="run_amrrules" name="run_amrrules" disabled>
+      <label for="run_amrrules">Run AMRrules interpretation</label>
+      <span id="amrrules-note" style="margin-left: 10px; color: grey;"></span>
+      <br>
+      <label for="no_rule_interpretation">Unmatched genotype handling:</label>
+      <select id="no_rule_interpretation" name="no_rule_interpretation" disabled>
+        <option value="none" selected>none -- no phenotype assigned</option>
+        <option value="nwt">nwt -- flag as nonwildtype</option>
+        <option value="nwtR">nwtR -- assume resistant</option>
+        <option value="nwtS">nwtS -- assume susceptible</option>
+      </select>
+    </fieldset>
     <!-- label for="parameters">Parameters (optional):</label> <br> 
       <input type="text" name="parameters" id="parameters"> <br><br>-->
     <button type="submit">Run AMRFinderPlus</button>
@@ -55,6 +71,39 @@
   <script>
     const form = document.getElementById('upload-form');
     const statusMsg = document.getElementById('status-msg');
+    
+    // AMRrules logic
+    const organismSelect = document.getElementById('organism');
+    const runAmrrulesCheckbox = document.getElementById('run_amrrules');
+    const noRuleInterpretationSelect = document.getElementById('no_rule_interpretation');
+    const amrrulesNote = document.getElementById('amrrules-note');
+    const organismMapping = {{ organism_mapping | safe }};
+
+    function updateAmrrulesState() {
+      const selectedOrganism = organismSelect.value;
+      if (!selectedOrganism) {
+        runAmrrulesCheckbox.disabled = true;
+        runAmrrulesCheckbox.checked = false;
+        noRuleInterpretationSelect.disabled = true;
+        amrrulesNote.textContent = 'AMRrules requires an organism selection';
+      } else if (organismMapping[selectedOrganism]) {
+        runAmrrulesCheckbox.disabled = false;
+        noRuleInterpretationSelect.disabled = !runAmrrulesCheckbox.checked;
+        amrrulesNote.textContent = '';
+      } else {
+        runAmrrulesCheckbox.disabled = true;
+        runAmrrulesCheckbox.checked = false;
+        noRuleInterpretationSelect.disabled = true;
+        amrrulesNote.textContent = 'AMRrules not available for this organism';
+      }
+    }
+
+    organismSelect.addEventListener('change', updateAmrrulesState);
+    runAmrrulesCheckbox.addEventListener('change', () => {
+      noRuleInterpretationSelect.disabled = !runAmrrulesCheckbox.checked;
+    });
+    // Init state
+    updateAmrrulesState();
 
     function validateForm() {
       const nucFile = form.elements['nuc_file'].files[0];
@@ -100,6 +149,11 @@
       formData.append('job_name', form.elements['job_name'].value || '');
       formData.append('annotation_format', form.elements['annotation_format'].value || 'standard');
       formData.append('organism', form.elements['organism'].value);
+      
+      formData.append('run_amrrules', runAmrrulesCheckbox.checked);
+      if (runAmrrulesCheckbox.checked) {
+        formData.append('no_rule_interpretation', noRuleInterpretationSelect.value);
+      }
 
       // Disable the submit button and show upload progress
       const submitButton = form.querySelector('button[type="submit"]');

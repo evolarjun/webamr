@@ -1,3 +1,5 @@
+- Figure out why pub/sub contains all the data firestore does. Is that necessary?
+- Simplify process to test locally
 - add links from reference sequence and node (DONE) to browsers
 - Add a report that includes the input filenames and the AMRFinderPlus command-line
 - Add a toggle to show core and plus in above the table

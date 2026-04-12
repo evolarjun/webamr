@@ -33,6 +33,15 @@ _storage_client = None
 _firestore_client = None
 _publisher = None
 
+import json
+organism_mapping = {}
+mapping_path = os.path.join(os.path.dirname(__file__), 'organism_mapping.json')
+try:
+    with open(mapping_path, 'r') as f:
+        organism_mapping = json.load(f)
+except Exception as e:
+    print(f"Error loading organism_mapping.json: {e}")
+
 def get_storage_client():
     global _storage_client
     if _storage_client is None:
@@ -196,7 +205,7 @@ def index():
         db_v = cached_db_version
         soft_v = cached_software_version
     return render_template('index.html', organism_select=organism_select_options, 
-        database_version=db_v, software_version=soft_v)
+        database_version=db_v, software_version=soft_v, organism_mapping=json.dumps(organism_mapping))
 
 @app.route("/docs")
 def documentation():
@@ -233,7 +242,7 @@ def analyze_file():
             return jsonify({'error': 'Job name can only contain letters, numbers, spaces, underscores, and hyphens.'}), 400
 
     # Basic command structure
-    command = [amrfinder_path, "--plus", "--print_node", "-o", upload_folder + "/output.amrfinder"]
+    command = [amrfinder_path, "--plus", "-o", upload_folder + "/output.amrfinder"]
 
     # Valid annotation formats as per amrfinder -h
     ALLOWED_ANNOTATION_FORMATS = {
@@ -305,7 +314,6 @@ def analyze_file():
         gcs_uri = f"gs://{BUCKET_NAME}/{user_id}/{main_filename}"
         
         params = {
-            "print_node": True, 
             "plus_flag": True, 
             "annotation_format": annotation_format,
             "has_nucleotide": bool(nuc_file),
@@ -313,6 +321,18 @@ def analyze_file():
         }
         if organism_value:
             params["organism"] = organism_value
+
+        # Check for AMRrules options
+        run_amrrules = request.form.get('run_amrrules') == 'true'
+        no_rule_interp_raw = request.form.get('no_rule_interpretation', 'none')
+        valid_interp_opts = {"none", "nwt", "nwtR", "nwtS"}
+        no_rule_interpretation = no_rule_interp_raw if no_rule_interp_raw in valid_interp_opts else "none"
+
+        amrrules_organism = None
+        if run_amrrules and organism_value and organism_value in organism_mapping:
+            amrrules_organism = organism_mapping[organism_value]
+            params["amrrules_organism"] = amrrules_organism
+            params["no_rule_interpretation"] = no_rule_interpretation
 
         # Calculate file sizes to write to DB
         nuc_size = os.path.getsize(os.path.join(upload_folder, secure_filename(nuc_file.filename))) if nuc_file else 0
@@ -335,6 +355,9 @@ def analyze_file():
             "parameters": params,
             "result_uri": None,
             "error_message": None,
+            "run_amrrules": run_amrrules,
+            "amrrules_organism": amrrules_organism,
+            "amrrules_error": None,
             "created_at": datetime.now(timezone.utc),
             "expire_at": datetime.now(timezone.utc) + timedelta(days=90),
             "total_file_size_bytes": total_file_size_bytes,
@@ -393,11 +416,15 @@ def results_page(job_id):
     job_data = doc.to_dict()
     status = job_data.get("status", "Unknown")
     error_message = job_data.get("error_message", "")
+    run_amrrules = job_data.get("run_amrrules", False)
+    amrrules_error = job_data.get("amrrules_error", None)
     
     result_html = None
     stderr_available = False
     nucleotide_available = False
     protein_available = False
+    amrrules_interpreted_available = False
+    amrrules_summary_available = False
     
     if status == "Completed":
         try:
@@ -411,6 +438,8 @@ def results_page(job_id):
             stderr_available = bucket.blob(f'results/{job_id}/stderr.txt').exists()
             nucleotide_available = bucket.blob(f'results/{job_id}/nucleotide.fna').exists()
             protein_available = bucket.blob(f'results/{job_id}/protein.faa').exists()
+            amrrules_interpreted_available = bucket.blob(f'results/{job_id}/amrrules_interpreted.tsv').exists()
+            amrrules_summary_available = bucket.blob(f'results/{job_id}/amrrules_summary.tsv').exists()
         except Exception as e:
             print(f"Error fetching results from GCS for completed job {job_id}: {e}")
 
@@ -427,6 +456,10 @@ def results_page(job_id):
         stderr_available=stderr_available,
         nucleotide_available=nucleotide_available,
         protein_available=protein_available,
+        run_amrrules=run_amrrules,
+        amrrules_error=amrrules_error,
+        amrrules_interpreted_available=amrrules_interpreted_available,
+        amrrules_summary_available=amrrules_summary_available,
         created_at=job_data.get("created_at").isoformat() if job_data.get("created_at") else None
     )
 
@@ -440,20 +473,42 @@ def return_results(user_id):
     stderr_available = bool(bucket.blob(f'results/{user_id}/stderr.txt').exists())
     nucleotide_available = bool(bucket.blob(f'results/{user_id}/nucleotide.fna').exists())
     protein_available = bool(bucket.blob(f'results/{user_id}/protein.faa').exists())
+    amrrules_interpreted_available = bool(bucket.blob(f'results/{user_id}/amrrules_interpreted.tsv').exists())
+    amrrules_summary_available = bool(bucket.blob(f'results/{user_id}/amrrules_summary.tsv').exists())
+
+    try:
+        db = get_firestore_client()
+        doc = db.collection("amr_jobs").document(user_id).get()
+    except Exception as e:
+        print(f"Error checking Firestore: {e}")
+        doc = None
+
     try:
         results = tabulize(blob.download_as_bytes())
         print("File exists")
-        return jsonify({'result': results, 'user_id': user_id, 'stderr_available': stderr_available, 'nucleotide_available': nucleotide_available, 'protein_available': protein_available}), 200
+        
+        run_amrrules = False
+        amrrules_error = None
+        if doc and doc.exists:
+            run_amrrules = doc.to_dict().get("run_amrrules", False)
+            amrrules_error = doc.to_dict().get("amrrules_error")
+            
+        return jsonify({
+            'result': results, 
+            'user_id': user_id, 
+            'stderr_available': stderr_available, 
+            'nucleotide_available': nucleotide_available, 
+            'protein_available': protein_available,
+            'run_amrrules': run_amrrules,
+            'amrrules_error': amrrules_error,
+            'amrrules_interpreted_available': amrrules_interpreted_available,
+            'amrrules_summary_available': amrrules_summary_available
+        }), 200
     except NotFound:
         # Check if the job failed in Firestore
-        try:
-            db = get_firestore_client()
-            doc = db.collection("amr_jobs").document(user_id).get()
-            if doc.exists and doc.to_dict().get("status") == "Failed":
-                error_msg = doc.to_dict().get("error_message", "Unknown error")
-                return jsonify({'error': f"Analysis failed: {error_msg}", 'stderr_available': stderr_available}), 500
-        except Exception as e:
-            print(f"Error checking Firestore: {e}")
+        if doc and doc.exists and doc.to_dict().get("status") == "Failed":
+            error_msg = doc.to_dict().get("error_message", "Unknown error")
+            return jsonify({'error': f"Analysis failed: {error_msg}", 'stderr_available': stderr_available}), 500
 
         return '', 204
 
@@ -547,6 +602,50 @@ def protein_output(user_id):
     except Exception as e:
         print(f"Error serving protein fasta: {e}")
         return jsonify({'error': 'Failed to retrieve protein fasta.'}), 500
+
+@app.route('/amrrules-interpreted/<user_id>')
+def amrrules_interpreted_output(user_id):
+    try:
+        storage_client = get_storage_client()
+        bucket = storage_client.bucket(OUTPUT_BUCKET)
+        blob = bucket.blob(f'results/{user_id}/amrrules_interpreted.tsv')
+
+        try:
+            file_bytes = blob.download_as_bytes()
+        except NotFound:
+            return jsonify({'error': 'AMRrules interpreted TSV is no longer available.'}), 404
+
+        return send_file(
+            io.BytesIO(file_bytes),
+            as_attachment=True,
+            download_name=f"amrrules_{user_id}_interpreted.tsv",
+            mimetype="text/tab-separated-values"
+        ), 200
+    except Exception as e:
+        print(f"Error serving AMRrules interpreted TSV: {e}")
+        return jsonify({'error': 'Failed to retrieve AMRrules interpreted TSV.'}), 500
+
+@app.route('/amrrules-summary/<user_id>')
+def amrrules_summary_output(user_id):
+    try:
+        storage_client = get_storage_client()
+        bucket = storage_client.bucket(OUTPUT_BUCKET)
+        blob = bucket.blob(f'results/{user_id}/amrrules_summary.tsv')
+
+        try:
+            file_bytes = blob.download_as_bytes()
+        except NotFound:
+            return jsonify({'error': 'AMRrules summary TSV is no longer available.'}), 404
+
+        return send_file(
+            io.BytesIO(file_bytes),
+            as_attachment=True,
+            download_name=f"amrrules_{user_id}_summary.tsv",
+            mimetype="text/tab-separated-values"
+        ), 200
+    except Exception as e:
+        print(f"Error serving AMRrules summary TSV: {e}")
+        return jsonify({'error': 'Failed to retrieve AMRrules summary TSV.'}), 500
 
 @app.route('/favicon.ico')
 def favicon():
