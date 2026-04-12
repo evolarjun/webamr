@@ -256,6 +256,19 @@ class TestHandlePubsubPush:
         resp = flask_client.post("/", json={"subscription": "projects/x/subscriptions/y"})
         assert resp.status_code == 400
 
+    def test_invalid_base64_payload_returns_200(self):
+        """An invalid base64 payload should be ACK'd (200) and return an error message."""
+        envelope = {
+            "message": {
+                "data": "not-valid-base64!",
+                "messageId": "test-msg-id"
+            },
+            "subscription": "projects/test/subscriptions/sub"
+        }
+        resp = flask_client.post("/", json=envelope)
+        assert resp.status_code == 200
+        assert b"Could not decode message" in resp.data
+
     def test_non_dict_payload_returns_200(self):
         """A JSON array payload is not a valid job message; should be ACK'd (200)."""
         body = _make_raw_push_body(json.dumps(["job1", "job2"]).encode("utf-8"))
