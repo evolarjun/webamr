@@ -467,7 +467,8 @@ class TestOutput:
         )
         resp = client.get("/output/test-job-id")
         assert resp.status_code == 200
-        assert "attachment" in resp.headers.get("Content-Disposition", "")
+        assert "attachment" not in resp.headers.get("Content-Disposition", "")
+        assert resp.mimetype == "text/plain"
         assert b"col1" in resp.data
 
     def test_returns_404_when_file_missing(self):
@@ -508,13 +509,15 @@ class TestNucleotideOutput:
     def setup_method(self):
         MOCK_STORAGE.bucket.return_value.blob.side_effect = None
 
-    def test_returns_nuc_attachment_when_file_exists(self):
+    def test_returns_nuc_inline_when_file_exists(self):
         MOCK_STORAGE.bucket.return_value.blob.return_value = _make_blob(
             exists=True, content=b">nuc\nATCG\n"
         )
         resp = client.get("/nucleotide/test-job-id")
         assert resp.status_code == 200
-        assert "attachment" in resp.headers.get("Content-Disposition", "")
+        # No longer an attachment; opens in browser
+        assert "attachment" not in resp.headers.get("Content-Disposition", "")
+        assert resp.mimetype == "text/plain"
 
     def test_returns_404_when_nuc_missing(self):
         MOCK_STORAGE.bucket.return_value.blob.return_value = _make_blob(exists=False)
@@ -530,13 +533,15 @@ class TestProteinOutput:
     def setup_method(self):
         MOCK_STORAGE.bucket.return_value.blob.side_effect = None
 
-    def test_returns_prot_attachment_when_file_exists(self):
+    def test_returns_prot_inline_when_file_exists(self):
         MOCK_STORAGE.bucket.return_value.blob.return_value = _make_blob(
             exists=True, content=b">prot\nMAGY\n"
         )
         resp = client.get("/protein/test-job-id")
         assert resp.status_code == 200
-        assert "attachment" in resp.headers.get("Content-Disposition", "")
+        # No longer an attachment; opens in browser
+        assert "attachment" not in resp.headers.get("Content-Disposition", "")
+        assert resp.mimetype == "text/plain"
 
     def test_returns_404_when_prot_missing(self):
         MOCK_STORAGE.bucket.return_value.blob.return_value = _make_blob(exists=False)

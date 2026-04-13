@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>WebAMR — AMRFinderPlus Web Interface</title>
+  <title>AMRFinderPlus Web Interface</title>
   <link rel="stylesheet" href="static/css/style.css" />
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
   <link rel="alternate icon" href="/static/favicon.ico" type="image/x-icon" />
@@ -13,7 +13,8 @@
 <body>
   <h1>Upload your files to run <a href="https://github.com/ncbi/amr/wiki">AMRFinderPlus</a></h1>
   <span style="color: red;">This is a personal experimental side-project and may fail.</span><span>This software does
-    not reflect the priorities or opinions of my employer, and use of the results is at your own risk.</span>
+      not reflect the priorities or opinions of my employer, and use of the results is at your own risk.</span><br>
+  <a href="/docs">[docs]</a>
   <p></p>
   <pre>AMRFinderPlus <a href="https://github.com/ncbi/amr/releases/tag/amrfinder_v{{ software_version }}"></a>{{ software_version }}</a> database version {{ database_version }}</pre>
   <form id="upload-form" action="/analyze" method="POST" enctype="multipart/form-data">
@@ -134,6 +135,10 @@
         });
     });
   </script>
+
+  <div style="margin-top: 40px; margin-bottom: 20px; color: #888; font-size: 0.85rem;">
+    WebAMR Frontend v{{ frontend_version }}
+  </div>
 
 </body>
 

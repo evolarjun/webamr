@@ -13,6 +13,8 @@ echo "Building worker image for project: ${PROJECT_ID}"
 echo "Usually takes about 8 minutes"
 echo "---------------------------------------------------------"
 
+cp ../VERSION.txt .
+
 # Cloud Build submits the current directory and pushes to Artifact Registry
 gcloud builds submit \
   --tag ${REGION}-docker.pkg.dev/${PROJECT_ID}/amr-repo/amr-worker \

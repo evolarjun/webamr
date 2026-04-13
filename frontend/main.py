@@ -51,6 +51,12 @@ def get_publisher():
         _publisher = pubsub_v1.PublisherClient()
     return _publisher
 
+try:
+    with open('VERSION.txt', 'r') as f:
+        APP_VERSION = f.read().strip()
+except FileNotFoundError:
+    APP_VERSION = "unknown"
+
 app = Flask(__name__, static_folder='static')
 app.config['UPLOAD_FOLDER_BASE'] = UPLOAD_FOLDER_BASE
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10 MB limit
@@ -164,6 +170,14 @@ def send_pubsub_message(message):
 # Cache the database version to avoid fetching it on every page load
 cached_db_version = None
 cached_software_version = None
+
+@app.context_processor
+def inject_version():
+    return dict(frontend_version=APP_VERSION)
+
+@app.route('/version')
+def version_info():
+    return jsonify({"frontend_version": APP_VERSION})
 
 @app.route("/")
 def index():
@@ -427,7 +441,8 @@ def results_page(job_id):
         stderr_available=stderr_available,
         nucleotide_available=nucleotide_available,
         protein_available=protein_available,
-        created_at=job_data.get("created_at").isoformat() if job_data.get("created_at") else None
+        created_at=job_data.get("created_at").isoformat() if job_data.get("created_at") else None,
+        worker_version=job_data.get("worker_version", "unknown")
     )
 
 
@@ -442,8 +457,22 @@ def return_results(user_id):
     protein_available = bool(bucket.blob(f'results/{user_id}/protein.faa').exists())
     try:
         results = tabulize(blob.download_as_bytes())
-        print("File exists")
-        return jsonify({'result': results, 'user_id': user_id, 'stderr_available': stderr_available, 'nucleotide_available': nucleotide_available, 'protein_available': protein_available}), 200
+        
+        # Fetch job metadata for additional status fields
+        db = get_firestore_client()
+        doc = db.collection("amr_jobs").document(user_id).get()
+        job = doc.to_dict() if doc.exists else {}
+        
+        worker_version = job.get('worker_version', 'unknown')
+
+        return jsonify({
+            'result': results, 
+            'user_id': user_id, 
+            'stderr_available': stderr_available, 
+            'nucleotide_available': nucleotide_available, 
+            'protein_available': protein_available,
+            'worker_version': worker_version
+        }), 200
     except NotFound:
         # Check if the job failed in Firestore
         try:
@@ -474,9 +503,8 @@ def output(user_id):
             
         return send_file(
             io.BytesIO(file_bytes),
-            as_attachment=True,
-            download_name=f"amrfinder_{user_id}.tsv",
-            mimetype="text/tab-separated-values"
+            as_attachment=False,
+            mimetype="text/plain"
         ), 200
     except Exception as e:
         print(f"Error serving output: {e}")
@@ -518,8 +546,7 @@ def nucleotide_output(user_id):
 
         return send_file(
             io.BytesIO(file_bytes),
-            as_attachment=True,
-            download_name=f"amrfinder_{user_id}_nucleotide.fna",
+            as_attachment=False,
             mimetype="text/plain"
         ), 200
     except Exception as e:
@@ -540,8 +567,7 @@ def protein_output(user_id):
 
         return send_file(
             io.BytesIO(file_bytes),
-            as_attachment=True,
-            download_name=f"amrfinder_{user_id}_protein.faa",
+            as_attachment=False,
             mimetype="text/plain"
         ), 200
     except Exception as e:

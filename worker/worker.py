@@ -16,6 +16,12 @@ import threading
 from flask import Flask, request, jsonify
 from google.cloud import storage, firestore
 
+try:
+    with open('VERSION.txt', 'r') as f:
+        APP_VERSION = f.read().strip()
+except FileNotFoundError:
+    APP_VERSION = "unknown"
+
 app = Flask(__name__)
 
 PROJECT_ID = os.environ.get("PROJECT_ID", "my-gcp-project")
@@ -139,7 +145,7 @@ def handle_pubsub_push():
     envelope = request.get_json(silent=True)
     if not envelope or "message" not in envelope:
         print(f"Invalid Pub/Sub envelope: {envelope}")
-        return jsonify({"error": "Invalid Pub/Sub envelope"}), 400
+        return jsonify({"error": "Invalid Pub/Sub envelope (Worker v{APP_VERSION})"}), 400
 
     # Decode the base64-encoded payload
     raw = envelope["message"].get("data", "")
@@ -203,16 +209,21 @@ def handle_pubsub_push():
         download_blob(gcs_uri, local_input)
         run_amrfinder(local_input, local_output, local_stderr, local_nuc, local_prot, params)
 
-        result_uri = upload_blob(local_output, f"results/{job_id}/results.tsv")
-        stderr_uri = upload_blob(local_stderr, f"results/{job_id}/stderr.txt")
+        upload_blob(local_output, f"results/{job_id}/results.tsv")
+        upload_blob(local_stderr, f"results/{job_id}/stderr.txt")
 
         if os.path.exists(local_nuc):
             upload_blob(local_nuc, f"results/{job_id}/nucleotide.fna")
         if os.path.exists(local_prot):
             upload_blob(local_prot, f"results/{job_id}/protein.faa")
 
-        doc_ref.update({"status": "Completed", "result_uri": result_uri, "stderr_uri": stderr_uri})
-        print(f"Job {job_id} completed successfully.")
+        # Mark job as completed
+        doc_ref.update({
+            "status": "Completed", 
+            "result_uri": f"gs://{OUTPUT_BUCKET}/results/{job_id}/results.tsv",
+            "worker_version": APP_VERSION
+        })
+        print(f"[{job_id}] Successfully processed and updated Firestore.")
 
     except Exception as e:
         print(f"Job {job_id} failed: {e}")

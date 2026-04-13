@@ -288,7 +288,8 @@ class TestEndToEnd:
 
             resp = frontend_client.get(f"/output/{user_id}")
             assert resp.status_code == 200
-            assert "attachment" in resp.headers.get("Content-Disposition", "")
+            assert "attachment" not in resp.headers.get("Content-Disposition", "")
+            assert resp.mimetype == "text/plain"
             assert b"blaTEM" in resp.data
         finally:
             _cleanup_gcs(user_id)

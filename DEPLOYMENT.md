@@ -153,6 +153,8 @@ gcloud artifacts repositories create amr-repo --repository-format=docker --locat
 🔄 **[Run Every Update]** *(whenever worker code changes)*
 ```bash
 # Cloud Build submits the worker/ directory and pushes to Artifact Registry
+# First, copy the root VERSION.txt into the context
+cp VERSION.txt worker/
 gcloud builds submit \
   --tag ${REGION}-docker.pkg.dev/${PROJECT_ID}/amr-repo/amr-worker \
   ./worker
@@ -222,6 +224,9 @@ cd frontend
 # Download required datatables for the frontend UI
 curl -s -o database_version.txt https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/version.txt
 curl -s -O https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/taxgroup.tsv
+
+# Copy VERSION.txt to the build context
+cp ../VERSION.txt .
 
 # Build and push the docker image
 gcloud builds submit \

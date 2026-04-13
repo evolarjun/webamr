@@ -3,6 +3,7 @@
 import os
 import sys
 from google.cloud import firestore
+from google.cloud.firestore_v1.base_query import FieldFilter
 
 
 def get_required_env(name: str) -> str:
@@ -26,7 +27,7 @@ def check_queue_via_db():
 
     try:
         # Check for Queued jobs (in queue, worker hasn't started them yet)
-        pending_docs = list(db.collection("amr_jobs").where("status", "==", "Queued").stream())
+        pending_docs = list(db.collection("amr_jobs").where(filter=FieldFilter("status", "==", "Queued")).stream())
         print(f"--- PENDING JOBS (Waiting in queue) ---")
         if not pending_docs:
              print("None.")
@@ -38,7 +39,7 @@ def check_queue_via_db():
         print("\n")
 
         # Check for Processing jobs (worker picked them up, but might be stuck in a retry loop)
-        processing_docs = list(db.collection("amr_jobs").where("status", "==", "Processing").stream())
+        processing_docs = list(db.collection("amr_jobs").where(filter=FieldFilter("status", "==", "Processing")).stream())
         print(f"--- PROCESSING JOBS (Currently running or stuck in 10-min timeout loop) ---")
         if not processing_docs:
              print("None.")

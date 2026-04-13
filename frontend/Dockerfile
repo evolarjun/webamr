@@ -3,6 +3,9 @@ FROM python:3.12-slim
 # Set working directory back to /app
 WORKDIR /app
 
+# Copy VERSION.txt
+COPY VERSION.txt .
+
 # Copy requirements and install them
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt

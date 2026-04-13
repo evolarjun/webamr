@@ -136,7 +136,7 @@ class TestProductionE2E:
                 resp = requests.post(
                     f"{FRONTEND_URL}/analyze",
                     files={"nuc_file": ("test_dna.fa", fasta, "application/octet-stream")},
-                    data={"organism": ""},
+                    data={"organism": "Escherichia"},
                     timeout=60,
                 )
 
@@ -175,13 +175,28 @@ class TestProductionE2E:
                 f"GET /output/{job_id} returned {download_resp.status_code}"
             )
             content_disp = download_resp.headers.get("Content-Disposition", "")
-            assert "attachment" in content_disp, (
-                f"Expected attachment Content-Disposition, got: {content_disp}"
+            assert "attachment" not in content_disp, (
+                f"Expected no attachment Content-Disposition, got: {content_disp}"
             )
             # TSV should have at least the header row
             tsv_text = download_resp.text
             assert "\t" in tsv_text, "Downloaded file does not appear to be TSV."
-            print("  TSV download successful. ✓")
+            print("  TSV output download successful. ✓")
+
+            # Verify stderr
+            stderr_resp = requests.get(f"{FRONTEND_URL}/stderr/{job_id}", timeout=30)
+            assert stderr_resp.status_code == 200
+            print("  Stderr download successful. ✓")
+
+            # Verify nucleotide output
+            nuc_resp = requests.get(f"{FRONTEND_URL}/nucleotide/{job_id}", timeout=30)
+            assert nuc_resp.status_code == 200
+            print("  Nucleotide fasta download successful. ✓")
+
+            # Verify protein output (optional depending on AMRFinderPlus hits, but should exist for test_dna.fa)
+            prot_resp = requests.get(f"{FRONTEND_URL}/protein/{job_id}", timeout=30)
+            if prot_resp.status_code == 200:
+                print("  Protein fasta download successful. ✓")
 
         finally:
             if job_id:
@@ -234,3 +249,13 @@ class TestProductionE2E:
             f"Expected 404 for unknown job ID, got {resp.status_code}"
         )
         print("  Unknown job ID correctly returns 404. ✓")
+
+    def test_version_endpoint(self):
+        """Verify the /version endpoint returns the expected format."""
+        resp = requests.get(f"{FRONTEND_URL}/version", timeout=10)
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}"
+        
+        data = resp.json()
+        assert "frontend_version" in data, "Missing frontend_version key"
+        assert len(data["frontend_version"]) > 0, "Version string should not be empty"
+        print(f"  Version endpoint returns valid JSON: {data} ✓")

@@ -1,4 +1,4 @@
-# ── Stage 1: Build AMRFinderPlus + HMMER3 from source ────────────────────────
+# Stage 1: Build AMRFinderPlus + HMMER3 from source 
 FROM ubuntu:24.04 AS builder
 
 RUN apt-get update && apt-get install -y \
@@ -14,7 +14,7 @@ RUN wget -q http://eddylab.org/software/hmmer/hmmer-${HMMER_VERSION}.tar.gz \
   && tar xzf hmmer-${HMMER_VERSION}.tar.gz \
   && cd hmmer-${HMMER_VERSION} \
   && ./configure --prefix=/usr/local \
-  && make -j$(nproc) \
+  && make -j$(nproc) -O \
   && make install \
   && cd .. && rm -rf hmmer-${HMMER_VERSION}*
 
@@ -25,7 +25,7 @@ RUN git clone https://github.com/ncbi/amr.git \
   && make -j$(nproc) -O \
   && make install INSTALL_DIR=/amrfinder
 
-# ── Stage 2: Runtime image ────────────────────────────────────────────────────
+# Stage 2: Runtime image 
 FROM ubuntu:24.04
 
 RUN apt-get update && apt-get install -y \
@@ -40,7 +40,7 @@ RUN apt-get update && apt-get install -y \
 # Copy HMMER3 binaries from builder
 COPY --from=builder /usr/local/bin/hmm* /usr/local/bin/
 
-# Install BLAST+ pre-built binary — uses correct arch (aarch64 for arm, x64 for amd64)
+# Install BLAST+ pre-built binary uses correct arch (aarch64 for arm, x64 for amd64)
 ENV BLAST_VERSION=2.17.0
 RUN ARCH=$(uname -m) \
   && if [ "$ARCH" = "aarch64" ]; then BLAST_ARCH="aarch64-linux"; else BLAST_ARCH="x64-linux"; fi \
@@ -70,8 +70,9 @@ ENV PATH="/opt/venv/bin:$PATH"
 RUN pip3 install --no-cache-dir -r requirements.txt
 
 COPY worker.py .
+COPY VERSION.txt .
 
 # gunicorn timeout must exceed the longest expected AMRFinderPlus run.
 # 3600s (1 hour) matches the Cloud Run max request timeout.
 EXPOSE 8080
-CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--timeout", "3600", "--workers", "1", "worker:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "--timeout", "1200", "--workers", "1", "worker:app"]

@@ -45,6 +45,7 @@ pytest tests/test_integration.py -v
 
 ## Common Operations
 
+*   **Versioning**: This project reads `VERSION.txt` at the root. You MUST increment the semantic version in `VERSION.txt` whenever you make functionality changes, bug fixes, or architecture updates, to ensure the frontend and worker are running the expected matching code.
 *   **To test rate limits**: We use `Flask-Limiter`. It is disabled during testing via `main.limiter.enabled = False`.
 *   **To update dependencies**: Update `requirements.txt` in both `frontend/` and `worker/` directories.
 *   **To view exact configurations**: Check `DEPLOYMENT.md` for the exact `gcloud` and `gsutil` commands used to construct this environment.

@@ -181,6 +181,10 @@
           .then(data => {
             if (!data) return;
 
+            document.getElementById('protein-download').style.display = data.protein_available ? 'inline-block' : 'none';
+            if (data.worker_version && data.worker_version !== 'unknown') {
+              document.getElementById('worker-version-display').textContent = ' | Worker v' + data.worker_version;
+            }
             if (data.error) {
               clearInterval(pollInterval);
               if (timerInterval) clearInterval(timerInterval);
@@ -235,6 +239,11 @@
     })();
     {% endif %}
   </script>
+
+  <div style="margin-top: 40px; margin-bottom: 20px; color: #888; font-size: 0.85rem;">
+    WebAMR Frontend v{{ frontend_version }}
+    <span id="worker-version-display">{% if worker_version and worker_version != 'unknown' %} | Worker v{{ worker_version }}{% endif %}</span>
+  </div>
 
 </body>
 

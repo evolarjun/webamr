@@ -4,22 +4,27 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Documentation -- WebAMR</title>
+  <title>Documentation -- Web interface for AMRFinderPlus</title>
   <link rel="stylesheet" href="static/css/style.css">
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="alternate icon" href="/static/favicon.ico" type="image/x-icon">
 </head>
 
 <body>
-  <h1>WebAMR - Web interface for AMRFinderPlus</h1>
+  <h1>Web interface for AMRFinderPlus</h1>
   <p><a href="/">← Back to Home</a></p>
   <p>
   This is a mostly vibe-coded web interface for <a href="https://github.com/ncbi/amr/wiki">AMRFinderPlus</a> created as a personal side-project. As far as I can tell everything works well, but there is no warranty that this will do what you want. A brief description of the options is below, and results can be downloaded in the native tab-delimited format output by AMRFinderPlus. 
-
+  </p>
+  <p>
 Right now it seems to be working quickly and easily with results coming in a minute or two at most. However, I haven't stress tested it, so performance under load is still unknown.
   </p>
 
-  <h1>WebAMR Input Settings</h1>
+  <p>
+  Runs AMRFinderPlus with the following options: `--plus` and `--print_node`
+  </p>
+
+  <h1>Input Settings</h1>
 
   <section id="job-name">
     <h2>Job Name (Optional)</h2>
@@ -85,7 +90,7 @@ Right now it seems to be working quickly and easily with results coming in a min
 
   <section id="limits">
     <h2>File Size and Usage Limits</h2>
-    <p>Currently, WebAMR has a <strong>10 MB</strong> file size limit for each upload. This tool is designed to analyze
+    <p>Currently, this server has a <strong>10 MB</strong> file size limit for each upload. This tool is designed to analyze
       one bacterial genome at a time. Larger submissions or multiple genomes may fail or be rejected.</p>
   </section>
 

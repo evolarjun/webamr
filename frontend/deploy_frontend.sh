@@ -15,6 +15,8 @@ echo "---------------------------------------------------------"
 echo "Building frontend image for project: ${PROJECT_ID}"
 echo "---------------------------------------------------------"
 
+cp ../VERSION.txt .
+
 # Cloud Build submits the current directory and pushes to Artifact Registry
 gcloud builds submit \
   --tag ${REGION}-docker.pkg.dev/${PROJECT_ID}/amr-repo/amr-frontend \
