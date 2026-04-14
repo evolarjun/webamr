@@ -82,7 +82,17 @@ def upload_blob(local_path, destination_blob_name):
 
 def run_amrfinder(input_fasta, output_tsv, stderr_path, nucleotide_path, protein_path, params):
     """Build and execute the amrfinder command."""
-    cmd = ["amrfinder", "-n", input_fasta, "-o", output_tsv]
+    cmd = ["amrfinder"]
+
+    if params.get("has_nucleotide"):
+        cmd.extend(["-n", input_fasta])
+    elif params.get("has_protein"):
+        cmd.extend(["-p", input_fasta])
+    else:
+        # Fallback to nucleotide if neither parameter is provided
+        cmd.extend(["-n", input_fasta])
+
+    cmd.extend(["-o", output_tsv])
 
     if params.get("has_nucleotide"):
         cmd.extend(["--nucleotide_output", nucleotide_path])

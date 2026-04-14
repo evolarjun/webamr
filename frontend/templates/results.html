@@ -172,14 +172,17 @@
       function checkStatus() {
         fetch('/get-results/' + jobId)
           .then(response => {
-            if (response.status === 204) {
-              if (statusMsg) statusMsg.innerHTML = '<p>Status: <strong>Running</strong> — polling… <span id="timer"></span></p>';
-              return null;
-            }
+            if (response.status === 204) return null;
             return response.json();
           })
           .then(data => {
             if (!data) return;
+
+            if (data.status && data.status !== 'Completed') {
+              const displayStatus = (data.status === 'Processing') ? 'Running' : data.status;
+              if (statusMsg) statusMsg.innerHTML = '<p>Status: <strong>' + displayStatus + '</strong> — polling… <span id="timer"></span></p>';
+              return;
+            }
 
             document.getElementById('protein-download').style.display = data.protein_available ? 'inline-block' : 'none';
             if (data.worker_version && data.worker_version !== 'unknown') {

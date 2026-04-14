@@ -238,6 +238,10 @@ def analyze_file():
     if prot_file and prot_file.filename == '':
         return jsonify({'error': 'No protein file selected'}), 400
 
+    if nuc_file and nuc_file.filename != '' and prot_file and prot_file.filename != '':
+        if not gff_file or gff_file.filename == '':
+            return jsonify({'error': 'A GFF file is required when providing both nucleotide and protein files.'}), 400
+
     raw_job_name = request.form.get("job_name", "")
     job_name = raw_job_name.strip()
     if job_name:
@@ -474,15 +478,20 @@ def return_results(user_id):
             'worker_version': worker_version
         }), 200
     except NotFound:
-        # Check if the job failed in Firestore
+        # Check job status in Firestore
         try:
             db = get_firestore_client()
             doc = db.collection("amr_jobs").document(user_id).get()
-            if doc.exists and doc.to_dict().get("status") == "Failed":
-                error_msg = doc.to_dict().get("error_message", "Unknown error")
-                return jsonify({'error': f"Analysis failed: {error_msg}", 'stderr_available': stderr_available}), 500
+            if doc.exists:
+                job_data = doc.to_dict()
+                status = job_data.get("status", "Queued")
+                if status == "Failed":
+                    error_msg = job_data.get("error_message", "Unknown error")
+                    return jsonify({'error': f"Analysis failed: {error_msg}", 'stderr_available': stderr_available}), 500
+                # Job is still pending (Queued or Processing)
+                return jsonify({'status': status}), 200
         except Exception as e:
-            print(f"Error checking Firestore: {e}")
+            print(f"Error checking Firestore in return_results: {e}")
 
         return '', 204
 

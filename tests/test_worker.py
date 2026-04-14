@@ -153,6 +153,8 @@ class TestRunAmrfinder:
         assert "--nucleotide_output" in cmd
         assert "/tmp/nuc.fna" in cmd
         assert "--protein_output" not in cmd
+        assert "-n" in cmd
+        assert "-p" not in cmd
 
     @patch("worker.subprocess.run")
     def test_has_protein_flag(self, mock_run):
@@ -162,6 +164,8 @@ class TestRunAmrfinder:
         assert "--protein_output" in cmd
         assert "/tmp/prot.faa" in cmd
         assert "--nucleotide_output" not in cmd
+        assert "-p" in cmd
+        assert "-n" not in cmd
 
     @patch("worker.subprocess.run")
     def test_plus_flag_added(self, mock_run):

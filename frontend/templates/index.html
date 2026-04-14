@@ -57,30 +57,55 @@
     const form = document.getElementById('upload-form');
     const statusMsg = document.getElementById('status-msg');
 
-    function validateForm() {
+    function validateForm(showError = true) {
       const nucFile = form.elements['nuc_file'].files[0];
       const protFile = form.elements['prot_file'].files[0];
       const gffFile = form.elements['gff_file'].files[0];
+      const submitButton = form.querySelector('button[type="submit"]');
+
+      if (!nucFile && !protFile && !gffFile) {
+        if (showError) statusMsg.innerHTML = '';
+        submitButton.disabled = false;
+        return true;
+      }
 
       const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
       if ((nucFile && nucFile.size > MAX_SIZE) ||
         (protFile && protFile.size > MAX_SIZE) ||
         (gffFile && gffFile.size > MAX_SIZE)) {
-        statusMsg.innerHTML = '<p class="error">File size exceeds the 10MB limit. Please upload smaller files.</p>';
+        if (showError) statusMsg.innerHTML = '<p class="error">File size exceeds the 10MB limit. Please upload smaller files.</p>';
+        submitButton.disabled = true;
+        return false;
+      }
+
+      if (nucFile && protFile && !gffFile) {
+        if (showError) statusMsg.innerHTML = '<p class="error">A GFF file is required when providing both nucleotide and protein files.</p>';
+        submitButton.disabled = true;
         return false;
       }
 
       if (nucFile && !protFile && !gffFile) {
+        if (showError) statusMsg.innerHTML = '';
+        submitButton.disabled = false;
         return true; // Only nuc_file provided
       } else if (protFile && !nucFile && !gffFile) {
+        if (showError) statusMsg.innerHTML = '';
+        submitButton.disabled = false;
         return true; // Only prot_file provided
       } else if (nucFile && protFile && gffFile) {
+        if (showError) statusMsg.innerHTML = '';
+        submitButton.disabled = false;
         return true; // All three files provided
       } else {
-        statusMsg.innerHTML = '<p class="error">Please upload either only a nucleotide file, only a protein file, or all three files (nucleotide, protein, and GFF).</p>';
+        if (showError) statusMsg.innerHTML = '<p class="error">Please upload either only a nucleotide file, only a protein file, or all three files (nucleotide, protein, and GFF).</p>';
+        submitButton.disabled = true;
         return false; // Invalid file combination
       }
     }
+
+    form.elements['nuc_file'].addEventListener('change', () => validateForm(true));
+    form.elements['prot_file'].addEventListener('change', () => validateForm(true));
+    form.elements['gff_file'].addEventListener('change', () => validateForm(true));
 
     form.addEventListener('submit', (event) => {
       event.preventDefault();

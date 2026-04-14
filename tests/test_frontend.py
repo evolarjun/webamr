@@ -314,6 +314,11 @@ class TestAnalyze:
         resp = client.post("/analyze", data={}, content_type="multipart/form-data")
         assert resp.status_code == 400
 
+    def test_missing_gff_when_both_nuc_and_prot_returns_400(self):
+        resp = self._post_analyze(nuc_file=True, prot_file=True)
+        assert resp.status_code == 400
+        assert "A GFF file is required" in resp.get_json()["error"]
+
     def test_pubsub_failure_returns_500(self):
         MOCK_PUBLISHER.publish.side_effect = Exception("Pub/Sub down")
         try:
@@ -398,12 +403,18 @@ class TestGetResults:
         body = client.get("/get-results/test-job-id").get_json()
         assert "<table>" in body["result"]
 
-    def test_returns_204_when_results_pending(self):
+    def test_returns_pending_status_when_results_missing(self):
         blob = _make_blob(exists=False)
         MOCK_STORAGE.bucket.return_value.blob.side_effect = None
         MOCK_STORAGE.bucket.return_value.blob.return_value = blob
+
+        mock_doc = MagicMock(exists=True)
+        mock_doc.to_dict.return_value = {"status": "Queued"}
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = mock_doc
+
         resp = client.get("/get-results/test-job-id")
-        assert resp.status_code == 204
+        assert resp.status_code == 200
+        assert resp.get_json()["status"] == "Queued"
 
     def test_returns_500_when_job_failed(self):
         blob = _make_blob(exists=False)
