@@ -184,9 +184,11 @@
               return;
             }
 
-            document.getElementById('protein-download').style.display = data.protein_available ? 'inline-block' : 'none';
             if (data.worker_version && data.worker_version !== 'unknown') {
-              document.getElementById('worker-version-display').textContent = ' | Worker v' + data.worker_version;
+              const workerDisplay = document.getElementById('worker-version-display');
+              if (workerDisplay) {
+                workerDisplay.textContent = ' | Worker v' + data.worker_version;
+              }
             }
             if (data.error) {
               clearInterval(pollInterval);
@@ -234,7 +236,7 @@
       }
 
       checkStatus(); // Initial check
-      const pollInterval = setInterval(checkStatus, 10000); // Poll every 10 seconds
+      const pollInterval = setInterval(checkStatus, 5000); // Poll every 5 seconds
       
       // Start the live timer
       timerInterval = setInterval(updateTimer, 1000);

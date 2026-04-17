@@ -280,6 +280,15 @@ class TestAnalyze:
         message = json.loads(call_args[0][1].decode("utf-8"))
         assert message.get("job_name") == "Sample Job_1"
 
+    def test_filenames_included_in_pubsub_message(self):
+        MOCK_PUBLISHER.publish.reset_mock()
+        self._post_analyze(nuc_file=True, prot_file=True, extra_data={"gff_file": _fasta_file("sample.gff")})
+        call_args = MOCK_PUBLISHER.publish.call_args
+        message = json.loads(call_args[0][1].decode("utf-8"))
+        assert message.get("nuc_filename") == "sample.fasta"
+        assert message.get("prot_filename") == "sample_prot.fasta"
+        assert message.get("gff_filename") == "sample.gff"
+
     def test_firestore_doc_set_to_pending(self):
         mock_doc = MagicMock()
         MOCK_FIRESTORE.collection.return_value.document.return_value = mock_doc

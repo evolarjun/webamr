@@ -40,8 +40,9 @@ PROJECT_ID = os.environ.get("PROJECT_ID", "amrfinder")
 OUTPUT_BUCKET = os.environ.get("OUTPUT_BUCKET", f"amr-output-bucket-{PROJECT_ID}")
 INPUT_BUCKET = os.environ.get("BUCKET_NAME", f"amr-input-bucket-{PROJECT_ID}")
 
-# Path to the sample FASTA bundled with the test suite
+# Paths to the sample files bundled with the test suite
 SAMPLE_FASTA = os.path.join(os.path.dirname(__file__), "test_dna.fa")
+SAMPLE_PROT = os.path.join(os.path.dirname(__file__), "test_prot.fa")
 
 # How long to wait for a job to complete (AMRFinderPlus can be slow to cold-start)
 POLL_INTERVAL_SECONDS = 15
@@ -99,10 +100,16 @@ def _poll_for_results(job_id: str) -> requests.Response:
         resp = requests.get(f"{FRONTEND_URL}/get-results/{job_id}", timeout=30)
         print(f"  Poll attempt {attempt}: HTTP {resp.status_code}")
         if resp.status_code == 200:
-            return resp   # Results are ready
-        if resp.status_code == 500:
+            try:
+                data = resp.json()
+                if "result" in data:
+                    return resp   # Results are ready
+            except ValueError:
+                pass
+            # If "status" is in data, it means it's Queued/Processing; continue polling
+        elif resp.status_code == 500:
             return resp   # Job failed — still a definitive answer
-        # 204 means still queued — wait and retry
+        # 204 or 200 (without results) means still queued — wait and retry
         time.sleep(POLL_INTERVAL_SECONDS)
 
     raise TimeoutError(
@@ -197,6 +204,89 @@ class TestProductionE2E:
             prot_resp = requests.get(f"{FRONTEND_URL}/protein/{job_id}", timeout=30)
             if prot_resp.status_code == 200:
                 print("  Protein fasta download successful. ✓")
+
+        finally:
+            if job_id:
+                print("Cleaning up GCP resources ...")
+                _cleanup_gcs(job_id)
+                _cleanup_firestore(job_id)
+
+    def test_protein_job_lifecycle(self):
+        """
+        Submit a real protein FASTA to the production frontend and verify:
+          1. The job is accepted (HTTP 200 + job_id returned).
+          2. The worker processes it and results become available.
+          3. The results endpoint returns an HTML table.
+          4. The TSV download endpoint returns plain-text TSV.
+        """
+        job_id = None
+        try:
+            # --- Step 1: Submit the job ---
+            print(f"\nSubmitting protein job to {FRONTEND_URL}/analyze ...")
+            with open(SAMPLE_PROT, "rb") as prot:
+                resp = requests.post(
+                    f"{FRONTEND_URL}/analyze",
+                    files={"prot_file": ("test_prot.fa", prot, "application/octet-stream")},
+                    data={"organism": "Escherichia"},
+                    timeout=60,
+                )
+
+            assert resp.status_code == 200, (
+                f"POST /analyze returned {resp.status_code}: {resp.text}"
+            )
+            body = resp.json()
+            assert "user_id" in body, f"Response missing user_id: {body}"
+            assert "results_url" in body, f"Response missing results_url: {body}"
+
+            job_id = body["user_id"]
+            print(f"  Job submitted: {job_id}")
+            print(f"  Shareable URL: {FRONTEND_URL}{body['results_url']}")
+
+            # --- Step 2: Poll for results ---
+            print(f"Polling for results (up to {MAX_POLL_SECONDS // 60} min) ...")
+            results_resp = _poll_for_results(job_id)
+
+            assert results_resp.status_code == 200, (
+                f"Job {job_id} failed. Worker response: {results_resp.text}"
+            )
+
+            # --- Step 3: Verify HTML table in results ---
+            results_body = results_resp.json()
+            assert "result" in results_body, (
+                f"Results body missing 'result' key: {results_body}"
+            )
+            assert "<table>" in results_body["result"], (
+                "Results do not contain an HTML table."
+            )
+            print("  Results contain an HTML table. ✓")
+
+            # --- Step 4: Verify TSV download ---
+            download_resp = requests.get(
+                f"{FRONTEND_URL}/output/{job_id}", timeout=30
+            )
+            assert download_resp.status_code == 200, (
+                f"GET /output/{job_id} returned {download_resp.status_code}"
+            )
+            content_disp = download_resp.headers.get("Content-Disposition", "")
+            assert "attachment" not in content_disp, (
+                f"Expected no attachment Content-Disposition, got: {content_disp}"
+            )
+            tsv_text = download_resp.text
+            assert "\t" in tsv_text, "Downloaded file does not appear to be TSV."
+            print("  TSV output download successful. ✓")
+
+            # Verify stderr
+            stderr_resp = requests.get(f"{FRONTEND_URL}/stderr/{job_id}", timeout=30)
+            assert stderr_resp.status_code == 200
+            print("  Stderr download successful. ✓")
+
+            # Protein-only jobs do not produce a nucleotide FASTA output
+            nuc_resp = requests.get(f"{FRONTEND_URL}/nucleotide/{job_id}", timeout=30)
+            assert nuc_resp.status_code == 404, (
+                f"Expected 404 for nucleotide output on a protein-only job, "
+                f"got {nuc_resp.status_code}"
+            )
+            print("  Nucleotide endpoint correctly returns 404 for protein-only job. ✓")
 
         finally:
             if job_id:

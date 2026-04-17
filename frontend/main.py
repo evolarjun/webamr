@@ -370,7 +370,10 @@ def analyze_file():
             "job_id": user_id,
             "gcs_uri": gcs_uri,
             "parameters": params,
-            "job_name": job_name if job_name else None
+            "job_name": job_name if job_name else None,
+            "nuc_filename": nuc_file.filename if nuc_file else None,
+            "prot_filename": prot_file.filename if prot_file else None,
+            "gff_filename": gff_file.filename if gff_file else None
         }
         send_pubsub_message(json.dumps(message_data))
 

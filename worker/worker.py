@@ -80,23 +80,22 @@ def upload_blob(local_path, destination_blob_name):
     return f"gs://{OUTPUT_BUCKET}/{destination_blob_name}"
 
 
-def run_amrfinder(input_fasta, output_tsv, stderr_path, nucleotide_path, protein_path, params):
+def run_amrfinder(nuc_input, prot_input, gff_input, output_tsv, stderr_path, nucleotide_path, protein_path, params):
     """Build and execute the amrfinder command."""
     cmd = ["amrfinder"]
 
-    if params.get("has_nucleotide"):
-        cmd.extend(["-n", input_fasta])
-    elif params.get("has_protein"):
-        cmd.extend(["-p", input_fasta])
-    else:
-        # Fallback to nucleotide if neither parameter is provided
-        cmd.extend(["-n", input_fasta])
+    if nuc_input:
+        cmd.extend(["-n", nuc_input])
+    if prot_input:
+        cmd.extend(["-p", prot_input])
+    if gff_input:
+        cmd.extend(["-g", gff_input])
 
     cmd.extend(["-o", output_tsv])
 
-    if params.get("has_nucleotide"):
+    if nuc_input and params.get("has_nucleotide"):
         cmd.extend(["--nucleotide_output", nucleotide_path])
-    if params.get("has_protein"):
+    if prot_input and params.get("has_protein"):
         cmd.extend(["--protein_output", protein_path])
 
     if params.get("plus_flag"):
@@ -204,20 +203,56 @@ def handle_pubsub_push():
         print(f"Malformed message — parameters must be a JSON object. Type: {type(params).__name__}. Defaulting to empty.")
         params = {}
 
+    nuc_filename = payload.get("nuc_filename")
+    prot_filename = payload.get("prot_filename")
+    gff_filename = payload.get("gff_filename")
+    
+    base_gcs_uri = gcs_uri.rsplit("/", 1)[0]
+
     print(f"[{job_id}] Received job. Fetching Firestore document...")
     doc_ref = db.collection("amr_jobs").document(job_id)
 
-    local_input = f"/tmp/{job_id}_input.fasta"
+    local_nuc_input = None
+    local_prot_input = None
+    local_gff_input = None
+
     local_output = f"/tmp/{job_id}_output.tsv"
     local_stderr = f"/tmp/{job_id}_stderr.txt"
     local_nuc = f"/tmp/{job_id}_nucleotide.fna"
     local_prot = f"/tmp/{job_id}_protein.faa"
 
+    cleanup_paths = [local_output, local_stderr, local_nuc, local_prot]
+
     try:
         print(f"[{job_id}] Updating status to Processing...")
         doc_ref.update({"status": "Processing"})
-        download_blob(gcs_uri, local_input)
-        run_amrfinder(local_input, local_output, local_stderr, local_nuc, local_prot, params)
+
+        if nuc_filename:
+            local_nuc_input = f"/tmp/{job_id}_{nuc_filename}"
+            download_blob(f"{base_gcs_uri}/{nuc_filename}", local_nuc_input)
+            cleanup_paths.append(local_nuc_input)
+
+        if prot_filename:
+            local_prot_input = f"/tmp/{job_id}_{prot_filename}"
+            download_blob(f"{base_gcs_uri}/{prot_filename}", local_prot_input)
+            cleanup_paths.append(local_prot_input)
+
+        if gff_filename:
+            local_gff_input = f"/tmp/{job_id}_{gff_filename}"
+            download_blob(f"{base_gcs_uri}/{gff_filename}", local_gff_input)
+            cleanup_paths.append(local_gff_input)
+
+        if not local_nuc_input and not local_prot_input:
+            if params.get("has_protein") and not params.get("has_nucleotide"):
+                local_prot_input = f"/tmp/{job_id}_input.fasta"
+                download_blob(gcs_uri, local_prot_input)
+                cleanup_paths.append(local_prot_input)
+            else:
+                local_nuc_input = f"/tmp/{job_id}_input.fasta"
+                download_blob(gcs_uri, local_nuc_input)
+                cleanup_paths.append(local_nuc_input)
+
+        run_amrfinder(local_nuc_input, local_prot_input, local_gff_input, local_output, local_stderr, local_nuc, local_prot, params)
 
         upload_blob(local_output, f"results/{job_id}/results.tsv")
         upload_blob(local_stderr, f"results/{job_id}/stderr.txt")
@@ -251,8 +286,8 @@ def handle_pubsub_push():
             print(f"Failed to update firestore with error status: {db_err}")
 
     finally:
-        for path in [local_input, local_output, local_stderr, local_nuc, local_prot]:
-            if os.path.exists(path):
+        for path in cleanup_paths:
+            if path and os.path.exists(path):
                 try:
                     os.remove(path)
                 except Exception as cleanup_err:
