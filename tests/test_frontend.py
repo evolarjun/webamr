@@ -701,6 +701,17 @@ class TestResultsPage:
         assert "<td>seq1</td>" in html
         assert "Download Results" in html
 
+    def test_results_page_firestore_exception_returns_404(self):
+        """GET /results/<id> returns 404 when Firestore raises an exception."""
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.side_effect = Exception("Firestore error")
+        try:
+            resp = client.get("/results/error-job")
+            assert resp.status_code == 404
+            assert b"Woah, 404 - Not Found" in resp.data
+        finally:
+            # Clean up side effect so other tests aren't broken
+            MOCK_FIRESTORE.collection.return_value.document.return_value.get.side_effect = None
+
 
 # ---------------------------------------------------------------------------
 # Tests: /analyze response includes results_url
