@@ -10,7 +10,6 @@ import os
 import sys
 from unittest.mock import MagicMock, patch
 
-import pytest
 from google.cloud.exceptions import NotFound
 
 # ---------------------------------------------------------------------------
