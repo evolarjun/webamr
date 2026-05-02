@@ -432,7 +432,8 @@ def results_page(job_id):
             try:
                 result_html = tabulize(blob.download_as_bytes())
             except NotFound:
-                pass
+                # Job completed but result files have been cleaned up
+                status = "Expired"
             stderr_available = bucket.blob(f'results/{job_id}/stderr.txt').exists()
             nucleotide_available = bucket.blob(f'results/{job_id}/nucleotide.fna').exists()
             protein_available = bucket.blob(f'results/{job_id}/protein.faa').exists()
@@ -495,6 +496,9 @@ def return_results(user_id):
                 if status == "Failed":
                     error_msg = job_data.get("error_message", "Unknown error")
                     return jsonify({'error': f"Analysis failed: {error_msg}", 'stderr_available': stderr_available}), 500
+                if status == "Completed":
+                    # Job completed but result files have been cleaned up
+                    return jsonify({'status': 'Expired'}), 200
                 # Job is still pending (Queued or Processing)
                 return jsonify({'status': status}), 200
         except Exception as e:

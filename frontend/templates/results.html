@@ -59,6 +59,10 @@
     <p><a href="/protein/{{ job_id }}" target="_blank">Download Protein FASTA</a></p>
     {% endif %}
   </div>
+  {% elif status == "Expired" %}
+  <div id="status-msg">
+    <p class="error"><strong>Job expired:</strong> This job completed successfully, but the result files are no longer available. Output files are retained on the server for 1 week.</p>
+  </div>
   {% else %}
   <div id="status-msg">
     <p>Status: <strong>{{ status }}</strong> — polling… <span id="timer"></span></p>
@@ -166,7 +170,7 @@
     // Attach to server-rendered table (completed jobs loaded directly)
     document.addEventListener('DOMContentLoaded', initSortHeaders);
 
-    {% if status != "Failed" and status != "Completed" %}
+    {% if status != "Failed" and status != "Completed" and status != "Expired" %}
     (function pollForResults() {
       // Fetch immediately once
       function checkStatus() {
@@ -177,6 +181,13 @@
           })
           .then(data => {
             if (!data) return;
+
+            if (data.status && data.status === 'Expired') {
+              clearInterval(pollInterval);
+              if (timerInterval) clearInterval(timerInterval);
+              if (statusMsg) statusMsg.innerHTML = '<p class="error"><strong>Job expired:</strong> This job completed successfully, but the result files are no longer available. Output files are retained on the server for 1 week.</p>';
+              return;
+            }
 
             if (data.status && data.status !== 'Completed') {
               const displayStatus = (data.status === 'Processing') ? 'Running' : data.status;
