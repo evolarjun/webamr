@@ -29,7 +29,6 @@ import time
 
 import pytest
 import requests
-from google.cloud import firestore, storage
 
 # ---------------------------------------------------------------------------
 # Configuration / fixtures
@@ -63,6 +62,7 @@ def _require_env():
 
 def _cleanup_gcs(job_id: str):
     """Delete all GCS blobs created for this job."""
+    from google.cloud import storage
     client = storage.Client(project=PROJECT_ID)
     for bucket_name, prefix in [
         (INPUT_BUCKET, f"{job_id}/"),
@@ -80,6 +80,7 @@ def _cleanup_gcs(job_id: str):
 
 def _cleanup_firestore(job_id: str):
     """Delete the Firestore job document created for this job."""
+    from google.cloud import firestore
     try:
         db = firestore.Client(project=PROJECT_ID)
         db.collection("amr_jobs").document(job_id).delete()
