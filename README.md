@@ -1,9 +1,11 @@
 # AMRFinderPlus Web Interface (WebAMR)
 
 > [!WARNING]
-> This application is an experimental side project. It may fail or produce unexpected results. 
+> This is an experimental side project. No warranty express or implied. Not endorsed or supported by my employer or anyone else.
 
 This application provides a web-based UI and scalable cloud-native backend for running [AMRFinderPlus](https://github.com/ncbi/amr/wiki), a tool by the NCBI for identifying antimicrobial resistance (AMR) genes and point mutations (plus some virulence and biocide/stress resistance genes) in assembled nucleotide and/or protein sequences. Currently running at https://amr.arjunp.net.
+
+User documentation at https://amr.arjunp.net/docs
 
 ## Project Structure
 
@@ -32,3 +34,5 @@ This project is actively developed. Current features include:
 *   Scalable zero-to-N worker instances on Cloud Run.
 *   Job status tracking via Cloud Firestore.
 *   Shareable result pages (`/results/<job_id>`) and TSV download.
+
+Report issues on [GitHub](https://github.com/evolarjun/webamr/issues)
