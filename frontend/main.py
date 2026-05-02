@@ -255,7 +255,7 @@ def analyze_file():
             return jsonify({'error': 'Job name can only contain letters, numbers, spaces, underscores, and hyphens.'}), 400
 
     # Basic command structure
-    command = [amrfinder_path, "--plus", "--print_node", "-o", upload_folder + "/output.amrfinder"]
+    command = [amrfinder_path, "--plus", "--print_node", "--output", upload_folder + "/output.amrfinder"]
 
     # Valid annotation formats as per amrfinder -h
     ALLOWED_ANNOTATION_FORMATS = {
@@ -290,17 +290,17 @@ def analyze_file():
         filename = secure_filename(nuc_file.filename)
         filepath = os.path.join(upload_folder, filename)
         nuc_file.save(filepath)
-        command.extend(["-n", filepath])
+        command.extend(["--nucleotide", filepath])
     if prot_file:
         filename = secure_filename(prot_file.filename)
         filepath = os.path.join(upload_folder, filename)
         prot_file.save(filepath)
-        command.extend(["-p", filepath])
+        command.extend(["--protein", filepath])
     if gff_file:
         filename = secure_filename(gff_file.filename)
         filepath = os.path.join(upload_folder, filename)
         gff_file.save(filepath)
-        command.extend(["-g", filepath])
+        command.extend(["--gff", filepath])
 
     # Write the command to a text file
     command_file_path = os.path.join(upload_folder, "command.txt")
@@ -593,6 +593,32 @@ def protein_output(user_id):
     except Exception as e:
         print(f"Error serving protein fasta: {e}")
         return jsonify({'error': 'Failed to retrieve protein fasta.'}), 500
+
+@app.route('/input/<job_id>/<filename>')
+def input_file(job_id, filename):
+    """Serve an input file from the GCS input bucket."""
+    safe_name = secure_filename(filename)
+    if not safe_name:
+        return jsonify({'error': 'Invalid filename.'}), 400
+    try:
+        storage_client = get_storage_client()
+        bucket = storage_client.bucket(BUCKET_NAME)
+        blob = bucket.blob(f'{job_id}/{safe_name}')
+
+        try:
+            file_bytes = blob.download_as_bytes()
+        except NotFound:
+            return jsonify({'error': 'Input file is no longer available.'}), 404
+
+        return send_file(
+            io.BytesIO(file_bytes),
+            as_attachment=True,
+            download_name=safe_name,
+            mimetype="application/octet-stream"
+        ), 200
+    except Exception as e:
+        print(f"Error serving input file: {e}")
+        return jsonify({'error': 'Failed to retrieve input file.'}), 500
 
 @app.route('/favicon.ico')
 def favicon():

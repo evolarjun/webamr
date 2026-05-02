@@ -85,13 +85,13 @@ def run_amrfinder(nuc_input, prot_input, gff_input, output_tsv, stderr_path, nuc
     cmd = ["amrfinder"]
 
     if nuc_input:
-        cmd.extend(["-n", nuc_input])
+        cmd.extend(["--nucleotide", nuc_input])
     if prot_input:
-        cmd.extend(["-p", prot_input])
+        cmd.extend(["--protein", prot_input])
     if gff_input:
-        cmd.extend(["-g", gff_input])
+        cmd.extend(["--gff", gff_input])
 
-    cmd.extend(["-o", output_tsv])
+    cmd.extend(["--output", output_tsv])
 
     if nuc_input and params.get("has_nucleotide"):
         cmd.extend(["--nucleotide_output", nucleotide_path])

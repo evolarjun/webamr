@@ -139,8 +139,8 @@ class TestRunAmrfinder:
         mock_run.return_value = MagicMock(returncode=0, stdout="col1\tcol2\n", stderr="")
         worker.run_amrfinder("/tmp/in.fasta", None, None, "/tmp/out.tsv", "/tmp/stderr.txt", "/tmp/nuc.fna", "/tmp/prot.faa", {})
         cmd = mock_run.call_args[0][0]
-        assert cmd[:3] == ["amrfinder", "-n", "/tmp/in.fasta"]
-        assert "-o" in cmd
+        assert cmd[:3] == ["amrfinder", "--nucleotide", "/tmp/in.fasta"]
+        assert "--output" in cmd
         assert "/tmp/out.tsv" in cmd
         assert "--nucleotide_output" not in cmd
         assert "--protein_output" not in cmd
@@ -153,8 +153,8 @@ class TestRunAmrfinder:
         assert "--nucleotide_output" in cmd
         assert "/tmp/nuc.fna" in cmd
         assert "--protein_output" not in cmd
-        assert "-n" in cmd
-        assert "-p" not in cmd
+        assert "--nucleotide" in cmd
+        assert "--protein" not in cmd
 
     @patch("worker.subprocess.run")
     def test_has_protein_flag(self, mock_run):
@@ -164,8 +164,8 @@ class TestRunAmrfinder:
         assert "--protein_output" in cmd
         assert "/tmp/prot.faa" in cmd
         assert "--nucleotide_output" not in cmd
-        assert "-p" in cmd
-        assert "-n" not in cmd
+        assert "--protein" in cmd
+        assert "--nucleotide" not in cmd
 
     @patch("worker.subprocess.run")
     def test_plus_flag_added(self, mock_run):
@@ -223,11 +223,11 @@ class TestRunAmrfinder:
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
         worker.run_amrfinder("/tmp/nuc.fasta", "/tmp/prot.fasta", "/tmp/prot.gff", "/tmp/out.tsv", "/tmp/stderr.txt", "/tmp/nuc.fna", "/tmp/prot.faa", {})
         cmd = mock_run.call_args[0][0]
-        assert "-n" in cmd
+        assert "--nucleotide" in cmd
         assert "/tmp/nuc.fasta" in cmd
-        assert "-p" in cmd
+        assert "--protein" in cmd
         assert "/tmp/prot.fasta" in cmd
-        assert "-g" in cmd
+        assert "--gff" in cmd
         assert "/tmp/prot.gff" in cmd
 
 

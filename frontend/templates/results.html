@@ -29,20 +29,21 @@
   <ul>
       {% if nuc_filename %}
       <li>
-        <strong>Nucleotide file:</strong> {{ nuc_filename }}
+        <strong>Nucleotide file:</strong> <a href="/input/{{ job_id }}/{{ nuc_filename }}">{{ nuc_filename }}</a>
       </li>
       {% endif %}
       {% if prot_filename %}
       <li>
-        <strong>Protein file:</strong> {{ prot_filename }}
+        <strong>Protein file:</strong> <a href="/input/{{ job_id }}/{{ prot_filename }}">{{ prot_filename }}</a>
       </li>
       {% endif %}
       {% if gff_filename %}
       <li>
-        <strong>GFF file:</strong> {{ gff_filename }}
+        <strong>GFF file:</strong> <a href="/input/{{ job_id }}/{{ gff_filename }}">{{ gff_filename }}</a>
       </li>
       {% endif %}
   </ul>
+  <strong>Results:</strong>
   {% if status == "Failed" %}
   <p class="error"><strong>Job failed:</strong> {{ error_message }}</p>
   {% elif status == "Completed" and result_html %}
