@@ -242,6 +242,10 @@ def analyze_file():
         if not gff_file or gff_file.filename == '':
             return jsonify({'error': 'A GFF file is required when providing both nucleotide and protein files.'}), 400
 
+    if gff_file and gff_file.filename != '':
+        if not prot_file or prot_file.filename == '':
+            return jsonify({'error': 'A protein file is required when providing a GFF file.'}), 400
+
     raw_job_name = request.form.get("job_name", "")
     job_name = raw_job_name.strip()
     if job_name:

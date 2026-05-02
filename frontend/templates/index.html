@@ -84,23 +84,15 @@
         return false;
       }
 
-      if (nucFile && !protFile && !gffFile) {
-        if (showError) statusMsg.innerHTML = '';
-        submitButton.disabled = false;
-        return true; // Only nuc_file provided
-      } else if (protFile && !nucFile && !gffFile) {
-        if (showError) statusMsg.innerHTML = '';
-        submitButton.disabled = false;
-        return true; // Only prot_file provided
-      } else if (nucFile && protFile && gffFile) {
-        if (showError) statusMsg.innerHTML = '';
-        submitButton.disabled = false;
-        return true; // All three files provided
-      } else {
-        if (showError) statusMsg.innerHTML = '<p class="error">Please upload either only a nucleotide file, only a protein file, or all three files (nucleotide, protein, and GFF).</p>';
+      if (gffFile && !protFile) {
+        if (showError) statusMsg.innerHTML = '<p class="error">A protein file is required when providing a GFF file.</p>';
         submitButton.disabled = true;
-        return false; // Invalid file combination
+        return false;
       }
+
+      if (showError) statusMsg.innerHTML = '';
+      submitButton.disabled = false;
+      return true;
     }
 
     form.elements['nuc_file'].addEventListener('change', () => validateForm(true));

@@ -335,6 +335,25 @@ class TestAnalyze:
         finally:
             MOCK_PUBLISHER.publish.side_effect = None
 
+    def test_prot_and_gff_success(self):
+        MOCK_PUBLISHER.publish.reset_mock()
+        resp = self._post_analyze(nuc_file=False, prot_file=True, extra_data={"gff_file": _fasta_file("sample.gff")})
+        assert resp.status_code == 200
+        MOCK_PUBLISHER.publish.assert_called_once()
+        call_args = MOCK_PUBLISHER.publish.call_args
+        message = json.loads(call_args[0][1].decode("utf-8"))
+        assert message.get("prot_filename") == "sample_prot.fasta"
+        assert message.get("gff_filename") == "sample.gff"
+        assert message.get("nuc_filename") is None
+        assert message["parameters"]["has_protein"] is True
+        assert message["parameters"]["has_nucleotide"] is False
+
+    def test_nuc_and_gff_fails(self):
+        MOCK_PUBLISHER.publish.reset_mock()
+        resp = self._post_analyze(nuc_file=True, prot_file=False, extra_data={"gff_file": _fasta_file("sample.gff")})
+        assert resp.status_code == 400
+        assert "A protein file is required" in resp.get_json()["error"]
+
 
 # ---------------------------------------------------------------------------
 # Tests: Rate limiting on /analyze

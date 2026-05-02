@@ -39,13 +39,15 @@ FRONTEND_URL = os.environ.get("FRONTEND_URL", "").rstrip("/")
 PROJECT_ID = os.environ.get("PROJECT_ID", "amrfinder")
 OUTPUT_BUCKET = os.environ.get("OUTPUT_BUCKET", f"amr-output-bucket-{PROJECT_ID}")
 INPUT_BUCKET = os.environ.get("BUCKET_NAME", f"amr-input-bucket-{PROJECT_ID}")
+SKIP_CLEANUP = os.environ.get("SKIP_CLEANUP", "false").lower() == "true"
 
 # Paths to the sample files bundled with the test suite
 SAMPLE_FASTA = os.path.join(os.path.dirname(__file__), "test_dna.fa")
 SAMPLE_PROT = os.path.join(os.path.dirname(__file__), "test_prot.fa")
+SAMPLE_GFF = os.path.join(os.path.dirname(__file__), "test_prot.gff")
 
 # How long to wait for a job to complete (AMRFinderPlus can be slow to cold-start)
-POLL_INTERVAL_SECONDS = 15
+POLL_INTERVAL_SECONDS = 3
 MAX_POLL_SECONDS = 600  # 10 minutes
 
 
@@ -206,10 +208,12 @@ class TestProductionE2E:
                 print("  Protein fasta download successful. ✓")
 
         finally:
-            if job_id:
+            if job_id and not SKIP_CLEANUP:
                 print("Cleaning up GCP resources ...")
                 _cleanup_gcs(job_id)
                 _cleanup_firestore(job_id)
+            elif job_id:
+                print("Skipping cleanup as SKIP_CLEANUP is true ...")
 
     def test_protein_job_lifecycle(self):
         """
@@ -289,10 +293,109 @@ class TestProductionE2E:
             print("  Nucleotide endpoint correctly returns 404 for protein-only job. ✓")
 
         finally:
-            if job_id:
+            if job_id and not SKIP_CLEANUP:
                 print("Cleaning up GCP resources ...")
                 _cleanup_gcs(job_id)
                 _cleanup_firestore(job_id)
+            elif job_id:
+                print("Skipping cleanup as SKIP_CLEANUP is true ...")
+
+    def test_combined_job_lifecycle(self):
+        """
+        Submit a nucleotide FASTA, a protein FASTA, and a GFF file together
+        to the production frontend and verify:
+          1. The job is accepted (HTTP 200 + job_id returned).
+          2. The worker processes it and results become available.
+          3. The results endpoint returns an HTML table.
+          4. The TSV, stderr, nucleotide, and protein output endpoints return 200.
+        """
+        job_id = None
+        try:
+            # --- Step 1: Submit the job ---
+            print(f"\nSubmitting combined nuc+prot+GFF job to {FRONTEND_URL}/analyze ...")
+            with open(SAMPLE_FASTA, "rb") as nuc, \
+                 open(SAMPLE_PROT, "rb") as prot, \
+                 open(SAMPLE_GFF, "rb") as gff:
+                resp = requests.post(
+                    f"{FRONTEND_URL}/analyze",
+                    files={
+                        "nuc_file": ("test_dna.fa", nuc, "application/octet-stream"),
+                        "prot_file": ("test_prot.fa", prot, "application/octet-stream"),
+                        "gff_file": ("test_prot.gff", gff, "application/octet-stream"),
+                    },
+                    data={"organism": "Escherichia"},
+                    timeout=60,
+                )
+
+            assert resp.status_code == 200, (
+                f"POST /analyze returned {resp.status_code}: {resp.text}"
+            )
+            body = resp.json()
+            assert "user_id" in body, f"Response missing user_id: {body}"
+            assert "results_url" in body, f"Response missing results_url: {body}"
+
+            job_id = body["user_id"]
+            print(f"  Job submitted: {job_id}")
+            print(f"  Shareable URL: {FRONTEND_URL}{body['results_url']}")
+
+            # --- Step 2: Poll for results ---
+            print(f"Polling for results (up to {MAX_POLL_SECONDS // 60} min) ...")
+            results_resp = _poll_for_results(job_id)
+
+            assert results_resp.status_code == 200, (
+                f"Job {job_id} failed. Worker response: {results_resp.text}"
+            )
+
+            # --- Step 3: Verify HTML table in results ---
+            results_body = results_resp.json()
+            assert "result" in results_body, (
+                f"Results body missing 'result' key: {results_body}"
+            )
+            assert "<table>" in results_body["result"], (
+                "Results do not contain an HTML table."
+            )
+            print("  Results contain an HTML table. ✓")
+
+            # --- Step 4: Verify TSV download ---
+            download_resp = requests.get(
+                f"{FRONTEND_URL}/output/{job_id}", timeout=30
+            )
+            assert download_resp.status_code == 200, (
+                f"GET /output/{job_id} returned {download_resp.status_code}"
+            )
+            content_disp = download_resp.headers.get("Content-Disposition", "")
+            assert "attachment" not in content_disp, (
+                f"Expected no attachment Content-Disposition, got: {content_disp}"
+            )
+            tsv_text = download_resp.text
+            assert "\t" in tsv_text, "Downloaded file does not appear to be TSV."
+            print("  TSV output download successful. ✓")
+
+            # Verify stderr
+            stderr_resp = requests.get(f"{FRONTEND_URL}/stderr/{job_id}", timeout=30)
+            assert stderr_resp.status_code == 200
+            print("  Stderr download successful. ✓")
+
+            # Combined jobs should produce a nucleotide FASTA output
+            nuc_resp = requests.get(f"{FRONTEND_URL}/nucleotide/{job_id}", timeout=30)
+            assert nuc_resp.status_code == 200, (
+                f"Expected 200 for nucleotide output on a combined job, "
+                f"got {nuc_resp.status_code}"
+            )
+            print("  Nucleotide FASTA download successful. ✓")
+
+            # Combined jobs may also produce a protein FASTA output
+            prot_resp = requests.get(f"{FRONTEND_URL}/protein/{job_id}", timeout=30)
+            if prot_resp.status_code == 200:
+                print("  Protein FASTA download successful. ✓")
+
+        finally:
+            if job_id and not SKIP_CLEANUP:
+                print("Cleaning up GCP resources ...")
+                _cleanup_gcs(job_id)
+                _cleanup_firestore(job_id)
+            elif job_id:
+                print("Skipping cleanup as SKIP_CLEANUP is true ...")
 
     def test_results_page_is_accessible(self):
         """
@@ -322,7 +425,7 @@ class TestProductionE2E:
             print(f"  /results/{job_id} is accessible and contains the job ID. ✓")
 
         finally:
-            if job_id:
+            if job_id and not SKIP_CLEANUP:
                 _cleanup_gcs(job_id)
                 _cleanup_firestore(job_id)
 
