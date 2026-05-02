@@ -1,0 +1,27 @@
+name: Production E2E Smoke Test
+on:
+  schedule:
+    - cron: '0 0 * * 0'  # Weekly on Sunday at midnight
+  workflow_dispatch:      # Allows manual trigger
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          
+      - name: Install Dependencies
+        run: |
+          pip install pytest requests
+          
+      - name: Run E2E Tests
+        env:
+          FRONTEND_URL: "https://amr.arjunp.net"
+          SKIP_CLEANUP: "true"
+        run: |
+          pytest tests/test_e2e_production.py -v
