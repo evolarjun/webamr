@@ -42,7 +42,7 @@ def main():
         docs.sort(key=get_sort_key, reverse=True)
 
         # Print header (tab-delimited)
-        header = ["date", "status", "ip_address", "nuc_size_bytes", "prot_size_bytes", "gff_size_bytes", "organism", "job_id", "results"]
+        header = ["date", "status", "job_name", "nuc_size_bytes", "prot_size_bytes", "gff_size_bytes", "organism", "job_id", "results"]
         print("\t".join(header))
 
         for doc in docs:
@@ -58,8 +58,8 @@ def main():
             # 2. Status
             status = data.get("status", "Unknown")
             
-            # 3. IP Address
-            ip_address = data.get("ip_address", "N/A")
+            # 3. Job Name
+            job_name = data.get("job_name") or "N/A"
             
             # 4. File Sizes (fallback to 0 if they don't exist yet on older docs)
             nuc_size = data.get("nuc_file_size_bytes", 0)
@@ -75,7 +75,7 @@ def main():
             row = [
                 str(date_str),
                 str(status),
-                str(ip_address),
+                str(job_name),
                 str(nuc_size),
                 str(prot_size),
                 str(gff_size),

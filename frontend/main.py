@@ -77,20 +77,17 @@ def generate_user_id():
     return str(uuid.uuid4())
 
 def read_file(filename):
-  """Reads the contents of a file.
+    """Reads the contents of a file.
 
-  Args:
-    filename: The name of the file to read.
+    Args:
+        filename: The name of the file to read.
 
-  Returns:
-    The contents of the file as a string.
-  """
-#   try:
-  with open(filename, 'r') as file:  # 'r' mode for reading
-    contents = file.read()
-  return contents
-#   except FileNotFoundError:
-#     return "File not found."
+    Returns:
+        The contents of the file as a string.
+    """
+    with open(filename, 'r') as file:
+        contents = file.read()
+    return contents
 
 def tabulize(tab_delimited):
     """Converts a tab-delimited string into an HTML table.
@@ -220,104 +217,128 @@ def documentation():
 def page_not_found(error):
     return render_template('404.html', url=request.url), 404
 
-@app.route('/analyze', methods=['POST'])
-@limiter.limit("5 per minute")
-def analyze_file():
+def _validate_job_submission(request):
+    """Validates the uploaded files and form data."""
     if 'nuc_file' not in request.files and 'prot_file' not in request.files:
-        return jsonify({'error': 'No nucleotide or protein file provided.'}), 400
+        return ({'error': 'No nucleotide or protein file provided.'}, 400), None
     nuc_file = request.files.get('nuc_file')
     prot_file = request.files.get('prot_file')
     gff_file = request.files.get('gff_file')
 
-    user_id = generate_user_id()
-    upload_folder = os.path.join(app.config['UPLOAD_FOLDER_BASE'], user_id)
-    os.makedirs(upload_folder, exist_ok=True)
-
     if nuc_file and nuc_file.filename == '':
-        return jsonify({'error': 'No nucleotide file selected'}), 400
+        return ({'error': 'No nucleotide file selected'}, 400), None
     if prot_file and prot_file.filename == '':
-        return jsonify({'error': 'No protein file selected'}), 400
+        return ({'error': 'No protein file selected'}, 400), None
 
     if nuc_file and nuc_file.filename != '' and prot_file and prot_file.filename != '':
         if not gff_file or gff_file.filename == '':
-            return jsonify({'error': 'A GFF file is required when providing both nucleotide and protein files.'}), 400
+            return ({'error': 'A GFF file is required when providing both nucleotide and protein files.'}, 400), None
 
     if gff_file and gff_file.filename != '':
         if not prot_file or prot_file.filename == '':
-            return jsonify({'error': 'A protein file is required when providing a GFF file.'}), 400
+            return ({'error': 'A protein file is required when providing a GFF file.'}, 400), None
 
     raw_job_name = request.form.get("job_name", "")
     job_name = raw_job_name.strip()
     if job_name:
         if len(job_name) > 100:
-            return jsonify({'error': 'Job name must be 100 characters or fewer.'}), 400
+            return ({'error': 'Job name must be 100 characters or fewer.'}, 400), None
         if not re.fullmatch(r"[A-Za-z0-9 _-]+", job_name):
-            return jsonify({'error': 'Job name can only contain letters, numbers, spaces, underscores, and hyphens.'}), 400
+            return ({'error': 'Job name can only contain letters, numbers, spaces, underscores, and hyphens.'}, 400), None
 
-    # Basic command structure
-    command = [amrfinder_path, "--plus", "--print_node", "--output", upload_folder + "/output.amrfinder"]
-
-    # Valid annotation formats as per amrfinder -h
-    ALLOWED_ANNOTATION_FORMATS = {
-        "bakta", "genbank", "microscope", "patric", "pgap", "prodigal",
-        "prokka", "pseudomonasdb", "rast", "standard"
+    return None, {
+        'nuc_file': nuc_file,
+        'prot_file': prot_file,
+        'gff_file': gff_file,
+        'job_name': job_name if job_name else None
     }
 
-    # Check for organism value
-    if 'organism' in request.form:
-        organism_value = request.form['organism']
-        if organism_value != "" and organism_value != 'None':  
-            # Strict sanitization: alphanumeric and underscores only
-            organism_value = re.sub(r'[^A-Za-z0-9_]', '', organism_value)
-            print(f"Organism selected: {organism_value}")
-            command.extend(["--organism", organism_value])  
-        else:
-            print("No organism selected.")
-            organism_value = None
-    else:
-        print("Organism not found in form data.")
-        organism_value = None
-
-    annotation_format = request.form.get('annotation_format', 'standard').strip()
-    if annotation_format not in ALLOWED_ANNOTATION_FORMATS:
-        print(f"Invalid annotation format: {annotation_format}. Defaulting to standard.")
-        annotation_format = "standard"
+def _save_and_upload_files(upload_folder, user_id, nuc_file, prot_file, gff_file):
+    """Saves files locally, calculates their sizes, and uploads them to GCS."""
+    sizes = {'nuc_size': 0, 'prot_size': 0, 'gff_size': 0}
     
-    command.extend(["--annotation_format", annotation_format])
-    print("Now saving files")
-    # save files
-    if nuc_file: 
-        filename = secure_filename(nuc_file.filename)
-        filepath = os.path.join(upload_folder, filename)
-        nuc_file.save(filepath)
-        command.extend(["--nucleotide", filepath])
-    if prot_file:
-        filename = secure_filename(prot_file.filename)
-        filepath = os.path.join(upload_folder, filename)
-        prot_file.save(filepath)
-        command.extend(["--protein", filepath])
-    if gff_file:
-        filename = secure_filename(gff_file.filename)
-        filepath = os.path.join(upload_folder, filename)
-        gff_file.save(filepath)
-        command.extend(["--gff", filepath])
+    files_to_process = [
+        (nuc_file, 'nuc_size'),
+        (prot_file, 'prot_size'),
+        (gff_file, 'gff_size')
+    ]
+    
+    for file_obj, size_key in files_to_process:
+        if file_obj and file_obj.filename:
+            filename = secure_filename(file_obj.filename)
+            filepath = os.path.join(upload_folder, filename)
+            file_obj.save(filepath)
+            sizes[size_key] = os.path.getsize(filepath)
+            
+            # Upload to GCS
+            destination_path = os.path.join(user_id, filename)
+            upload_to_gcs(BUCKET_NAME, filepath, destination_path)
+            
+    return sizes
 
-    # Write the command to a text file
-    command_file_path = os.path.join(upload_folder, "command.txt")
-    with open(command_file_path, "w") as command_file:
-        command_file.write(" ".join(command))
+def _create_firestore_record(user_id, job_name, gcs_uri, params, sizes, files, client_ip):
+    """Creates the initial queued job record in Firestore."""
+    db = get_firestore_client()
+    doc_ref = db.collection("amr_jobs").document(user_id)
+    
+    total_size = sizes['nuc_size'] + sizes['prot_size'] + sizes['gff_size']
+    
+    doc_ref.set({
+        "job_id": user_id,
+        "job_name": job_name,
+        "status": "Queued",
+        "gcs_uri": gcs_uri,
+        "parameters": params,
+        "result_uri": None,
+        "error_message": None,
+        "created_at": datetime.now(timezone.utc),
+        "expire_at": datetime.now(timezone.utc) + timedelta(days=90),
+        "total_file_size_bytes": total_size,
+        "nuc_file_size_bytes": sizes['nuc_size'],
+        "prot_file_size_bytes": sizes['prot_size'],
+        "gff_file_size_bytes": sizes['gff_size'],
+        "nuc_filename": files['nuc_file'].filename if files['nuc_file'] else None,
+        "prot_filename": files['prot_file'].filename if files['prot_file'] else None,
+        "gff_filename": files['gff_file'].filename if files['gff_file'] else None,
+        "ip_address": client_ip
+    })
+
+
+@app.route('/analyze', methods=['POST'])
+@limiter.limit("5 per minute")
+def analyze_file():
+    """Endpoint to handle new AMRFinderPlus job submissions."""
+    error_response, validated_data = _validate_job_submission(request)
+    if error_response:
+        return jsonify(error_response[0]), error_response[1]
+
+    nuc_file = validated_data['nuc_file']
+    prot_file = validated_data['prot_file']
+    gff_file = validated_data['gff_file']
+    job_name = validated_data['job_name']
+
+    user_id = generate_user_id()
+    upload_folder = os.path.join(app.config['UPLOAD_FOLDER_BASE'], user_id)
+    os.makedirs(upload_folder, exist_ok=True)
+
     try:
-        print("Now uploading files to bucket")
-        # Upload files and command to GCS
-        for filename in os.listdir(upload_folder):
-            source_path = os.path.join(upload_folder, filename)
-            destination_path = os.path.join(user_id, filename)  # Use user_id as prefix in GCS
-            upload_to_gcs(BUCKET_NAME, source_path, destination_path)
-            print(f"Uploaded {source_path} to gs://{BUCKET_NAME}/{destination_path}")
+        ALLOWED_ANNOTATION_FORMATS = {
+            "bakta", "genbank", "microscope", "patric", "pgap", "prodigal",
+            "prokka", "pseudomonasdb", "rast", "standard"
+        }
 
-        print ("Now sending pubsub message")
-        
-        # Determine the primary upload file for the worker's processing
+        organism_value = None
+        if 'organism' in request.form:
+            form_org = request.form['organism']
+            if form_org and form_org != 'None':  
+                organism_value = re.sub(r'[^A-Za-z0-9_]', '', form_org)
+
+        annotation_format = request.form.get('annotation_format', 'standard').strip()
+        if annotation_format not in ALLOWED_ANNOTATION_FORMATS:
+            annotation_format = "standard"
+
+        sizes = _save_and_upload_files(upload_folder, user_id, nuc_file, prot_file, gff_file)
+
         main_filename = ""
         if nuc_file:
             main_filename = secure_filename(nuc_file.filename)
@@ -336,70 +357,38 @@ def analyze_file():
         if organism_value:
             params["organism"] = organism_value
 
-        # Calculate file sizes to write to DB
-        nuc_size = os.path.getsize(os.path.join(upload_folder, secure_filename(nuc_file.filename))) if nuc_file else 0
-        prot_size = os.path.getsize(os.path.join(upload_folder, secure_filename(prot_file.filename))) if prot_file else 0
-        gff_size = os.path.getsize(os.path.join(upload_folder, secure_filename(gff_file.filename))) if gff_file else 0
-
-        total_file_size_bytes = nuc_size + prot_size + gff_size
-
-        # Capture IP address for analytics
         client_ip = get_remote_address()
 
-        # 1. Update DB state to queued
-        db = get_firestore_client()
-        doc_ref = db.collection("amr_jobs").document(user_id)
-        doc_ref.set({
-            "job_id": user_id,
-            "job_name": job_name if job_name else None,
-            "status": "Queued",
-            "gcs_uri": gcs_uri,
-            "parameters": params,
-            "result_uri": None,
-            "error_message": None,
-            "created_at": datetime.now(timezone.utc),
-            "expire_at": datetime.now(timezone.utc) + timedelta(days=90),
-            "total_file_size_bytes": total_file_size_bytes,
-            "nuc_file_size_bytes": nuc_size,
-            "prot_file_size_bytes": prot_size,
-            "gff_file_size_bytes": gff_size,
-            "nuc_filename": nuc_file.filename if nuc_file else None,
-            "prot_filename": prot_file.filename if prot_file else None,
-            "gff_filename": gff_file.filename if gff_file else None,
-            "ip_address": client_ip
-        })
+        files_dict = {'nuc_file': nuc_file, 'prot_file': prot_file, 'gff_file': gff_file}
+        _create_firestore_record(user_id, job_name, gcs_uri, params, sizes, files_dict, client_ip)
 
-        # 2. Trigger analysis via pubsub message (matching worker's payload expectations)
         message_data = {
             "job_id": user_id,
             "gcs_uri": gcs_uri,
             "parameters": params,
-            "job_name": job_name if job_name else None,
+            "job_name": job_name,
             "nuc_filename": nuc_file.filename if nuc_file else None,
             "prot_filename": prot_file.filename if prot_file else None,
             "gff_filename": gff_file.filename if gff_file else None
         }
         send_pubsub_message(json.dumps(message_data))
 
-        results_url = f"/results/{user_id}"
-        # Return success with user_id and a shareable results URL
         return jsonify({
             'result': "Files uploaded successfully. Analysis will begin shortly.",
             'user_id': user_id,
-            'results_url': results_url,
+            'results_url': f"/results/{user_id}",
         }), 200
+        
     except Exception as e:
-        print(f"Server Error in analyze_file: {str(e)}")
-        traceback.print_exc()
+        logging.error(f"Server Error in analyze_file: {str(e)}", exc_info=True)
         return jsonify({'error': f"Failed to submit job: {str(e)}"}), 500
+        
     finally:
-        # Clean up the local upload directory
         if os.path.exists(upload_folder):
             try:
                 shutil.rmtree(upload_folder, ignore_errors=True)
-                print(f"Cleaned up local upload folder: {upload_folder}")
             except Exception as e:
-                print(f"Failed to clean up local upload folder {upload_folder}: {e}")
+                logging.error(f"Failed to clean up local upload folder {upload_folder}: {e}")
 
 
 @app.route('/results/<job_id>')
@@ -509,90 +498,47 @@ def return_results(user_id):
 
 
 
-@app.route('/output/<user_id>')
-def output(user_id):
+def _serve_gcs_result_file(user_id, filename, mimetype, as_attachment=False):
+    """Helper to serve files from the GCS output bucket."""
     try:
         storage_client = get_storage_client()
         bucket = storage_client.bucket(OUTPUT_BUCKET)
-        blob = bucket.blob(f'results/{user_id}/results.tsv')
-        
+        blob = bucket.blob(f'results/{user_id}/{filename}')
+
         try:
             file_bytes = blob.download_as_bytes()
         except NotFound:
-            return jsonify({'error': 'AMRFinderPlus output file is no longer available.'}), 404
-            
+            return jsonify({'error': f'AMRFinderPlus {filename} is no longer available.'}), 404
+
         return send_file(
             io.BytesIO(file_bytes),
-            as_attachment=False,
-            mimetype="text/plain"
+            as_attachment=as_attachment,
+            download_name=secure_filename(filename) if as_attachment else None,
+            mimetype=mimetype
         ), 200
     except Exception as e:
-        print(f"Error serving output: {e}")
-        return jsonify({'error': 'Failed to retrieve output file.'}), 500
+        logging.error(f"Error serving {filename}: {e}", exc_info=True)
+        return jsonify({'error': f'Failed to retrieve {filename}.'}), 500
 
+@app.route('/output/<user_id>')
+def output(user_id):
+    """Serves the results TSV file."""
+    return _serve_gcs_result_file(user_id, 'results.tsv', 'text/plain')
 
 @app.route('/stderr/<user_id>')
 def stderr_output(user_id):
-    try:
-        storage_client = get_storage_client()
-        bucket = storage_client.bucket(OUTPUT_BUCKET)
-        blob = bucket.blob(f'results/{user_id}/stderr.txt')
-
-        try:
-            file_bytes = blob.download_as_bytes()
-        except NotFound:
-            return jsonify({'error': 'AMRFinderPlus stderr log is no longer available.'}), 404
-
-        return send_file(
-            io.BytesIO(file_bytes),
-            as_attachment=False,
-            mimetype="text/plain"
-        ), 200
-    except Exception as e:
-        print(f"Error serving stderr: {e}")
-        return jsonify({'error': 'Failed to retrieve stderr log.'}), 500
+    """Serves the stderr text log."""
+    return _serve_gcs_result_file(user_id, 'stderr.txt', 'text/plain')
 
 @app.route('/nucleotide/<user_id>')
 def nucleotide_output(user_id):
-    try:
-        storage_client = get_storage_client()
-        bucket = storage_client.bucket(OUTPUT_BUCKET)
-        blob = bucket.blob(f'results/{user_id}/nucleotide.fna')
-
-        try:
-            file_bytes = blob.download_as_bytes()
-        except NotFound:
-            return jsonify({'error': 'AMRFinderPlus nucleotide fasta is no longer available.'}), 404
-
-        return send_file(
-            io.BytesIO(file_bytes),
-            as_attachment=False,
-            mimetype="text/plain"
-        ), 200
-    except Exception as e:
-        print(f"Error serving nucleotide fasta: {e}")
-        return jsonify({'error': 'Failed to retrieve nucleotide fasta.'}), 500
+    """Serves the nucleotide FASTA output file."""
+    return _serve_gcs_result_file(user_id, 'nucleotide.fna', 'text/plain')
 
 @app.route('/protein/<user_id>')
 def protein_output(user_id):
-    try:
-        storage_client = get_storage_client()
-        bucket = storage_client.bucket(OUTPUT_BUCKET)
-        blob = bucket.blob(f'results/{user_id}/protein.faa')
-
-        try:
-            file_bytes = blob.download_as_bytes()
-        except NotFound:
-            return jsonify({'error': 'AMRFinderPlus protein fasta is no longer available.'}), 404
-
-        return send_file(
-            io.BytesIO(file_bytes),
-            as_attachment=False,
-            mimetype="text/plain"
-        ), 200
-    except Exception as e:
-        print(f"Error serving protein fasta: {e}")
-        return jsonify({'error': 'Failed to retrieve protein fasta.'}), 500
+    """Serves the protein FASTA output file."""
+    return _serve_gcs_result_file(user_id, 'protein.faa', 'text/plain')
 
 @app.route('/input/<job_id>/<filename>')
 def input_file(job_id, filename):

@@ -75,6 +75,11 @@ except Exception as e:
     print(f"Failed to start version upload thread: {e}")
 
 
+def _log(job_id, msg):
+    """Print a log line prefixed with the job ID."""
+    print(f"[{job_id}] {msg}")
+
+
 def download_blob(gcs_uri, local_path):
     """Download a file from GCS given a gs:// URI."""
     parts = gcs_uri.replace("gs://", "").split("/", 1)
@@ -95,7 +100,17 @@ def upload_blob(local_path, destination_blob_name):
     return f"gs://{OUTPUT_BUCKET}/{destination_blob_name}"
 
 
-def run_amrfinder(nuc_input, prot_input, gff_input, output_tsv, stderr_path, nucleotide_path, protein_path, params):
+def run_amrfinder(
+    *,
+    nuc_input,
+    prot_input,
+    gff_input,
+    output_tsv,
+    stderr_path,
+    nucleotide_path,
+    protein_path,
+    params,
+):
     """Build and execute the amrfinder command."""
     cmd = ["amrfinder"]
 
@@ -148,6 +163,71 @@ def run_amrfinder(nuc_input, prot_input, gff_input, output_tsv, stderr_path, nuc
     return result.stdout
 
 
+def _validate_payload(envelope):
+    """
+    Parse and validate a Pub/Sub push envelope.
+
+    Returns (payload_dict, None) on success,
+    or (None, flask_response_tuple) on failure.
+
+    Returning a 200 response on most errors is intentional: it tells Pub/Sub
+    to ACK (not retry) messages that are permanently malformed.
+    """
+    if not envelope or "message" not in envelope:
+        print(f"Invalid Pub/Sub envelope: {envelope}")
+        return None, (jsonify({"error": f"Invalid Pub/Sub envelope (Worker v{APP_VERSION})"}), 400)
+
+    # Decode the base64-encoded payload
+    raw = envelope["message"].get("data", "")
+    try:
+        payload = json.loads(base64.b64decode(raw).decode("utf-8"))
+    except Exception as e:
+        print(f"Failed to decode message data: {e}, raw={raw[:200]}")
+        # Ack the message (200) so Pub/Sub stops retrying a broken message
+        return None, (jsonify({"error": "Could not decode message"}), 200)
+
+    print(f"Decoded payload: {payload}")
+
+    # Validate that the decoded payload is a JSON object (dict), not an array or scalar
+    if not isinstance(payload, dict):
+        print(f"Malformed message - payload is not a JSON object. Type: {type(payload).__name__}")
+        return None, (jsonify({"error": "Malformed message, payload must be a JSON object"}), 200)
+
+    if "job_id" not in payload or "gcs_uri" not in payload:
+        print(f"Malformed message - missing job_id or gcs_uri. Payload: {payload}")
+        # Ack the message (200) so Pub/Sub stops retrying it
+        return None, (jsonify({"error": "Malformed message, missing required fields"}), 200)
+
+    job_id = payload["job_id"]
+    gcs_uri = payload["gcs_uri"]
+
+    # Validate that job_id and gcs_uri are non-empty strings
+    if not isinstance(job_id, str):
+        print(f"Malformed message - job_id must be a string. Got: {job_id!r}")
+        return None, (jsonify({"error": "Malformed message, job_id must be a string"}), 200)
+
+    if not job_id:
+        print(f"Malformed message - job_id must not be empty.")
+        return None, (jsonify({"error": "Malformed message, job_id must be a non-empty string"}), 200)
+
+    if not re.fullmatch(r"[a-zA-Z0-9-]+", job_id):
+        print(f"Malformed message - job_id contains invalid characters. Got: {job_id!r}")
+        return None, (jsonify({"error": "Malformed message, job_id must be alphanumeric and hyphens only"}), 200)
+
+    if not isinstance(gcs_uri, str) or not gcs_uri.startswith("gs://"):
+        print(f"Malformed message - gcs_uri must start with 'gs://'. Got: {gcs_uri!r}")
+        return None, (jsonify({"error": "Malformed message, gcs_uri must start with gs://"}), 200)
+
+    # Ensure parameters is a dict; fall back to empty dict if malformed
+    params = payload.get("parameters", {})
+    if not isinstance(params, dict):
+        print(f"Malformed message - parameters must be a JSON object. Type: {type(params).__name__}. Defaulting to empty.")
+        params = {}
+
+    payload["parameters"] = params
+    return payload, None
+
+
 @app.route("/", methods=["POST"])
 def handle_pubsub_push():
     """
@@ -164,67 +244,22 @@ def handle_pubsub_push():
 
     Returning HTTP 200 tells Pub/Sub the message was successfully processed
     and should not be redelivered. Returning 200 even on AMRFinderPlus failure
-    is intentional — the error is recorded in Firestore instead.
+    is intentional -- the error is recorded in Firestore instead.
     """
-    envelope = request.get_json(silent=True)
-    if not envelope or "message" not in envelope:
-        print(f"Invalid Pub/Sub envelope: {envelope}")
-        return jsonify({"error": "Invalid Pub/Sub envelope (Worker v{APP_VERSION})"}), 400
-
-    # Decode the base64-encoded payload
-    raw = envelope["message"].get("data", "")
-    try:
-        payload = json.loads(base64.b64decode(raw).decode("utf-8"))
-    except Exception as e:
-        print(f"Failed to decode message data: {e}, raw={raw[:200]}")
-        # Ack the message (200) so Pub/Sub stops retrying a broken message
-        return jsonify({"error": "Could not decode message"}), 200
-
-    print(f"Decoded payload: {payload}")
-
-    # Validate that the decoded payload is a JSON object (dict), not an array or scalar
-    if not isinstance(payload, dict):
-        print(f"Malformed message — payload is not a JSON object. Type: {type(payload).__name__}")
-        return jsonify({"error": "Malformed message, payload must be a JSON object"}), 200
-
-    if "job_id" not in payload or "gcs_uri" not in payload:
-        print(f"Malformed message — missing job_id or gcs_uri. Payload: {payload}")
-        # Ack the message (200) so Pub/Sub stops retrying it
-        return jsonify({"error": "Malformed message, missing required fields"}), 200
+    payload, error = _validate_payload(request.get_json(silent=True))
+    if error:
+        return error
 
     job_id = payload["job_id"]
     gcs_uri = payload["gcs_uri"]
-    params = payload.get("parameters", {})
-
-    # Validate that job_id and gcs_uri are non-empty strings
-    if not isinstance(job_id, str):
-        print(f"Malformed message — job_id must be a string. Got: {job_id!r}")
-        return jsonify({"error": "Malformed message, job_id must be a string"}), 200
-
-    if not job_id:
-        print(f"Malformed message — job_id must not be empty.")
-        return jsonify({"error": "Malformed message, job_id must be a non-empty string"}), 200
-
-    if not re.fullmatch(r"[a-zA-Z0-9-]+", job_id):
-        print(f"Malformed message — job_id contains invalid characters. Got: {job_id!r}")
-        return jsonify({"error": "Malformed message, job_id must be alphanumeric and hyphens only"}), 200
-
-    if not isinstance(gcs_uri, str) or not gcs_uri.startswith("gs://"):
-        print(f"Malformed message — gcs_uri must start with 'gs://'. Got: {gcs_uri!r}")
-        return jsonify({"error": "Malformed message, gcs_uri must start with gs://"}), 200
-
-    # Ensure parameters is a dict; fall back to empty dict if malformed
-    if not isinstance(params, dict):
-        print(f"Malformed message — parameters must be a JSON object. Type: {type(params).__name__}. Defaulting to empty.")
-        params = {}
-
+    params = payload["parameters"]
     nuc_filename = payload.get("nuc_filename")
     prot_filename = payload.get("prot_filename")
     gff_filename = payload.get("gff_filename")
-    
+
     base_gcs_uri = gcs_uri.rsplit("/", 1)[0]
 
-    print(f"[{job_id}] Received job. Fetching Firestore document...")
+    _log(job_id, "Received job. Fetching Firestore document...")
     db = get_firestore_client()
     doc_ref = db.collection("amr_jobs").document(job_id)
 
@@ -240,24 +275,26 @@ def handle_pubsub_push():
     cleanup_paths = [local_output, local_stderr, local_nuc, local_prot]
 
     try:
-        print(f"[{job_id}] Updating status to Processing...")
+        _log(job_id, "Updating status to Processing...")
         doc_ref.update({"status": "Processing"})
 
-        if nuc_filename:
-            local_nuc_input = f"/tmp/{job_id}_{nuc_filename}"
-            download_blob(f"{base_gcs_uri}/{nuc_filename}", local_nuc_input)
-            cleanup_paths.append(local_nuc_input)
+        # Download each named input file (nucleotide, protein, GFF) if provided
+        for attr, filename in [("nuc", nuc_filename), ("prot", prot_filename), ("gff", gff_filename)]:
+            if not filename:
+                continue
+            local_path = f"/tmp/{job_id}_{filename}"
+            download_blob(f"{base_gcs_uri}/{filename}", local_path)
+            cleanup_paths.append(local_path)
+            if attr == "nuc":
+                local_nuc_input = local_path
+            elif attr == "prot":
+                local_prot_input = local_path
+            elif attr == "gff":
+                local_gff_input = local_path
 
-        if prot_filename:
-            local_prot_input = f"/tmp/{job_id}_{prot_filename}"
-            download_blob(f"{base_gcs_uri}/{prot_filename}", local_prot_input)
-            cleanup_paths.append(local_prot_input)
-
-        if gff_filename:
-            local_gff_input = f"/tmp/{job_id}_{gff_filename}"
-            download_blob(f"{base_gcs_uri}/{gff_filename}", local_gff_input)
-            cleanup_paths.append(local_gff_input)
-
+        # Legacy fallback: older Pub/Sub messages send a single gcs_uri
+        # without separate nuc_filename/prot_filename fields.
+        # Determine input type from the has_protein/has_nucleotide params.
         if not local_nuc_input and not local_prot_input:
             if params.get("has_protein") and not params.get("has_nucleotide"):
                 local_prot_input = f"/tmp/{job_id}_input.fasta"
@@ -268,7 +305,16 @@ def handle_pubsub_push():
                 download_blob(gcs_uri, local_nuc_input)
                 cleanup_paths.append(local_nuc_input)
 
-        run_amrfinder(local_nuc_input, local_prot_input, local_gff_input, local_output, local_stderr, local_nuc, local_prot, params)
+        run_amrfinder(
+            nuc_input=local_nuc_input,
+            prot_input=local_prot_input,
+            gff_input=local_gff_input,
+            output_tsv=local_output,
+            stderr_path=local_stderr,
+            nucleotide_path=local_nuc,
+            protein_path=local_prot,
+            params=params,
+        )
 
         upload_blob(local_output, f"results/{job_id}/results.tsv")
         upload_blob(local_stderr, f"results/{job_id}/stderr.txt")
@@ -280,26 +326,26 @@ def handle_pubsub_push():
 
         # Mark job as completed
         doc_ref.update({
-            "status": "Completed", 
+            "status": "Completed",
             "result_uri": f"gs://{OUTPUT_BUCKET}/results/{job_id}/results.tsv",
             "worker_version": APP_VERSION
         })
-        print(f"[{job_id}] Successfully processed and updated Firestore.")
+        _log(job_id, "Successfully processed and updated Firestore.")
 
     except Exception as e:
-        print(f"Job {job_id} failed: {e}")
+        _log(job_id, f"Job failed: {e}")
         # Upload stderr even on failure if the file was written
         stderr_uri = None
         if os.path.exists(local_stderr):
             try:
                 stderr_uri = upload_blob(local_stderr, f"results/{job_id}/stderr.txt")
             except Exception as upload_err:
-                print(f"Failed to upload stderr: {upload_err}")
-                
+                _log(job_id, f"Failed to upload stderr: {upload_err}")
+
         try:
             doc_ref.update({"status": "Failed", "error_message": str(e), "stderr_uri": stderr_uri})
         except Exception as db_err:
-            print(f"Failed to update firestore with error status: {db_err}")
+            _log(job_id, f"Failed to update Firestore with error status: {db_err}")
 
     finally:
         for path in cleanup_paths:

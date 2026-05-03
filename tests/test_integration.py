@@ -127,7 +127,7 @@ def _forward_to_worker(pubsub_payload, mock_amr_output=FAKE_AMR_TSV):
         "subscription": "projects/test/subscriptions/test-sub",
     }
 
-    def fake_run_amrfinder(input_fasta, output_tsv, stderr_path, nucleotide_path, protein_path, params):
+    def fake_run_amrfinder(*, nuc_input, prot_input, gff_input, output_tsv, stderr_path, nucleotide_path, protein_path, params):
         """Write fake TSV output the same way the real amrfinder would."""
         with open(output_tsv, "w") as f:
             f.write(mock_amr_output)
@@ -254,7 +254,7 @@ class TestEndToEnd:
         user_id, payload = _submit_job()
         try:
             # Make run_amrfinder raise an exception
-            def failing_amrfinder(input_fasta, output_tsv, stderr_path, nucleotide_path, protein_path, params):
+            def failing_amrfinder(*, nuc_input, prot_input, gff_input, output_tsv, stderr_path, nucleotide_path, protein_path, params):
                 with open(stderr_path, "w") as f:
                     f.write("FATAL: database not found\n")
                 raise Exception("AMRFinderPlus failed: database not found")

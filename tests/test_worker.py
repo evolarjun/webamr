@@ -136,7 +136,7 @@ class TestRunAmrfinder:
     @patch("worker.subprocess.run")
     def test_basic_command(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0, stdout="col1\tcol2\n", stderr="")
-        worker.run_amrfinder("/tmp/in.fasta", None, None, "/tmp/out.tsv", "/tmp/stderr.txt", "/tmp/nuc.fna", "/tmp/prot.faa", {})
+        worker.run_amrfinder(nuc_input="/tmp/in.fasta", prot_input=None, gff_input=None, output_tsv="/tmp/out.tsv", stderr_path="/tmp/stderr.txt", nucleotide_path="/tmp/nuc.fna", protein_path="/tmp/prot.faa", params={})
         cmd = mock_run.call_args[0][0]
         assert cmd[:3] == ["amrfinder", "--nucleotide", "/tmp/in.fasta"]
         assert "--output" in cmd
@@ -147,7 +147,7 @@ class TestRunAmrfinder:
     @patch("worker.subprocess.run")
     def test_has_nucleotide_flag(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-        worker.run_amrfinder("/tmp/in.fasta", None, None, "/tmp/out.tsv", "/tmp/stderr.txt", "/tmp/nuc.fna", "/tmp/prot.faa", {"has_nucleotide": True})
+        worker.run_amrfinder(nuc_input="/tmp/in.fasta", prot_input=None, gff_input=None, output_tsv="/tmp/out.tsv", stderr_path="/tmp/stderr.txt", nucleotide_path="/tmp/nuc.fna", protein_path="/tmp/prot.faa", params={"has_nucleotide": True})
         cmd = mock_run.call_args[0][0]
         assert "--nucleotide_output" in cmd
         assert "/tmp/nuc.fna" in cmd
@@ -158,7 +158,7 @@ class TestRunAmrfinder:
     @patch("worker.subprocess.run")
     def test_has_protein_flag(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-        worker.run_amrfinder(None, "/tmp/in.fasta", None, "/tmp/out.tsv", "/tmp/stderr.txt", "/tmp/nuc.fna", "/tmp/prot.faa", {"has_protein": True})
+        worker.run_amrfinder(nuc_input=None, prot_input="/tmp/in.fasta", gff_input=None, output_tsv="/tmp/out.tsv", stderr_path="/tmp/stderr.txt", nucleotide_path="/tmp/nuc.fna", protein_path="/tmp/prot.faa", params={"has_protein": True})
         cmd = mock_run.call_args[0][0]
         assert "--protein_output" in cmd
         assert "/tmp/prot.faa" in cmd
@@ -169,14 +169,14 @@ class TestRunAmrfinder:
     @patch("worker.subprocess.run")
     def test_plus_flag_added(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-        worker.run_amrfinder("/tmp/in.fasta", None, None, "/tmp/out.tsv", "/tmp/stderr.txt", "/tmp/nuc.fna", "/tmp/prot.faa", {"plus_flag": True})
+        worker.run_amrfinder(nuc_input="/tmp/in.fasta", prot_input=None, gff_input=None, output_tsv="/tmp/out.tsv", stderr_path="/tmp/stderr.txt", nucleotide_path="/tmp/nuc.fna", protein_path="/tmp/prot.faa", params={"plus_flag": True})
         cmd = mock_run.call_args[0][0]
         assert "--plus" in cmd
 
     @patch("worker.subprocess.run")
     def test_organism_flag_added(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-        worker.run_amrfinder("/tmp/in.fasta", None, None, "/tmp/out.tsv", "/tmp/stderr.txt", "/tmp/nuc.fna", "/tmp/prot.faa", {"organism": "Salmonella"})
+        worker.run_amrfinder(nuc_input="/tmp/in.fasta", prot_input=None, gff_input=None, output_tsv="/tmp/out.tsv", stderr_path="/tmp/stderr.txt", nucleotide_path="/tmp/nuc.fna", protein_path="/tmp/prot.faa", params={"organism": "Salmonella"})
         cmd = mock_run.call_args[0][0]
         assert "-O" in cmd
         assert "Salmonella" in cmd
@@ -184,7 +184,7 @@ class TestRunAmrfinder:
     @patch("worker.subprocess.run")
     def test_ident_min_and_coverage_min(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-        worker.run_amrfinder("/tmp/in.fasta", None, None, "/tmp/out.tsv", "/tmp/stderr.txt", "/tmp/nuc.fna", "/tmp/prot.faa", {
+        worker.run_amrfinder(nuc_input="/tmp/in.fasta", prot_input=None, gff_input=None, output_tsv="/tmp/out.tsv", stderr_path="/tmp/stderr.txt", nucleotide_path="/tmp/nuc.fna", protein_path="/tmp/prot.faa", params={
             "ident_min": 0.9,
             "coverage_min": 0.75,
         })
@@ -198,14 +198,14 @@ class TestRunAmrfinder:
     def test_annotation_format_added(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
         worker.run_amrfinder(
-            "/tmp/in.fasta",
-            None,
-            None,
-            "/tmp/out.tsv",
-            "/tmp/stderr.txt",
-            "/tmp/nuc.fna",
-            "/tmp/prot.faa",
-            {"annotation_format": "prokka"},
+            nuc_input="/tmp/in.fasta",
+            prot_input=None,
+            gff_input=None,
+            output_tsv="/tmp/out.tsv",
+            stderr_path="/tmp/stderr.txt",
+            nucleotide_path="/tmp/nuc.fna",
+            protein_path="/tmp/prot.faa",
+            params={"annotation_format": "prokka"},
         )
         cmd = mock_run.call_args[0][0]
         assert "--annotation_format" in cmd
@@ -215,12 +215,12 @@ class TestRunAmrfinder:
     def test_nonzero_returncode_raises(self, mock_run):
         mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="Database error")
         with pytest.raises(Exception, match="AMRFinderPlus failed"):
-            worker.run_amrfinder("/tmp/in.fasta", None, None, "/tmp/out.tsv", "/tmp/stderr.txt", "/tmp/nuc.fna", "/tmp/prot.faa", {})
+            worker.run_amrfinder(nuc_input="/tmp/in.fasta", prot_input=None, gff_input=None, output_tsv="/tmp/out.tsv", stderr_path="/tmp/stderr.txt", nucleotide_path="/tmp/nuc.fna", protein_path="/tmp/prot.faa", params={})
 
     @patch("worker.subprocess.run")
     def test_multiple_files_added(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-        worker.run_amrfinder("/tmp/nuc.fasta", "/tmp/prot.fasta", "/tmp/prot.gff", "/tmp/out.tsv", "/tmp/stderr.txt", "/tmp/nuc.fna", "/tmp/prot.faa", {})
+        worker.run_amrfinder(nuc_input="/tmp/nuc.fasta", prot_input="/tmp/prot.fasta", gff_input="/tmp/prot.gff", output_tsv="/tmp/out.tsv", stderr_path="/tmp/stderr.txt", nucleotide_path="/tmp/nuc.fna", protein_path="/tmp/prot.faa", params={})
         cmd = mock_run.call_args[0][0]
         assert "--nucleotide" in cmd
         assert "/tmp/nuc.fasta" in cmd
@@ -307,9 +307,8 @@ class TestHandlePubsubPush:
         )
         resp = flask_client.post("/", json=body)
         assert resp.status_code == 200
-        # run_amrfinder should be called with an empty dict as params
-        _, _, _, _, _, _, _, called_params = mock_run.call_args[0]
-        assert called_params == {}
+        # run_amrfinder is keyword-only; verify params was coerced to an empty dict
+        assert mock_run.call_args.kwargs["params"] == {}
 
     @patch("worker.upload_blob", return_value="gs://output/results/job-abc/results.tsv")
     @patch("worker.run_amrfinder")
