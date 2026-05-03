@@ -24,8 +24,8 @@ except FileNotFoundError:
 
 app = Flask(__name__)
 
-PROJECT_ID = os.environ.get("PROJECT_ID", "my-gcp-project")
-OUTPUT_BUCKET = os.environ.get("OUTPUT_BUCKET", "amr-output-bucket")
+PROJECT_ID = os.environ.get("PROJECT_ID", "amrfinder")
+OUTPUT_BUCKET = os.environ.get("OUTPUT_BUCKET", f"amr-output-bucket-{PROJECT_ID}")
 
 _storage_client = None
 _firestore_client = None

@@ -83,6 +83,72 @@ pytest tests/test_integration.py -v
 
 ---
 
+## Manual Testing with Docker (Colima)
+
+If you are on macOS and want to test the worker Docker image locally using [Colima](https://github.com/abiosoft/colima), follow these steps:
+
+### 1. Start Colima
+Run the following command to start the Docker engine with optimized virtualization and resource allocation:
+
+```bash
+colima start --vm-type vz --mount-type virtiofs --cpu 4 --memory 8
+```
+
+### 2. Build and Run the Worker
+Once Colima is running, you can build and run the container as usual:
+
+```bash
+# Build the worker image
+docker build -t amrfinder-worker ./worker
+
+# Run the container locally with GCP credentials
+docker run -p 8080:8080 \
+  -e GOOGLE_APPLICATION_CREDENTIALS=/tmp/keys/google_creds.json \
+  -v ~/.config/gcloud/application_default_credentials.json:/tmp/keys/google_creds.json \
+  -e PROJECT_ID=$(gcloud config get-value project) \
+  amrfinder-worker
+```
+
+> **Note**: Sharing your host's credentials allows the local container to interact with real GCP services (like Firestore and GCS) using your personal identity.
+
+The worker will be available at `http://localhost:8080`.
+
+### 3. Verification
+
+To ensure the Docker image is fully functional, run the following verification steps:
+
+#### Verify Binaries
+Check that AMRFinderPlus and its dependencies are correctly installed:
+```bash
+docker run --rm amrfinder-worker amrfinder --version
+```
+
+#### Run Unit Tests Inside Container
+Verify the Python environment and dependencies by running unit tests inside the container (this mounts your local `tests` directory):
+```bash
+docker run --rm -v $(pwd)/tests:/app/tests amrfinder-worker /bin/bash -c "pip install pytest && pytest tests/test_worker.py"
+```
+
+#### API Smoke Test
+Start the container and send a mock Pub/Sub message to verify the Flask application logic:
+```bash
+# Start the container in the background
+docker run -d -p 8080:8080 --name amr-test amrfinder-worker
+
+# Send a dummy Pub/Sub push message
+curl -X POST http://localhost:8080/ \
+  -H "Content-Type: application/json" \
+  -d '{"message": {"data": "eyJqb2JfaWQiOiAidGVzdCIsICJnY3NfdXJpIjogImdzOi8vYnVja2V0L2ZpbGUuZmFzdGEifQ=="}}'
+
+# Check the container logs for successful decoding and processing steps
+docker logs amr-test
+
+# Clean up
+docker stop amr-test && docker rm amr-test
+```
+
+---
+
 ## Run Everything
 
 ```bash

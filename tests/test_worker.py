@@ -31,7 +31,13 @@ def setup_module(module):
     for p in patchers:
         p.start()
 
-    worker_dir = os.path.join(os.path.dirname(__file__), "..", "worker")
+    # Support both local dev (../worker) and flattened Docker structure (..)
+    test_dir = os.path.dirname(__file__)
+    worker_dir = os.path.join(test_dir, "..", "worker")
+    if not os.path.exists(worker_dir):
+        worker_dir = os.path.join(test_dir, "..")
+
+    worker_dir = os.path.abspath(worker_dir)
     if worker_dir not in sys.path:
         sys.path.insert(0, worker_dir)
 
