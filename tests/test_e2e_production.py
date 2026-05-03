@@ -130,7 +130,7 @@ class TestProductionE2E:
     def setup_method(self):
         _require_env()
 
-    def test_full_job_lifecycle(self):
+    def test_nuc_job_lifecycle(self):
         """
         Submit a real FASTA file to the production frontend and verify:
           1. The job is accepted (HTTP 200 + job_id returned).
@@ -216,7 +216,7 @@ class TestProductionE2E:
             elif job_id:
                 print("Skipping cleanup as SKIP_CLEANUP is true ...")
 
-    def test_protein_job_lifecycle(self):
+    def test_prot_job_lifecycle(self):
         """
         Submit a real protein FASTA to the production frontend and verify:
           1. The job is accepted (HTTP 200 + job_id returned).

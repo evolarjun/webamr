@@ -85,27 +85,26 @@ def _make_raw_push_body(raw_bytes):
 
 class TestDownloadBlob:
     def setup_method(self):
-        # upload_versions() runs at import time and may have already called
-        # storage_client.bucket(); reset the mock before each test so that
-        # assert_called_once_with counts only the call made by the test itself.
-        worker.storage_client.bucket.reset_mock()
+        # upload_versions() runs in a background thread and may have already 
+        # called storage_client.bucket(); reset the mock before each test.
+        worker.get_storage_client().bucket.reset_mock()
 
     def test_parses_gcs_uri_correctly(self):
         mock_bucket = MagicMock()
         mock_blob = MagicMock()
-        worker.storage_client.bucket.return_value = mock_bucket
+        worker.get_storage_client().bucket.return_value = mock_bucket
         mock_bucket.blob.return_value = mock_blob
 
         worker.download_blob("gs://my-bucket/path/to/file.fasta", "/tmp/file.fasta")
 
-        worker.storage_client.bucket.assert_called_once_with("my-bucket")
+        worker.get_storage_client().bucket.assert_called_once_with("my-bucket")
         mock_bucket.blob.assert_called_once_with("path/to/file.fasta")
         mock_blob.download_to_filename.assert_called_once_with("/tmp/file.fasta")
 
     def test_nested_path_in_uri(self):
         mock_bucket = MagicMock()
         mock_blob = MagicMock()
-        worker.storage_client.bucket.return_value = mock_bucket
+        worker.get_storage_client().bucket.return_value = mock_bucket
         mock_bucket.blob.return_value = mock_blob
 
         worker.download_blob("gs://bucket/a/b/c/file.fasta", "/tmp/out.fasta")
@@ -120,7 +119,7 @@ class TestUploadBlob:
     def test_uploads_and_returns_gcs_uri(self):
         mock_bucket = MagicMock()
         mock_blob = MagicMock()
-        worker.storage_client.bucket.return_value = mock_bucket
+        worker.get_storage_client().bucket.return_value = mock_bucket
         mock_bucket.blob.return_value = mock_blob
 
         result = worker.upload_blob("/tmp/results.tsv", "results/job-123/results.tsv")
@@ -237,7 +236,7 @@ class TestRunAmrfinder:
 
 class TestHandlePubsubPush:
     def setup_method(self):
-        worker.db.collection.return_value.document.return_value = MagicMock()
+        worker.get_firestore_client().collection.return_value.document.return_value = MagicMock()
 
     def test_missing_envelope_returns_400(self):
         resp = flask_client.post("/", json={})
@@ -326,7 +325,7 @@ class TestHandlePubsubPush:
     def test_successful_job_updates_status_to_completed(self, mock_dl, mock_run, mock_ul):
         mock_run.return_value = ""
         mock_doc = MagicMock()
-        worker.db.collection.return_value.document.return_value = mock_doc
+        worker.get_firestore_client().collection.return_value.document.return_value = mock_doc
 
         flask_client.post("/", json=_make_push_body(job_id="job-xyz"))
 
@@ -337,7 +336,7 @@ class TestHandlePubsubPush:
     @patch("worker.download_blob")
     def test_failed_job_updates_status_to_failed(self, mock_dl, mock_run):
         mock_doc = MagicMock()
-        worker.db.collection.return_value.document.return_value = mock_doc
+        worker.get_firestore_client().collection.return_value.document.return_value = mock_doc
 
         flask_client.post("/", json=_make_push_body())
 

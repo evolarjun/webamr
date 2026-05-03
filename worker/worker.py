@@ -27,12 +27,25 @@ app = Flask(__name__)
 PROJECT_ID = os.environ.get("PROJECT_ID", "my-gcp-project")
 OUTPUT_BUCKET = os.environ.get("OUTPUT_BUCKET", "amr-output-bucket")
 
-storage_client = storage.Client(project=PROJECT_ID)
-db = firestore.Client(project=PROJECT_ID)
+_storage_client = None
+_firestore_client = None
+
+def get_storage_client():
+    global _storage_client
+    if _storage_client is None:
+        _storage_client = storage.Client(project=PROJECT_ID)
+    return _storage_client
+
+def get_firestore_client():
+    global _firestore_client
+    if _firestore_client is None:
+        _firestore_client = firestore.Client(project=PROJECT_ID)
+    return _firestore_client
 
 
 def upload_versions():
     """Uploads the local AMRFinder database and software versions to GCS configuration path."""
+    storage_client = get_storage_client()
     bucket = storage_client.bucket(OUTPUT_BUCKET)
     
     # Upload Database Version
@@ -67,6 +80,7 @@ def download_blob(gcs_uri, local_path):
     parts = gcs_uri.replace("gs://", "").split("/", 1)
     bucket_name = parts[0]
     blob_name = parts[1]
+    storage_client = get_storage_client()
     bucket = storage_client.bucket(bucket_name)
     blob = bucket.blob(blob_name)
     blob.download_to_filename(local_path)
@@ -74,6 +88,7 @@ def download_blob(gcs_uri, local_path):
 
 def upload_blob(local_path, destination_blob_name):
     """Upload a local file to the output GCS bucket."""
+    storage_client = get_storage_client()
     bucket = storage_client.bucket(OUTPUT_BUCKET)
     blob = bucket.blob(destination_blob_name)
     blob.upload_from_filename(local_path)
@@ -210,6 +225,7 @@ def handle_pubsub_push():
     base_gcs_uri = gcs_uri.rsplit("/", 1)[0]
 
     print(f"[{job_id}] Received job. Fetching Firestore document...")
+    db = get_firestore_client()
     doc_ref = db.collection("amr_jobs").document(job_id)
 
     local_nuc_input = None
