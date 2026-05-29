@@ -106,12 +106,18 @@ def tabulize(tab_delimited):
         
     headers = lines[0].split('\t')
     
-    # Identify Hierarchy node column for special linking
+    # Identify Hierarchy node, Closest reference accession, and HMM accession columns for special linking
     hierarchy_node_idx = -1
+    closest_ref_idx = -1
+    hmm_acc_idx = -1
     for i, h in enumerate(headers):
-        if h.strip().lower() == "hierarchy node":
+        h_lower = h.strip().lower()
+        if h_lower == "hierarchy node":
             hierarchy_node_idx = i
-            break
+        elif h_lower == "closest reference accession":
+            closest_ref_idx = i
+        elif h_lower == "hmm accession":
+            hmm_acc_idx = i
 
     rows = [line.split('\t') for line in lines[1:]]
     html = '<table><thead><tr>'
@@ -121,11 +127,31 @@ def tabulize(tab_delimited):
     for row in rows:
         html += '<tr>'
         for i, cell in enumerate(row):
+            cell_stripped = cell.strip()
+            cell_lower = cell_stripped.lower()
             # Only link if it's the Hierarchy node column and has a valid-looking value
-            if i == hierarchy_node_idx and cell.strip() and cell.strip().lower() != "n/a":
-                node_id = cell.strip()
+            if i == hierarchy_node_idx and cell_stripped and cell_lower not in ("n/a", "na"):
+                node_id = cell_stripped
                 escaped_node_id = escape(node_id)
                 content = f'<a href="https://www.ncbi.nlm.nih.gov/pathogens/genehierarchy/#node_id:{escaped_node_id}" target="_blank">{escaped_node_id}</a>'
+            # Link HMM accession column to Reference Gene Hierarchy
+            elif i == hmm_acc_idx and cell_stripped and cell_lower not in ("n/a", "na"):
+                val = cell_stripped
+                escaped_val = escape(val)
+                content = f'<a href="https://www.ncbi.nlm.nih.gov/pathogens/genehierarchy/#{escaped_val}" target="_blank">{escaped_val}</a>'
+            # Link Closest reference accession column to RefGene catalog
+            elif i == closest_ref_idx and cell_stripped and cell_lower not in ("n/a", "na"):
+                val = cell_stripped
+                if ':' in val:
+                    parts = val.split(':', 1)
+                    accession = parts[0].strip()
+                    suffix = ":" + parts[1]
+                    escaped_accession = escape(accession)
+                    escaped_suffix = escape(suffix)
+                    content = f'<a href="https://www.ncbi.nlm.nih.gov/pathogens/refgene/#{escaped_accession}" target="_blank">{escaped_accession}</a>{escaped_suffix}'
+                else:
+                    escaped_accession = escape(val)
+                    content = f'<a href="https://www.ncbi.nlm.nih.gov/pathogens/refgene/#{escaped_accession}" target="_blank">{escaped_accession}</a>'
             else:
                 content = escape(cell)
             html += f'<td>{content}</td>'
@@ -429,6 +455,22 @@ def results_page(job_id):
         except Exception as e:
             print(f"Error fetching results from GCS for completed job {job_id}: {e}")
 
+    # Calculate retention date (7 days after created_at)
+    created_at = job_data.get("created_at")
+    retention_date_str = "unknown"
+    if created_at:
+        try:
+            if isinstance(created_at, str):
+                try:
+                    created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+                except ValueError:
+                    pass
+            if hasattr(created_at, "strftime"):
+                retention_date = created_at + timedelta(days=7)
+                retention_date_str = retention_date.strftime("%Y-%m-%d")
+        except Exception as e:
+            print(f"Error calculating retention date: {e}")
+
     return render_template(
         'results.html',
         job_id=job_id,
@@ -442,7 +484,8 @@ def results_page(job_id):
         stderr_available=stderr_available,
         nucleotide_available=nucleotide_available,
         protein_available=protein_available,
-        created_at=job_data.get("created_at").isoformat() if job_data.get("created_at") else None,
+        created_at=job_data.get("created_at").isoformat() if hasattr(job_data.get("created_at"), "isoformat") else None,
+        retention_date=retention_date_str,
         worker_version=job_data.get("worker_version", "unknown")
     )
 

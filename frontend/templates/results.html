@@ -8,21 +8,22 @@
   <link rel="stylesheet" href="/static/css/style.css" />
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
   <link rel="alternate icon" href="/static/favicon.ico" type="image/x-icon" />
+  <script src="/static/js/theme-toggle.js"></script>
 </head>
 
 <body>
   <h1>
     <a href="/">AMRFinderPlus</a> - Job Results{% if job_name %}: {{ job_name }}{% endif %}
   </h1>
-
   <p>
     <strong>Job ID:</strong>
     <a id="share-link" href="/results/{{ job_id }}"><code id="job-id">{{ job_id }}</code></a>
-    &nbsp;<button onclick="copyLink()" title="Copy link">Copy link</button> &nbsp;&nbsp; data is retained on the server for 1 week
+    &nbsp;<button onclick="copyLink()" title="Copy link">Copy link</button> &nbsp;&nbsp; data will be retained on the server until {{ retention_date }} <br />
+  <a href="/docs">[docs]</a>
   </p>
   {% if job_name %}
   <p>
-    <strong>Job name:</strong> <code id="job-name">{{ job_name }}</code>
+  <strong>Job name:</strong> <code id="job-name">{{ job_name }}</code><br />
   </p>
   {% endif %}
   <strong>Inputs:</strong>
@@ -62,7 +63,7 @@
   </div>
   {% elif status == "Expired" %}
   <div id="status-msg">
-    <p class="error"><strong>Job expired:</strong> This job completed successfully, but the result files are no longer available. Output files are retained on the server for 1 week.</p>
+    <p class="error"><strong>Job expired:</strong> This job completed successfully, but the result files are no longer available. Output files were retained on the server until {{ retention_date }}.</p>
   </div>
   {% else %}
   <div id="status-msg">
@@ -75,6 +76,7 @@
   <script>
     const jobId = {{ job_id | tojson }};
     const createdAtStr = {{ created_at | tojson }};
+    const retentionDate = {{ retention_date | tojson }};
     const resultsDiv = document.getElementById('results');
     const statusMsg = document.getElementById('status-msg');
     const startTime = createdAtStr ? new Date(createdAtStr) : new Date();
@@ -186,7 +188,7 @@
             if (data.status && data.status === 'Expired') {
               clearInterval(pollInterval);
               if (timerInterval) clearInterval(timerInterval);
-              if (statusMsg) statusMsg.innerHTML = '<p class="error"><strong>Job expired:</strong> This job completed successfully, but the result files are no longer available. Output files are retained on the server for 1 week.</p>';
+              if (statusMsg) statusMsg.innerHTML = '<p class="error"><strong>Job expired:</strong> This job completed successfully, but the result files are no longer available. Output files were retained on the server until ' + retentionDate + '.</p>';
               return;
             }
 
@@ -257,7 +259,7 @@
     {% endif %}
   </script>
 
-  <div style="margin-top: 40px; margin-bottom: 20px; color: #888; font-size: 0.85rem;">
+  <div class="page-footer">
     WebAMR Frontend v{{ frontend_version }}
     <span id="worker-version-display">{% if worker_version and worker_version != 'unknown' %} | Worker v{{ worker_version }}{% endif %}</span>
   </div>

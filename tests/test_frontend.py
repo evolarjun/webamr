@@ -9,6 +9,7 @@ import json
 import os
 import sys
 from unittest.mock import MagicMock, patch
+from datetime import datetime, timezone
 
 from google.cloud.exceptions import NotFound
 
@@ -479,6 +480,7 @@ class TestGetResults:
         content = (
             b"Protein identifier\tHierarchy node\n"
             b"seq1\tN/A\n"
+            b"seq2\tNA\n"
         )
         blob = _make_blob(exists=True, content=content)
         stderr_blob = _make_blob(exists=False)
@@ -488,6 +490,61 @@ class TestGetResults:
         body = client.get("/get-results/test-na-job").get_json()
         assert 'https://www.ncbi.nlm.nih.gov/pathogens/genehierarchy/' not in body["result"]
         assert '<td>N/A</td>' in body["result"]
+        assert '<td>NA</td>' in body["result"]
+
+    def test_closest_reference_accession_is_linked(self):
+        content = (
+            b"Protein identifier\tClosest reference accession\n"
+            b"seq1\tNG_050218.1\n"
+            b"seq2\tNG_050218.1:1-861\n"
+            b"seq3\tN/A\n"
+            b"seq4\tNA\n"
+        )
+        blob = _make_blob(exists=True, content=content)
+        stderr_blob = _make_blob(exists=False)
+        MOCK_STORAGE.bucket.return_value.blob.side_effect = lambda name: (
+            blob if "results/" in name and name.endswith("results.tsv") else stderr_blob
+        )
+        body = client.get("/get-results/test-closest-ref-job").get_json()
+        
+        # Test regular accession link
+        assert '<a href="https://www.ncbi.nlm.nih.gov/pathogens/refgene/#NG_050218.1" target="_blank">NG_050218.1</a>' in body["result"]
+        
+        # Test accession with colon link (only accession portion is linked, suffix is plain text outside anchor)
+        assert '<a href="https://www.ncbi.nlm.nih.gov/pathogens/refgene/#NG_050218.1" target="_blank">NG_050218.1</a>:1-861' in body["result"]
+        
+        # Test N/A is not linked
+        assert 'https://www.ncbi.nlm.nih.gov/pathogens/refgene/' not in body["result"].split('</tr>')[3]  # checks third data row
+        assert '<td>N/A</td>' in body["result"]
+
+        # Test NA is not linked
+        assert 'https://www.ncbi.nlm.nih.gov/pathogens/refgene/' not in body["result"].split('</tr>')[4]  # checks fourth data row
+        assert '<td>NA</td>' in body["result"]
+
+    def test_hmm_accession_is_linked(self):
+        content = (
+            b"Protein identifier\tHMM accession\n"
+            b"seq1\tNF012345.1\n"
+            b"seq2\tN/A\n"
+            b"seq3\tNA\n"
+        )
+        blob = _make_blob(exists=True, content=content)
+        stderr_blob = _make_blob(exists=False)
+        MOCK_STORAGE.bucket.return_value.blob.side_effect = lambda name: (
+            blob if "results/" in name and name.endswith("results.tsv") else stderr_blob
+        )
+        body = client.get("/get-results/test-hmm-job").get_json()
+        
+        # Test regular accession link
+        assert '<a href="https://www.ncbi.nlm.nih.gov/pathogens/genehierarchy/#NF012345.1" target="_blank">NF012345.1</a>' in body["result"]
+        
+        # Test N/A is not linked
+        assert 'https://www.ncbi.nlm.nih.gov/pathogens/genehierarchy/' not in body["result"].split('</tr>')[2]
+        assert '<td>N/A</td>' in body["result"]
+
+        # Test NA is not linked
+        assert 'https://www.ncbi.nlm.nih.gov/pathogens/genehierarchy/' not in body["result"].split('</tr>')[3]
+        assert '<td>NA</td>' in body["result"]
 
 
 # ---------------------------------------------------------------------------
@@ -598,7 +655,12 @@ class TestResultsPage:
         """Return a mock Firestore doc representing a queued job."""
         doc = MagicMock()
         doc.exists = True
-        doc.to_dict.return_value = {"job_id": "test-job-id", "status": "Queued", "job_name": "Demo Job"}
+        doc.to_dict.return_value = {
+            "job_id": "test-job-id",
+            "status": "Queued",
+            "job_name": "Demo Job",
+            "created_at": datetime(2026, 5, 29, 9, 0, 0, tzinfo=timezone.utc)
+        }
         return doc
 
     def _failed_firestore(self):
@@ -608,6 +670,7 @@ class TestResultsPage:
             "job_id": "fail-job-id",
             "status": "Failed",
             "error_message": "amrfinder crashed",
+            "created_at": datetime(2026, 5, 29, 9, 0, 0, tzinfo=timezone.utc)
         }
         return doc
 
@@ -622,7 +685,8 @@ class TestResultsPage:
         doc.to_dict.return_value = {
             "job_id": "completed-job-id",
             "status": "Completed",
-            "result_uri": "gs://bucket/results.tsv"
+            "result_uri": "gs://bucket/results.tsv",
+            "created_at": datetime(2026, 5, 29, 9, 0, 0, tzinfo=timezone.utc)
         }
         return doc
     def test_results_page_200_pending_job(self):
@@ -727,6 +791,25 @@ class TestResultsPage:
         assert "<table>" in html
         assert "<td>seq1</td>" in html
         assert "Download Results" in html
+
+    def test_results_page_retention_date_is_calculated_and_shown(self):
+        """The results page shows data will be retained until 7 days after created_at."""
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = self._completed_firestore()
+        mock_blob = MagicMock()
+        mock_blob.download_as_bytes.return_value = b"Protein identifier\tContig id\nseq1\tcontig01\n"
+        MOCK_STORAGE.bucket.return_value.blob.return_value = mock_blob
+
+        resp = client.get("/results/completed-job-id")
+        assert resp.status_code == 200
+        assert b"data will be retained on the server until 2026-06-05" in resp.data
+
+        # Now test when the results file is missing (expired status)
+        mock_blob.download_as_bytes.side_effect = NotFound("File not found in GCS")
+        resp_expired = client.get("/results/completed-job-id")
+        assert resp_expired.status_code == 200
+        assert b"Output files were retained on the server until 2026-06-05." in resp_expired.data
+        # Restore mock side effect
+        mock_blob.download_as_bytes.side_effect = None
 
     def test_results_page_firestore_exception_returns_404(self):
         """GET /results/<id> returns 404 when Firestore raises an exception."""
