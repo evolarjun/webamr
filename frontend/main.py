@@ -323,9 +323,9 @@ def _create_firestore_record(user_id, job_name, gcs_uri, params, sizes, files, c
         "nuc_file_size_bytes": sizes['nuc_size'],
         "prot_file_size_bytes": sizes['prot_size'],
         "gff_file_size_bytes": sizes['gff_size'],
-        "nuc_filename": files['nuc_file'].filename if files['nuc_file'] else None,
-        "prot_filename": files['prot_file'].filename if files['prot_file'] else None,
-        "gff_filename": files['gff_file'].filename if files['gff_file'] else None,
+        "nuc_filename": secure_filename(files['nuc_file'].filename) if files['nuc_file'] else None,
+        "prot_filename": secure_filename(files['prot_file'].filename) if files['prot_file'] else None,
+        "gff_filename": secure_filename(files['gff_file'].filename) if files['gff_file'] else None,
         "ip_address": client_ip
     })
 
@@ -393,9 +393,9 @@ def analyze_file():
             "gcs_uri": gcs_uri,
             "parameters": params,
             "job_name": job_name,
-            "nuc_filename": nuc_file.filename if nuc_file else None,
-            "prot_filename": prot_file.filename if prot_file else None,
-            "gff_filename": gff_file.filename if gff_file else None
+            "nuc_filename": secure_filename(nuc_file.filename) if nuc_file else None,
+            "prot_filename": secure_filename(prot_file.filename) if prot_file else None,
+            "gff_filename": secure_filename(gff_file.filename) if gff_file else None
         }
         send_pubsub_message(json.dumps(message_data))
 

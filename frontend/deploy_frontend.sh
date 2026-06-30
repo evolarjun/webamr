@@ -1,5 +1,5 @@
 #!/bin/bash
-# deploy_frontend.sh — Deploys the AMRFinderPlus frontend to Cloud Run
+# deploy_frontend.sh - Deploys the AMRFinderPlus frontend to Cloud Run
 set -e
 
 # Configuration

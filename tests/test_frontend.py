@@ -289,6 +289,31 @@ class TestAnalyze:
         assert message.get("prot_filename") == "sample_prot.fasta"
         assert message.get("gff_filename") == "sample.gff"
 
+    def test_filenames_with_special_characters_are_secured(self):
+        MOCK_PUBLISHER.publish.reset_mock()
+        mock_doc = MagicMock()
+        MOCK_FIRESTORE.collection.return_value.document.return_value = mock_doc
+        self._post_analyze(
+            nuc_file=False,
+            prot_file=False,
+            extra_data={
+                "nuc_file": _fasta_file("sequence(1).fasta"),
+                "prot_file": _fasta_file("protein (2).fasta"),
+                "gff_file": _fasta_file("anno-1!@#.gff")
+            }
+        )
+        call_args = MOCK_PUBLISHER.publish.call_args
+        message = json.loads(call_args[0][1].decode("utf-8"))
+        assert message.get("nuc_filename") == "sequence1.fasta"
+        assert message.get("prot_filename") == "protein_2.fasta"
+        assert message.get("gff_filename") == "anno-1.gff"
+
+        mock_doc.set.assert_called_once()
+        set_data = mock_doc.set.call_args[0][0]
+        assert set_data["nuc_filename"] == "sequence1.fasta"
+        assert set_data["prot_filename"] == "protein_2.fasta"
+        assert set_data["gff_filename"] == "anno-1.gff"
+
     def test_firestore_doc_set_to_pending(self):
         mock_doc = MagicMock()
         MOCK_FIRESTORE.collection.return_value.document.return_value = mock_doc
