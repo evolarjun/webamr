@@ -15,11 +15,11 @@
   <h1>Web interface for AMRFinderPlus</h1>
   <p><a href="/">← Back to Home</a></p>
   <p>
-  This is a mostly vibe-coded web interface for <a href="https://github.com/ncbi/amr/wiki">AMRFinderPlus</a> created as a personal side-project. As far as I can tell everything works well, but there is no guarantee that this will do what you want. A brief description of the options is below, and results can be downloaded in the native tab-delimited format output by AMRFinderPlus. Suggestions for improvements or reporting of issues as <a href="https://github.com/evolarjun/webamr/issues">GitHub issues</a> is much appreciated.
+  This is a mostly vibe-coded web interface for <a href="https://github.com/ncbi/amr/wiki">AMRFinderPlus</a> created as a personal side-project. As far as I can tell everything works well, but there is no guarantee that this will do what you want. A brief description of the options is below, and results can be downloaded in the native tab-delimited format output by AMRFinderPlus. Suggestions for improvements or bug reports as <a href="https://github.com/evolarjun/webamr/issues">GitHub issues</a> is much appreciated.
   </p>
 
   <p>
-  Runs AMRFinderPlus with the following options: `--plus` and `--print_node`
+  Runs AMRFinderPlus with the following options: <code>--plus</code> <code>--print_node</code>
   </p>
 
   <h1>Input Settings</h1>
@@ -32,18 +32,18 @@
 
   <section id="nucleotide-file">
     <h2>Select an assembled nucleotide file (<code>-n</code>, <code>--nucleotide</code>)</h2>
-    <p>An assembled nucleotide FASTA file to search.
+    <p>An assembled nucleotide FASTA file to search. May be gzipped with a .gz extension.
     </p>
-    <p>See the official documentation for <a
+    <p>See the AMRFinderPlus documentation for <a
         href="https://github.com/ncbi/amr/wiki/Running-AMRFinderPlus#-p-protein_fasta-and--n-nucleotide_fasta"
         target="_blank">Input FASTA files</a>.</p>
   </section>
 
   <section id="protein-file">
     <h2>Select a protein file (<code>-p</code>, <code>--protein</code>)</h2>
-    <p>A protein FASTA file to search.
+    <p>A protein FASTA file to search. May be gzipped with a .gz extension.
     </p>
-    <p>See the official documentation for <a
+    <p>See the AMRFinderPlus documentation for <a
         href="https://github.com/ncbi/amr/wiki/Running-AMRFinderPlus#-p-protein_fasta-and--n-nucleotide_fasta"
         target="_blank">Input FASTA files</a>.</p>
   </section>
@@ -53,7 +53,7 @@
     <p>A GFF3 format file containing gene annotations. This file provides the genomic coordinates and identifiers for
       the genes in the nucleotide sequence. If you provide a GFF file, you should also provide the corresponding
       nucleotide and protein files to enable full AMRFinderPlus functionality.</p>
-    <p>See the official documentation for <a href="https://github.com/ncbi/amr/wiki/Running-AMRFinderPlus#-g-gff_file"
+    <p>See the AMRFinderPlus documentation for <a href="https://github.com/ncbi/amr/wiki/Running-AMRFinderPlus#-g-gff_file"
         target="_blank">GFF files</a>.</p>
   </section>
 
@@ -69,9 +69,9 @@
       <li><strong>standard</strong>: (default) Use for files downloaded from NCBI resources.</li>
       <li>...and others (genbank, microscope, patric, prodigal, pseudomonasdb, rast).</li>
     </ul>
-    <p>The official documentation for the <a
+    <p>The AMRFinderPlus documentation for the <a
         href="https://github.com/ncbi/amr/wiki/Running-AMRFinderPlus#the---annotation_format-format-option"
-        target="_blank">--annotation_format option</a> contains more information.</p>
+        target="_blank"><code>--annotation_format</code> option</a> contains more information.</p>
   </section>
 
   <section id="organism-group">
@@ -81,15 +81,15 @@
       thresholds and search for known point mutations that confer resitance
     </p>
     <p>If "None" is selected, AMRFinderPlus will only perform a general search against its core database.</p>
-    <p>See the official documentation for the <a
-        href="https://github.com/ncbi/amr/wiki/Running-AMRFinderPlus#--organism-option" target="_blank">--organism
+    <p>See the AMRFinderPlus documentation for the <a href="https://github.com/ncbi/amr/wiki/Running-AMRFinderPlus#--organism-option" target="_blank"><code>--organism</code>
         option</a>.</p>
   </section>
 
   <section id="limits">
     <h2>File Size and Usage Limits</h2>
-    <p>Currently, this server has a <strong>10 MB</strong> file size limit for each upload. This tool is designed to analyze
-      one bacterial genome at a time. Larger submissions or multiple genomes may fail or be rejected.</p>
+    <p>Because this tool is designed to analyze
+      one bacterial genome at a time, this server has a <strong>10 MB</strong> file size limit for each upload. 
+      Larger submissions or multiple genomes may fail or be rejected.</p>
   </section>
 
     Report issues on [GitHub](https://github.com/evolarjun/webamr/issues)

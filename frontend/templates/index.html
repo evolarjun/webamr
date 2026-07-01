@@ -21,11 +21,9 @@
   <form id="upload-form" action="/analyze" method="POST" enctype="multipart/form-data">
     <label for="job_name"><a href="/docs#job-name">Job name</a> (optional):</label>
     <input type="text" name="job_name" id="job_name" maxlength="100"> <br>
-    <label for="file">Select an assembled <a href="/docs#nucleotide-file">nucleotide file</a>:</label>
+    <label for="file">Assembled <a href="/docs#nucleotide-file">nucleotide FASTA</a>:</label>
     <input type="file" name="nuc_file"> <br>
-    <label for="file">Select a <a href="/docs#protein-file">protein file</a>:</label>
-    <input type="file" name="prot_file"> <br>
-    <label for="gff_file">Select a <a href="/docs#gff-file">GFF file</a>:</label>
+    <label for="gff_file"><a href="/docs#gff-file">GFF file</a>:</label>
     <input type="file" name="gff_file" id="gff_file">
     <label for="annotation_format" style="margin-left: 15px;"><a href="/docs#annotation-format">Annotation
         format</a>:</label>
@@ -41,6 +39,8 @@
       <option value="rast">rast</option>
       <option value="standard" selected>standard</option>
     </select> <br>
+    <label for="file"><a href="/docs#protein-file">Protein FASTA</a>:</label>
+    <input type="file" name="prot_file"> <br>
     <label for="organism"><a href="/docs#organism-group">Organism group</a> (optional):</label>
 
     <select id="organism" name="organism">
