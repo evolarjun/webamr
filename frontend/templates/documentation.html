@@ -32,7 +32,7 @@
 
   <section id="nucleotide-file">
     <h2>Select an assembled nucleotide file (<code>-n</code>, <code>--nucleotide</code>)</h2>
-    <p>An assembled nucleotide FASTA file to search. May be gzipped with a .gz extension.
+    <p>An assembled nucleotide FASTA file to search. May be gzipped with a .gz extension. This enables searching with translated BLAST, identifying frame shifts, and, with the "Organism" option below, to identify non-coding point mutations.
     </p>
     <p>See the AMRFinderPlus documentation for <a
         href="https://github.com/ncbi/amr/wiki/Running-AMRFinderPlus#-p-protein_fasta-and--n-nucleotide_fasta"
@@ -41,7 +41,7 @@
 
   <section id="protein-file">
     <h2>Select a protein file (<code>-p</code>, <code>--protein</code>)</h2>
-    <p>A protein FASTA file to search. May be gzipped with a .gz extension.
+    <p>A protein FASTA file to search. May be gzipped with a .gz extension. This enables the identification of genes by HMMs which enables more sensitive detection of distant AMR genes.
     </p>
     <p>See the AMRFinderPlus documentation for <a
         href="https://github.com/ncbi/amr/wiki/Running-AMRFinderPlus#-p-protein_fasta-and--n-nucleotide_fasta"
@@ -51,7 +51,7 @@
   <section id="gff-file">
     <h2>Select a GFF file (<code>-g</code>, <code>--gff</code>)</h2>
     <p>A GFF3 format file containing gene annotations. This file provides the genomic coordinates and identifiers for
-      the genes in the nucleotide sequence. If you provide a GFF file, you should also provide the corresponding
+      the proteins in the nucleotide sequence. If you provide a GFF file, you should also provide the corresponding
       nucleotide and protein files to enable full AMRFinderPlus functionality.</p>
     <p>See the AMRFinderPlus documentation for <a href="https://github.com/ncbi/amr/wiki/Running-AMRFinderPlus#-g-gff_file"
         target="_blank">GFF files</a>.</p>
@@ -78,7 +78,7 @@
     <h2>Organism group (optional) (<code>-O</code>, <code>--organism</code>)</h2>
     <p>Specifies the taxonomic group of the organism being analyzed (e.g., <em>Escherichia</em>, <em>Salmonella</em>,
       <em>Staphylococcus aureus</em>). Providing an organism group allows AMRFinderPlus to use organism-specific curated
-      thresholds and search for known point mutations that confer resitance
+      thresholds and search for known point mutations that confer resitance.
     </p>
     <p>If "None" is selected, AMRFinderPlus will only perform a general search against its core database.</p>
     <p>See the AMRFinderPlus documentation for the <a href="https://github.com/ncbi/amr/wiki/Running-AMRFinderPlus#--organism-option" target="_blank"><code>--organism</code>

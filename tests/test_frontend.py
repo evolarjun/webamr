@@ -334,6 +334,21 @@ class TestAnalyze:
         set_data = mock_doc.set.call_args[0][0]
         assert set_data["job_name"] == "My Run-01"
 
+    def test_firestore_doc_includes_client_ip_from_header(self):
+        mock_doc = MagicMock()
+        MOCK_FIRESTORE.collection.return_value.document.return_value = mock_doc
+        headers = {"X-Forwarded-For": "203.0.113.195, 74.125.19.1"}
+        client.post("/analyze", data={"nuc_file": _fasta_file("sample.fasta")}, content_type="multipart/form-data", headers=headers)
+        set_data = mock_doc.set.call_args[0][0]
+        assert set_data["ip_address"] == "203.0.113.195"
+
+    def test_firestore_doc_includes_client_ip_fallback(self):
+        mock_doc = MagicMock()
+        MOCK_FIRESTORE.collection.return_value.document.return_value = mock_doc
+        client.post("/analyze", data={"nuc_file": _fasta_file("sample.fasta")}, content_type="multipart/form-data")
+        set_data = mock_doc.set.call_args[0][0]
+        assert set_data["ip_address"] == "127.0.0.1"
+
     def test_invalid_job_name_characters_return_400(self):
         resp = self._post_analyze(job_name="bad@name")
         assert resp.status_code == 400

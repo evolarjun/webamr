@@ -383,7 +383,11 @@ def analyze_file():
         if organism_value:
             params["organism"] = organism_value
 
-        client_ip = get_remote_address()
+        forwarded_for = request.headers.get('X-Forwarded-For')
+        if forwarded_for:
+            client_ip = forwarded_for.split(',')[0].strip()
+        else:
+            client_ip = get_remote_address()
 
         files_dict = {'nuc_file': nuc_file, 'prot_file': prot_file, 'gff_file': gff_file}
         _create_firestore_record(user_id, job_name, gcs_uri, params, sizes, files_dict, client_ip)
