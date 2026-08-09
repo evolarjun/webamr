@@ -17,6 +17,7 @@ tests/__pycache__/
 # GCP credentials (never commit these!)
 *.json
 !cors.json
+!frontend/organism_mapping.json
 
 # GCP configuration stuff
 gcp_setup_commands.txt

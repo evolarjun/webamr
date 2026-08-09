@@ -1,0 +1,18 @@
+{
+  "Acinetobacter_baumannii": "s__Acinetobacter baumannii",
+  "Bordetella_pertussis": "s__Bordetella pertussis",
+  "Burkholderia_pseudomallei": "s__Burkholderia pseudomallei",
+  "Campylobacter": "s__Campylobacter jejuni",
+  "Enterobacter_asburiae": "s__Enterobacter hormaechei",
+  "Enterobacter_cloacae": "s__Enterobacter hormaechei",
+  "Enterococcus_faecalis": "s__Enterococcus faecalis",
+  "Enterococcus_faecium": "s__Enterococcus faecium",
+  "Escherichia": "s__Escherichia coli",
+  "Klebsiella_oxytoca": "s__Klebsiella oxytoca",
+  "Klebsiella_pneumoniae": "s__Klebsiella pneumoniae",
+  "Neisseria_gonorrhoeae": "s__Neisseria gonorrhoeae",
+  "Neisseria_meningitidis": "s__Neisseria meningitidis",
+  "Pseudomonas_aeruginosa": "s__Pseudomonas aeruginosa",
+  "Salmonella": "s__Salmonella enterica",
+  "Staphylococcus_aureus": "s__Staphylococcus aureus"
+}
