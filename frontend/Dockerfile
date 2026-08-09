@@ -14,6 +14,7 @@ COPY static ./static
 COPY templates ./templates
 COPY database_version.txt .
 COPY taxgroup.tsv .
+COPY organism_mapping.json .
 COPY main.py .
 
 # Set the entrypoint to execute

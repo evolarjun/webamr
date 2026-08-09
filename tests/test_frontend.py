@@ -894,3 +894,82 @@ class TestAnalyzeResultsUrl:
         body = resp.get_json()
         user_id = body["user_id"]
         assert user_id in body["results_url"]
+
+
+# ---------------------------------------------------------------------------
+# Tests: AMRrules Integration
+# ---------------------------------------------------------------------------
+
+class TestAMRrulesIntegration:
+    """Verify AMRrules parameter processing, mapping resolution, and download routes."""
+
+    def setup_method(self):
+        MOCK_STORAGE.bucket.return_value.blob.side_effect = None
+        MOCK_STORAGE.bucket.return_value.blob.return_value = _make_blob()
+        mock_future = MagicMock()
+        mock_future.result.return_value = "msg-id-1"
+        MOCK_PUBLISHER.publish.return_value = mock_future
+        MOCK_PUBLISHER.topic_path.return_value = "projects/amrfinder/topics/amr-jobs-topic"
+        MOCK_FIRESTORE.collection.return_value.document.return_value = MagicMock()
+
+    def test_index_includes_escherichia_organism_mapping(self):
+        """GET / renders index template with organismMapping containing Escherichia -> s__Escherichia coli."""
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert b'"Escherichia": "s__Escherichia coli"' in resp.data
+
+    def test_analyze_auto_amrrules_mapped_organism(self):
+        """Selecting Escherichia with auto AMRrules includes s__Escherichia coli in Pub/Sub params."""
+        data = {"organism": "Escherichia", "amrrules_organism": "auto", "nuc_file": _fasta_file()}
+        resp = client.post("/analyze", data=data, content_type="multipart/form-data")
+        assert resp.status_code == 200
+        call_args = MOCK_PUBLISHER.publish.call_args
+        message_bytes = call_args[0][1]
+        msg = json.loads(message_bytes.decode("utf-8"))
+        assert msg["parameters"].get("amrrules_organism") == "s__Escherichia coli"
+
+    def test_analyze_auto_amrrules_unmapped_organism(self):
+        """Selecting Vibrio_cholerae with auto AMRrules omits amrrules_organism from Pub/Sub params."""
+        data = {"organism": "Vibrio_cholerae", "amrrules_organism": "auto", "nuc_file": _fasta_file()}
+        resp = client.post("/analyze", data=data, content_type="multipart/form-data")
+        assert resp.status_code == 200
+        call_args = MOCK_PUBLISHER.publish.call_args
+        message_bytes = call_args[0][1]
+        msg = json.loads(message_bytes.decode("utf-8"))
+        assert "amrrules_organism" not in msg["parameters"]
+
+    def test_analyze_amrrules_none(self):
+        """Selecting amrrules_organism=none omits amrrules_organism from Pub/Sub params."""
+        data = {"organism": "Escherichia", "amrrules_organism": "none", "nuc_file": _fasta_file()}
+        resp = client.post("/analyze", data=data, content_type="multipart/form-data")
+        assert resp.status_code == 200
+        call_args = MOCK_PUBLISHER.publish.call_args
+        message_bytes = call_args[0][1]
+        msg = json.loads(message_bytes.decode("utf-8"))
+        assert "amrrules_organism" not in msg["parameters"]
+
+    def test_analyze_amrrules_manual_override(self):
+        """Selecting an explicit AMRrules target species overrides auto-mapping."""
+        data = {"organism": "Vibrio_cholerae", "amrrules_organism": "s__Enterobacter hormaechei", "nuc_file": _fasta_file()}
+        resp = client.post("/analyze", data=data, content_type="multipart/form-data")
+        assert resp.status_code == 200
+        call_args = MOCK_PUBLISHER.publish.call_args
+        message_bytes = call_args[0][1]
+        msg = json.loads(message_bytes.decode("utf-8"))
+        assert msg["parameters"].get("amrrules_organism") == "s__Enterobacter hormaechei"
+
+    def test_amrrules_summary_download_route(self):
+        """GET /amrrules-summary/<id> returns attachment when file exists."""
+        mock_blob = _make_blob(exists=True, content=b"gene\tdrug\tinterpretation\n")
+        MOCK_STORAGE.bucket.return_value.blob.return_value = mock_blob
+        resp = client.get("/amrrules-summary/job-123")
+        assert resp.status_code == 200
+        assert b"gene\tdrug" in resp.data
+
+    def test_amrrules_interpreted_download_route(self):
+        """GET /amrrules-interpreted/<id> returns attachment when file exists."""
+        mock_blob = _make_blob(exists=True, content=b"gene\tdrug\tinterpretation\n")
+        MOCK_STORAGE.bucket.return_value.blob.return_value = mock_blob
+        resp = client.get("/amrrules-interpreted/job-123")
+        assert resp.status_code == 200
+        assert b"gene\tdrug" in resp.data

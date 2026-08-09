@@ -50,6 +50,9 @@
   {% elif status == "Completed" and result_html %}
   <div id="results">
     <button onclick="downloadResults('{{ job_id }}')" style="margin-bottom: 10px;">Download Results</button>
+    {% if amrrules_interpreted_available %}
+    &nbsp;<a href="/amrrules-interpreted/{{ job_id }}" target="_blank">Download AMRrules Interpreted TSV</a> &nbsp;&nbsp;&nbsp;
+    {% endif %}
     {% if stderr_available %}
     &nbsp;<a href="/stderr/{{ job_id }}" target="_blank">View STDERR log</a>
     {% endif %}
@@ -59,6 +62,12 @@
     {% endif %}
     {% if protein_available %}
     <p><a href="/protein/{{ job_id }}" target="_blank">Download Protein FASTA</a></p>
+    {% endif %}
+    {% if amrrules_summary_available %}
+    <p><a href="/amrrules-summary/{{ job_id }}" target="_blank">Download AMRrules Summary TSV</a></p>
+    {% endif %}
+    {% if amrrules_error %}
+    <p class="error"><strong>AMRrules notice:</strong> {{ amrrules_error }}</p>
     {% endif %}
   </div>
   {% elif status == "Expired" %}
@@ -225,6 +234,9 @@
               resultsDiv.innerHTML = '';
               resultsDiv.appendChild(downloadButton);
 
+              if (data.amrrules_interpreted_available) {
+                resultsDiv.insertAdjacentHTML('beforeend', '&nbsp;<a href="/amrrules-interpreted/' + jobId + '" target="_blank">Download AMRrules Interpreted TSV</a>');
+              }
               if (data.stderr_available) {
                 resultsDiv.insertAdjacentHTML('beforeend', '&nbsp;<a href="/stderr/' + jobId + '" target="_blank">View STDERR log</a>');
               }
@@ -240,6 +252,17 @@
                 const protLink = document.createElement('p');
                 protLink.innerHTML = '<a href="/protein/' + jobId + '" target="_blank">Download Protein FASTA</a>';
                 resultsDiv.appendChild(protLink);
+              }
+              if (data.amrrules_summary_available) {
+                const summaryLink = document.createElement('p');
+                summaryLink.innerHTML = '<a href="/amrrules-summary/' + jobId + '" target="_blank">Download AMRrules Summary TSV</a>';
+                resultsDiv.appendChild(summaryLink);
+              }
+              if (data.amrrules_error) {
+                const amrError = document.createElement('p');
+                amrError.className = 'error';
+                amrError.innerHTML = '<strong>AMRrules notice:</strong> ' + data.amrrules_error;
+                resultsDiv.appendChild(amrError);
               }
 
               // Attach sort handlers to the newly injected table

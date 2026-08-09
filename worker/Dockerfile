@@ -34,6 +34,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   libcurl4 \
   curl \
   libgomp1 \
+  git \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 
@@ -67,6 +68,17 @@ COPY requirements.txt .
 RUN python3 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 RUN pip3 install --no-cache-dir -r requirements.txt
+
+# Install AMRrules from source (requires copy_rules.py to populate rules subpackage)
+RUN git clone https://github.com/AMRverse/AMRrules.git /tmp/AMRrules \
+  && cd /tmp/AMRrules \
+  && sed -i "s/card_amrfp_conversion.get(self.amrfp_subclass)/(card_amrfp_conversion.get(self.amrfp_subclass) or {})/g" src/amrrules/genotype_parser.py \
+  && python copy_rules.py \
+  && pip3 install --no-cache-dir . \
+  && rm -rf /tmp/AMRrules
+
+# Download AMRrules resource files (create target resources directory first)
+RUN python3 -c "from pathlib import Path; import amrrules; (Path(amrrules.__file__).parent / 'resources').mkdir(parents=True, exist_ok=True); from amrrules.resources import ResourceManager; ResourceManager().setup_all_resources()"
 
 COPY worker.py .
 COPY VERSION.txt .

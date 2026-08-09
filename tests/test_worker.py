@@ -379,3 +379,48 @@ class TestHandlePubsubPush:
 
         removed_paths = [c[0][0] for c in mock_remove.call_args_list]
         assert any("job-cleanup" in p for p in removed_paths)
+
+    @patch("builtins.open", mock_open())
+    @patch("worker.upload_blob", return_value="gs://output/results/job-abc/results.tsv")
+    @patch("worker.run_amrrules", side_effect=Exception("amrrules error"))
+    @patch("worker.run_amrfinder")
+    @patch("worker.download_blob")
+    def test_amrrules_soft_failure_does_not_fail_job(self, mock_dl, mock_run, mock_rules, mock_ul):
+        """AMRrules exception records amrrules_error in Firestore but job completes successfully."""
+        mock_run.return_value = ""
+        mock_doc = MagicMock()
+        worker.get_firestore_client().collection.return_value.document.return_value = mock_doc
+
+        params = {"amrrules_organism": "s__Escherichia coli"}
+        payload = {"job_id": "job-soft-fail", "gcs_uri": "gs://b/f.fa", "parameters": params}
+        body = _make_raw_push_body(json.dumps(payload).encode("utf-8"))
+
+        resp = flask_client.post("/", json=body)
+        assert resp.status_code == 200
+
+        update_calls = [c[0][0] for c in mock_doc.update.call_args_list]
+        completed_update = [u for u in update_calls if u.get("status") == "Completed"]
+        assert len(completed_update) == 1
+        assert completed_update[0].get("amrrules_error") == "amrrules error"
+
+
+class TestRunAmrrules:
+    """Verify run_amrrules helper function command execution."""
+
+    @patch("worker.subprocess.run")
+    def test_basic_amrrules_command(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=0, stdout="success", stderr="")
+        worker.run_amrrules(
+            amrfp_output_tsv="/tmp/out.tsv",
+            amrrules_organism="s__Escherichia coli",
+            output_prefix="/tmp/prefix",
+            job_id="job-123",
+        )
+        cmd = mock_run.call_args[0][0]
+        assert cmd[0] == "amrrules"
+        assert "--input" in cmd
+        assert "/tmp/out.tsv" in cmd
+        assert "--organism" in cmd
+        assert "s__Escherichia coli" in cmd
+        assert "--sample-id" in cmd
+        assert "job-123" in cmd
