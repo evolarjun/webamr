@@ -8,7 +8,7 @@ import importlib
 import json
 import os
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, mock_open
 
 import pytest
 
@@ -139,6 +139,7 @@ class TestUploadBlob:
 # ---------------------------------------------------------------------------
 
 class TestRunAmrfinder:
+    @patch("builtins.open", mock_open())
     @patch("worker.subprocess.run")
     def test_basic_command(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0, stdout="col1\tcol2\n", stderr="")
@@ -150,6 +151,7 @@ class TestRunAmrfinder:
         assert "--nucleotide_output" not in cmd
         assert "--protein_output" not in cmd
 
+    @patch("builtins.open", mock_open())
     @patch("worker.subprocess.run")
     def test_has_nucleotide_flag(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
@@ -161,6 +163,7 @@ class TestRunAmrfinder:
         assert "--nucleotide" in cmd
         assert "--protein" not in cmd
 
+    @patch("builtins.open", mock_open())
     @patch("worker.subprocess.run")
     def test_has_protein_flag(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
@@ -172,6 +175,7 @@ class TestRunAmrfinder:
         assert "--protein" in cmd
         assert "--nucleotide" not in cmd
 
+    @patch("builtins.open", mock_open())
     @patch("worker.subprocess.run")
     def test_plus_flag_added(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
@@ -179,6 +183,7 @@ class TestRunAmrfinder:
         cmd = mock_run.call_args[0][0]
         assert "--plus" in cmd
 
+    @patch("builtins.open", mock_open())
     @patch("worker.subprocess.run")
     def test_organism_flag_added(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
@@ -187,6 +192,7 @@ class TestRunAmrfinder:
         assert "-O" in cmd
         assert "Salmonella" in cmd
 
+    @patch("builtins.open", mock_open())
     @patch("worker.subprocess.run")
     def test_ident_min_and_coverage_min(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
@@ -200,6 +206,7 @@ class TestRunAmrfinder:
         assert "-c" in cmd
         assert "0.75" in cmd
 
+    @patch("builtins.open", mock_open())
     @patch("worker.subprocess.run")
     def test_annotation_format_added(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
@@ -217,12 +224,14 @@ class TestRunAmrfinder:
         assert "--annotation_format" in cmd
         assert "prokka" in cmd
 
+    @patch("builtins.open", mock_open())
     @patch("worker.subprocess.run")
     def test_nonzero_returncode_raises(self, mock_run):
         mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="Database error")
         with pytest.raises(Exception, match="AMRFinderPlus failed"):
             worker.run_amrfinder(nuc_input="/tmp/in.fasta", prot_input=None, gff_input=None, output_tsv="/tmp/out.tsv", stderr_path="/tmp/stderr.txt", nucleotide_path="/tmp/nuc.fna", protein_path="/tmp/prot.faa", params={})
 
+    @patch("builtins.open", mock_open())
     @patch("worker.subprocess.run")
     def test_multiple_files_added(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")

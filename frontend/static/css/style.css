@@ -1,4 +1,4 @@
-/* ── Color tokens ───────────────────────────────────────────── */
+/* -- Color tokens --------------------------------------------- */
 :root {
   --bg: #ffffff;
   --fg: #222222;
@@ -41,11 +41,11 @@
   --toggle-knob: #202020;
 }
 
-/* ── Base ───────────────────────────────────────────────────── */
+/* -- Base ----------------------------------------------------- */
 body {
   font-family: sans-serif;
   margin: 20px;
-  line-height: 1.6;
+  line-height: 2.0;
   background-color: var(--bg);
   color: var(--fg);
   transition: background-color 0.3s, color 0.3s;
@@ -73,11 +73,12 @@ code {
   border-radius: 3px;
 }
 
-/* ── Table ──────────────────────────────────────────────────── */
+/* -- Table ---------------------------------------------------- */
 table {
   border-collapse: collapse;
   width: 100%;
   margin-bottom: 20px;
+  line-height: 1.3;
 }
 
 th,
@@ -137,7 +138,7 @@ tr:hover {
   overflow-x: auto;
 }
 
-/* ── Error block ────────────────────────────────────────────── */
+/* -- Error block ---------------------------------------------- */
 .error {
   color: var(--error-fg);
   font-weight: bold;
@@ -150,7 +151,7 @@ tr:hover {
   margin: 15px 0;
 }
 
-/* ── Dark-mode toggle ──────────────────────────────────────── */
+/* -- Dark-mode toggle ---------------------------------------- */
 .theme-toggle {
   position: fixed;
   top: 14px;
@@ -194,7 +195,7 @@ tr:hover {
   line-height: 1;
 }
 
-/* ── Utility classes ───────────────────────────────────────── */
+/* -- Utility classes ----------------------------------------- */
 .page-footer {
   margin-top: 40px;
   margin-bottom: 20px;
@@ -210,7 +211,7 @@ tr:hover {
   color: #ef9a9a;
 }
 
-/* ── Form elements ─────────────────────────────────────────── */
+/* -- Form elements ------------------------------------------- */
 input,
 select,
 button {
