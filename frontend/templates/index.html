@@ -13,6 +13,7 @@
 
 <body>
   <h1>Upload your files to run <a href="https://github.com/ncbi/amr/wiki">AMRFinderPlus</a></h1>
+  <h2>And now <a href="https://docs.amrrules.org/en/latest/">AMRrules</a></h2>
   <span>This is a personal side-project; this software does not reflect the priorities or opinions of my employer, and use of the results is at your own risk.</span><br>
   <a href="/docs">[docs]</a>
   <p></p>
@@ -46,6 +47,21 @@
       <option value="">None</option>
       {{ organism_select | safe }}
     </select> <br />
+    
+    <br />
+
+    <label for="amrrules_organism"><a href="/docs#amrrules-organism">AMRrules organism (optional)</a>:</label>
+    <select id="amrrules_organism" name="amrrules_organism">
+      <option value="auto" selected>Auto-mapped from AMRFinderPlus organism</option>
+      <option value="none">None / Do not run AMRrules</option>
+      {% if amrrules_species %}
+      {% for sp in amrrules_species %}
+      <option value="{{ sp }}">{{ sp }}</option>
+      {% endfor %}
+      {% endif %}
+    </select><br />
+    <span id="amrrules-helper" style="font-size: 0.85em; color: var(--fg-muted); margin-left: 10px;"></span> <br />
+
     <!-- label for="parameters">Parameters (optional):</label> <br> 
       <input type="text" name="parameters" id="parameters"> <br><br>-->
     <button type="submit">Run AMRFinderPlus</button>
@@ -56,6 +72,34 @@
   <script>
     const form = document.getElementById('upload-form');
     const statusMsg = document.getElementById('status-msg');
+    const organismMapping = {{ organism_mapping | default('{}') | safe }};
+    const organismSelect = document.getElementById('organism');
+    const amrrulesSelect = document.getElementById('amrrules_organism');
+    const amrrulesHelper = document.getElementById('amrrules-helper');
+
+    function updateAmrrulesHelper() {
+      if (!amrrulesSelect || !amrrulesHelper) return;
+      const selectedAmrrules = amrrulesSelect.value;
+      const selectedOrg = organismSelect ? organismSelect.value : '';
+
+      if (selectedAmrrules === 'none') {
+        amrrulesHelper.textContent = 'AMRrules will not be run.';
+      } else if (selectedAmrrules === 'auto') {
+        if (!selectedOrg || selectedOrg === 'None') {
+          amrrulesHelper.textContent = 'No AMRFinderPlus organism selected; AMRrules will be skipped.';
+        } else if (organismMapping[selectedOrg]) {
+          amrrulesHelper.textContent = 'Auto-mapped target: ' + organismMapping[selectedOrg];
+        } else {
+          amrrulesHelper.textContent = 'No auto-mapping available for ' + selectedOrg + '; AMRrules will be skipped.';
+        }
+      } else {
+        amrrulesHelper.textContent = 'Manual target override: ' + selectedAmrrules;
+      }
+    }
+
+    if (organismSelect) organismSelect.addEventListener('change', updateAmrrulesHelper);
+    if (amrrulesSelect) amrrulesSelect.addEventListener('change', updateAmrrulesHelper);
+    document.addEventListener('DOMContentLoaded', updateAmrrulesHelper);
 
     function validateForm(showError = true) {
       const nucFile = form.elements['nuc_file'].files[0];

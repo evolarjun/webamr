@@ -57,6 +57,35 @@ try:
 except FileNotFoundError:
     APP_VERSION = "unknown"
 
+ORGANISM_MAPPING = {}
+try:
+    mapping_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'organism_mapping.json')
+    if not os.path.exists(mapping_path):
+        mapping_path = 'organism_mapping.json'
+    with open(mapping_path, 'r') as f:
+        ORGANISM_MAPPING = json.load(f)
+except Exception as e:
+    logging.error(f"Failed to load organism_mapping.json: {e}")
+
+AMRRULES_SPECIES = sorted(list(set(ORGANISM_MAPPING.values()) | {
+    "s__Acinetobacter baumannii",
+    "s__Bordetella pertussis",
+    "s__Burkholderia pseudomallei",
+    "s__Campylobacter jejuni",
+    "s__Enterobacter hormaechei",
+    "s__Enterobacter roggenkampii",
+    "s__Enterococcus faecalis",
+    "s__Enterococcus faecium",
+    "s__Escherichia coli",
+    "s__Klebsiella oxytoca",
+    "s__Klebsiella pneumoniae",
+    "s__Neisseria gonorrhoeae",
+    "s__Neisseria meningitidis",
+    "s__Pseudomonas aeruginosa",
+    "s__Salmonella enterica",
+    "s__Staphylococcus aureus"
+}))
+
 app = Flask(__name__, static_folder='static')
 app.config['UPLOAD_FOLDER_BASE'] = UPLOAD_FOLDER_BASE
 app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10 MB limit
@@ -208,7 +237,7 @@ def index():
     global cached_db_version, cached_software_version
     organism_select_options = organism_select()
     
-    if not cached_db_version or cached_software_version:
+    if not cached_db_version or not cached_software_version:
         try:
             storage_client = get_storage_client()
             bucket = storage_client.bucket(OUTPUT_BUCKET)
@@ -223,7 +252,9 @@ def index():
                 return render_template('index.html', 
                                        organism_select=organism_select_options, 
                     database_version="Run job to refresh", 
-                    software_version="Run job to refresh")
+                    software_version="Run job to refresh",
+                    organism_mapping=json.dumps(ORGANISM_MAPPING),
+                    amrrules_species=AMRRULES_SPECIES)
         except Exception as e:
             print(f"Error fetching DB version: {e}")
             # Don't cache error/unknown so we can retry
@@ -233,7 +264,9 @@ def index():
         db_v = cached_db_version
         soft_v = cached_software_version
     return render_template('index.html', organism_select=organism_select_options, 
-        database_version=db_v, software_version=soft_v)
+        database_version=db_v, software_version=soft_v,
+        organism_mapping=json.dumps(ORGANISM_MAPPING),
+        amrrules_species=AMRRULES_SPECIES)
 
 @app.route("/docs")
 def documentation():
@@ -383,6 +416,17 @@ def analyze_file():
         if organism_value:
             params["organism"] = organism_value
 
+        amrrules_org_input = request.form.get('amrrules_organism', 'auto').strip()
+        resolved_amrrules_org = None
+        if amrrules_org_input == 'auto':
+            if organism_value and organism_value in ORGANISM_MAPPING:
+                resolved_amrrules_org = ORGANISM_MAPPING[organism_value]
+        elif amrrules_org_input and amrrules_org_input != 'none':
+            resolved_amrrules_org = amrrules_org_input
+
+        if resolved_amrrules_org:
+            params["amrrules_organism"] = resolved_amrrules_org
+
         forwarded_for = request.headers.get('X-Forwarded-For')
         if forwarded_for:
             client_ip = forwarded_for.split(',')[0].strip()
@@ -442,6 +486,9 @@ def results_page(job_id):
     stderr_available = False
     nucleotide_available = False
     protein_available = False
+    amrrules_summary_available = False
+    amrrules_interpreted_available = False
+    amrrules_error = job_data.get("amrrules_error", None)
     
     if status == "Completed":
         try:
@@ -456,6 +503,8 @@ def results_page(job_id):
             stderr_available = bucket.blob(f'results/{job_id}/stderr.txt').exists()
             nucleotide_available = bucket.blob(f'results/{job_id}/nucleotide.fna').exists()
             protein_available = bucket.blob(f'results/{job_id}/protein.faa').exists()
+            amrrules_summary_available = bucket.blob(f'results/{job_id}/amrrules_summary.tsv').exists()
+            amrrules_interpreted_available = bucket.blob(f'results/{job_id}/amrrules_interpreted.tsv').exists()
         except Exception as e:
             print(f"Error fetching results from GCS for completed job {job_id}: {e}")
 
@@ -488,6 +537,9 @@ def results_page(job_id):
         stderr_available=stderr_available,
         nucleotide_available=nucleotide_available,
         protein_available=protein_available,
+        amrrules_summary_available=amrrules_summary_available,
+        amrrules_interpreted_available=amrrules_interpreted_available,
+        amrrules_error=amrrules_error,
         created_at=job_data.get("created_at").isoformat() if hasattr(job_data.get("created_at"), "isoformat") else None,
         retention_date=retention_date_str,
         worker_version=job_data.get("worker_version", "unknown")
@@ -503,6 +555,8 @@ def return_results(user_id):
     stderr_available = bool(bucket.blob(f'results/{user_id}/stderr.txt').exists())
     nucleotide_available = bool(bucket.blob(f'results/{user_id}/nucleotide.fna').exists())
     protein_available = bool(bucket.blob(f'results/{user_id}/protein.faa').exists())
+    amrrules_summary_available = bool(bucket.blob(f'results/{user_id}/amrrules_summary.tsv').exists())
+    amrrules_interpreted_available = bool(bucket.blob(f'results/{user_id}/amrrules_interpreted.tsv').exists())
     try:
         results = tabulize(blob.download_as_bytes())
         
@@ -512,6 +566,7 @@ def return_results(user_id):
         job = doc.to_dict() if doc.exists else {}
         
         worker_version = job.get('worker_version', 'unknown')
+        amrrules_error = job.get('amrrules_error', None)
 
         return jsonify({
             'result': results, 
@@ -519,6 +574,9 @@ def return_results(user_id):
             'stderr_available': stderr_available, 
             'nucleotide_available': nucleotide_available, 
             'protein_available': protein_available,
+            'amrrules_summary_available': amrrules_summary_available,
+            'amrrules_interpreted_available': amrrules_interpreted_available,
+            'amrrules_error': amrrules_error,
             'worker_version': worker_version
         }), 200
     except NotFound:
@@ -586,6 +644,16 @@ def nucleotide_output(user_id):
 def protein_output(user_id):
     """Serves the protein FASTA output file."""
     return _serve_gcs_result_file(user_id, 'protein.faa', 'text/plain')
+
+@app.route('/amrrules-summary/<user_id>')
+def amrrules_summary_output(user_id):
+    """Serves the AMRrules summary TSV output file."""
+    return _serve_gcs_result_file(user_id, 'amrrules_summary.tsv', 'text/plain', as_attachment=True)
+
+@app.route('/amrrules-interpreted/<user_id>')
+def amrrules_interpreted_output(user_id):
+    """Serves the AMRrules interpreted TSV output file."""
+    return _serve_gcs_result_file(user_id, 'amrrules_interpreted.tsv', 'text/plain', as_attachment=True)
 
 @app.route('/input/<job_id>/<filename>')
 def input_file(job_id, filename):
