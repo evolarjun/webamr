@@ -17,7 +17,8 @@
   <span>This is a personal side-project; this software does not reflect the priorities or opinions of my employer, and use of the results is at your own risk.</span><br>
   <a href="/docs">[docs]</a>
   <p></p>
-  <pre>AMRFinderPlus <a href="https://github.com/ncbi/amr/releases/tag/amrfinder_v{{ software_version }}"></a>{{ software_version }}</a> database version {{ database_version }}</pre>
+  <pre>AMRFinderPlus <a href="https://github.com/ncbi/amr/releases/tag/amrfinder_v{{ software_version }}">{{ software_version }}</a> database version {{ database_version }}
+AMRrules version {{ amrrules_version }}</pre>
   <form id="upload-form" action="/analyze" method="POST" enctype="multipart/form-data">
     <label for="job_name"><a href="/docs#job-name">Job name</a> (optional):</label>
     <input type="text" name="job_name" id="job_name" maxlength="100"> <br>
@@ -50,7 +51,7 @@
     
     <br />
 
-    <label for="amrrules_organism"><a href="/docs#amrrules-organism">AMRrules organism (optional)</a>:</label>
+    <label for="amrrules_organism"><a href="/docs#amrrules-organism">AMRrules organism</a> (optional):</label>
     <select id="amrrules_organism" name="amrrules_organism">
       <option value="auto" selected>Auto-mapped from AMRFinderPlus organism</option>
       <option value="none">None / Do not run AMRrules</option>
@@ -162,38 +163,54 @@
       formData.append('job_name', form.elements['job_name'].value || '');
       formData.append('annotation_format', form.elements['annotation_format'].value || 'standard');
       formData.append('organism', form.elements['organism'].value);
+      if (form.elements['amrrules_organism']) {
+        formData.append('amrrules_organism', form.elements['amrrules_organism'].value);
+      }
 
-      // Disable the submit button and show upload progress
+      // Disable the submit button and show two-stage upload status with animated spinner
       const submitButton = form.querySelector('button[type="submit"]');
       submitButton.disabled = true;
-      statusMsg.innerHTML = '<p>Uploading files…</p>';
+      statusMsg.innerHTML = '<p><span class="spinner"></span><span id="upload-status-text">Uploading files to server…</span></p>';
 
-      fetch('/analyze', {
-        method: 'POST',
-        body: formData
-      })
-        .then(async response => {
-          let data;
-          try {
-            data = await response.json();
-          } catch (e) {
-            const text = await response.text();
-            throw new Error(`Server returned non-JSON response: ${text}`);
-          }
-          if (!response.ok) {
-            throw new Error(data.error || 'Unknown Server Error');
-          }
-          return data;
-        })
-        .then(data => {
-          // Redirect to the dedicated results page
-          window.location.href = data.results_url || `/results/${data.user_id}`;
-        })
-        .catch(error => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/analyze', true);
+
+      xhr.upload.onprogress = (e) => {
+        const statusText = document.getElementById('upload-status-text');
+        if (!statusText) return;
+
+        if (e.lengthComputable && e.loaded >= e.total) {
+          statusText.textContent = `Storing files in cloud storage & queuing job…`;
+        } else {
+          statusText.textContent = `Uploading files to server…`;
+        }
+      };
+
+      xhr.onload = () => {
+        let data;
+        try {
+          data = JSON.parse(xhr.responseText);
+        } catch (e) {
           submitButton.disabled = false;
-          console.error('Error:', error);
-          statusMsg.innerHTML = `<p class="error">ERROR: ${error.message || error.toString()}</p>`;
-        });
+          statusMsg.innerHTML = `<p class="error">ERROR: Server returned non-JSON response: ${xhr.responseText}</p>`;
+          return;
+        }
+
+        if (xhr.status >= 200 && xhr.status < 300) {
+          window.location.href = data.results_url || `/results/${data.user_id}`;
+        } else {
+          submitButton.disabled = false;
+          statusMsg.innerHTML = `<p class="error">ERROR: ${data.error || 'Unknown Server Error'}</p>`;
+        }
+      };
+
+      xhr.onerror = () => {
+        submitButton.disabled = false;
+        let userMsg = 'Connection failed. The server may have timed out, restarted, or exceeded memory limits during file upload. Please check network connectivity or try uploading smaller files.';
+        statusMsg.innerHTML = `<p class="error">ERROR: ${userMsg}</p>`;
+      };
+
+      xhr.send(formData);
     });
   </script>
 

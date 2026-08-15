@@ -403,6 +403,30 @@ class TestHandlePubsubPush:
         assert len(completed_update) == 1
         assert completed_update[0].get("amrrules_error") == "amrrules error"
 
+    @patch("builtins.open", mock_open())
+    @patch("worker.upload_blob", return_value="gs://output/results/job-abc/results.tsv")
+    @patch("worker.run_amrrules", return_value="amrrules success")
+    @patch("worker.run_amrfinder")
+    @patch("worker.download_blob")
+    @patch("worker.os.path.exists")
+    def test_amrrules_genome_summary_uploaded(self, mock_exists, mock_dl, mock_run_af, mock_rules, mock_ul):
+        """Worker uploads amrrules_genome_summary.tsv to GCS when produced by amrrules."""
+        mock_exists.side_effect = lambda path: "_amrrules_genome_summary.tsv" in path or "results.tsv" in path
+        mock_run_af.return_value = ""
+        mock_doc = MagicMock()
+        worker.get_firestore_client().collection.return_value.document.return_value = mock_doc
+
+        params = {"amrrules_organism": "s__Escherichia coli"}
+        payload = {"job_id": "job-amr-success", "gcs_uri": "gs://b/f.fa", "parameters": params}
+        body = _make_raw_push_body(json.dumps(payload).encode("utf-8"))
+
+        resp = flask_client.post("/", json=body)
+        assert resp.status_code == 200
+
+        upload_destinations = [c[0][1] for c in mock_ul.call_args_list]
+        assert "results/job-amr-success/amrrules_genome_summary.tsv" in upload_destinations
+
+
 
 class TestRunAmrrules:
     """Verify run_amrrules helper function command execution."""
@@ -424,3 +448,52 @@ class TestRunAmrrules:
         assert "s__Escherichia coli" in cmd
         assert "--sample-id" in cmd
         assert "job-123" in cmd
+
+    @patch("worker.subprocess.run")
+    def test_amrrules_appends_to_stderr_path(self, mock_run, tmp_path):
+        mock_run.return_value = MagicMock(returncode=0, stdout="amrrules stdout log", stderr="amrrules stderr log")
+        stderr_file = tmp_path / "test_stderr.txt"
+        stderr_file.write_text("=== AMRFinderPlus Log ===\nAMRFinder output\n")
+
+        worker.run_amrrules(
+            amrfp_output_tsv="/tmp/out.tsv",
+            amrrules_organism="s__Escherichia coli",
+            output_prefix="/tmp/prefix",
+            job_id="job-123",
+            stderr_path=str(stderr_file),
+        )
+
+        content = stderr_file.read_text()
+        assert "=== AMRFinderPlus Log ===" in content
+        assert "=== AMRrules Log ===" in content
+        assert "amrrules stderr log" in content
+        assert "amrrules stdout log" in content
+
+
+class TestUploadVersions:
+    @patch("importlib.metadata.version", return_value="1.2.3")
+    @patch("worker.subprocess.run")
+    @patch("worker.os.path.exists", return_value=True)
+    def test_upload_versions_uploads_amrrules_version(self, mock_exists, mock_run, mock_pkg_ver):
+        mock_bucket = MagicMock()
+        mock_blob = MagicMock()
+        worker.get_storage_client().bucket.return_value = mock_bucket
+        mock_bucket.blob.return_value = mock_blob
+        mock_run.return_value = MagicMock(stdout="4.2.7")
+
+        worker.upload_versions()
+
+        blob_calls = [call[0][0] for call in mock_bucket.blob.call_args_list]
+        assert "config/amrrules_version.txt" in blob_calls
+        mock_blob.upload_from_string.assert_any_call("1.2.3")
+
+    @patch("importlib.metadata.version", side_effect=Exception("Package not found"))
+    @patch("worker.subprocess.run")
+    @patch("worker.os.path.exists", return_value=False)
+    def test_upload_versions_handles_exception_gracefully(self, mock_exists, mock_run, mock_pkg_ver):
+        mock_bucket = MagicMock()
+        worker.get_storage_client().bucket.return_value = mock_bucket
+        mock_run.side_effect = Exception("Subprocess error")
+
+        # Should not raise exception
+        worker.upload_versions()

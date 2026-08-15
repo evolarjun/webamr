@@ -1,5 +1,6 @@
 import os
 import io
+import time
 import traceback
 from flask import Flask, send_file, request, jsonify, render_template, send_from_directory
 from markupsafe import escape
@@ -94,7 +95,7 @@ logging.basicConfig(level=logging.INFO)
 limiter = Limiter(
     get_remote_address,
     app=app,
-    default_limits=[],      # no global limit — only apply where decorated
+    default_limits=[],      # no global limit - only apply where decorated
     storage_uri="memory://",
 )
 
@@ -149,7 +150,7 @@ def tabulize(tab_delimited):
             hmm_acc_idx = i
 
     rows = [line.split('\t') for line in lines[1:]]
-    html = '<table><thead><tr>'
+    html = '<div class="table-container"><table><thead><tr>'
     for header in headers:
         html += f'<th>{escape(header)}</th>\n'
     html += '</tr></thead><tbody>\n'
@@ -185,7 +186,7 @@ def tabulize(tab_delimited):
                 content = escape(cell)
             html += f'<td>{content}</td>'
         html += '</tr>\n'
-    html += '</tbody></table>'
+    html += '</tbody></table></div>'
     return html
    
 def organism_select():
@@ -200,12 +201,24 @@ def organism_select():
     options = [f'<option value="{line.split()[0]}">{line.split()[0]}</option>' for line in lines[1:]]
     return '\n'.join(options)
 
-def upload_to_gcs(bucket_name, source_file_name, destination_blob_name):
-    """Uploads a file to the bucket."""
+def _get_memory_usage_mb():
+    """Returns current process max RSS memory usage in MB."""
+    try:
+        rusage = resource.getrusage(resource.RUSAGE_SELF)
+        return rusage.ru_maxrss / 1024.0
+    except Exception:
+        return 0.0
+
+def upload_to_gcs(bucket_name, source_file, destination_blob_name):
+    """Uploads a file (filename or file-like object) to the bucket."""
     storage_client = get_storage_client()
     bucket = storage_client.bucket(bucket_name)
     blob = bucket.blob(destination_blob_name)
-    blob.upload_from_filename(source_file_name)
+    if isinstance(source_file, str):
+        blob.upload_from_filename(source_file)
+    else:
+        source_file.seek(0)
+        blob.upload_from_file(source_file)
 
 def send_pubsub_message(message):
     """Sends a message to the Pub/Sub topic"""
@@ -222,6 +235,7 @@ def send_pubsub_message(message):
 # Cache the database version to avoid fetching it on every page load
 cached_db_version = None
 cached_software_version = None
+cached_amrrules_version = None
 
 @app.context_processor
 def inject_version():
@@ -234,10 +248,10 @@ def version_info():
 @app.route("/")
 def index():
     # print("Inside index!")
-    global cached_db_version, cached_software_version
+    global cached_db_version, cached_software_version, cached_amrrules_version
     organism_select_options = organism_select()
     
-    if not cached_db_version or not cached_software_version:
+    if not cached_db_version or not cached_software_version or not cached_amrrules_version:
         try:
             storage_client = get_storage_client()
             bucket = storage_client.bucket(OUTPUT_BUCKET)
@@ -248,11 +262,18 @@ def index():
                 blob = bucket.blob("config/software_version.txt")
                 cached_software_version = blob.download_as_string().decode('utf-8').strip()
                 soft_v = cached_software_version
+                try:
+                    blob = bucket.blob("config/amrrules_version.txt")
+                    cached_amrrules_version = blob.download_as_string().decode('utf-8').strip()
+                    amrrules_v = cached_amrrules_version
+                except NotFound:
+                    amrrules_v = "Run job to refresh"
             except NotFound:
                 return render_template('index.html', 
                                        organism_select=organism_select_options, 
                     database_version="Run job to refresh", 
                     software_version="Run job to refresh",
+                    amrrules_version="Run job to refresh",
                     organism_mapping=json.dumps(ORGANISM_MAPPING),
                     amrrules_species=AMRRULES_SPECIES)
         except Exception as e:
@@ -260,11 +281,13 @@ def index():
             # Don't cache error/unknown so we can retry
             db_v = "Error retrieving version"
             soft_v = "Error retrieving version"
+            amrrules_v = "Error retrieving version"
     else:
         db_v = cached_db_version
         soft_v = cached_software_version
+        amrrules_v = cached_amrrules_version
     return render_template('index.html', organism_select=organism_select_options, 
-        database_version=db_v, software_version=soft_v,
+        database_version=db_v, software_version=soft_v, amrrules_version=amrrules_v,
         organism_mapping=json.dumps(ORGANISM_MAPPING),
         amrrules_species=AMRRULES_SPECIES)
 
@@ -313,7 +336,10 @@ def _validate_job_submission(request):
     }
 
 def _save_and_upload_files(upload_folder, user_id, nuc_file, prot_file, gff_file):
-    """Saves files locally, calculates their sizes, and uploads them to GCS."""
+    """Streams uploaded files directly to GCS and logs memory metrics."""
+    mem_before = _get_memory_usage_mb()
+    logging.info(f"Starting upload for user_id={user_id}. Initial RSS Memory: {mem_before:.2f} MB")
+
     sizes = {'nuc_size': 0, 'prot_size': 0, 'gff_size': 0}
     
     files_to_process = [
@@ -325,17 +351,24 @@ def _save_and_upload_files(upload_folder, user_id, nuc_file, prot_file, gff_file
     for file_obj, size_key in files_to_process:
         if file_obj and file_obj.filename:
             filename = secure_filename(file_obj.filename)
-            filepath = os.path.join(upload_folder, filename)
-            file_obj.save(filepath)
-            sizes[size_key] = os.path.getsize(filepath)
             
-            # Upload to GCS
+            # Calculate file size without saving to disk
+            file_obj.seek(0, os.SEEK_END)
+            sizes[size_key] = file_obj.tell()
+            file_obj.seek(0)
+            
+            # Stream upload to GCS directly from memory/stream
             destination_path = os.path.join(user_id, filename)
-            upload_to_gcs(BUCKET_NAME, filepath, destination_path)
+            upload_to_gcs(BUCKET_NAME, file_obj, destination_path)
+            logging.info(f"Streamed {filename} ({sizes[size_key]} bytes) to gs://{BUCKET_NAME}/{destination_path}")
+
+    mem_after = _get_memory_usage_mb()
+    total_mb = sum(sizes.values()) / (1024.0 * 1024.0)
+    logging.info(f"Upload complete for user_id={user_id}. Total upload size: {total_mb:.2f} MB. Post-upload RSS Memory: {mem_after:.2f} MB")
             
     return sizes
 
-def _create_firestore_record(user_id, job_name, gcs_uri, params, sizes, files, client_ip):
+def _create_firestore_record(user_id, job_name, gcs_uri, params, sizes, files, client_ip, upload_duration_seconds=None):
     """Creates the initial queued job record in Firestore."""
     db = get_firestore_client()
     doc_ref = db.collection("amr_jobs").document(user_id)
@@ -359,7 +392,8 @@ def _create_firestore_record(user_id, job_name, gcs_uri, params, sizes, files, c
         "nuc_filename": secure_filename(files['nuc_file'].filename) if files['nuc_file'] else None,
         "prot_filename": secure_filename(files['prot_file'].filename) if files['prot_file'] else None,
         "gff_filename": secure_filename(files['gff_file'].filename) if files['gff_file'] else None,
-        "ip_address": client_ip
+        "ip_address": client_ip,
+        "upload_duration_seconds": upload_duration_seconds
     })
 
 
@@ -396,7 +430,9 @@ def analyze_file():
         if annotation_format not in ALLOWED_ANNOTATION_FORMATS:
             annotation_format = "standard"
 
+        upload_start = time.time()
         sizes = _save_and_upload_files(upload_folder, user_id, nuc_file, prot_file, gff_file)
+        upload_duration_seconds = round(time.time() - upload_start, 2)
 
         main_filename = ""
         if nuc_file:
@@ -434,7 +470,7 @@ def analyze_file():
             client_ip = get_remote_address()
 
         files_dict = {'nuc_file': nuc_file, 'prot_file': prot_file, 'gff_file': gff_file}
-        _create_firestore_record(user_id, job_name, gcs_uri, params, sizes, files_dict, client_ip)
+        _create_firestore_record(user_id, job_name, gcs_uri, params, sizes, files_dict, client_ip, upload_duration_seconds)
 
         message_data = {
             "job_id": user_id,
@@ -503,7 +539,10 @@ def results_page(job_id):
             stderr_available = bucket.blob(f'results/{job_id}/stderr.txt').exists()
             nucleotide_available = bucket.blob(f'results/{job_id}/nucleotide.fna').exists()
             protein_available = bucket.blob(f'results/{job_id}/protein.faa').exists()
-            amrrules_summary_available = bucket.blob(f'results/{job_id}/amrrules_summary.tsv').exists()
+            amrrules_summary_available = (
+                bucket.blob(f'results/{job_id}/amrrules_genome_summary.tsv').exists() or
+                bucket.blob(f'results/{job_id}/amrrules_summary.tsv').exists()
+            )
             amrrules_interpreted_available = bucket.blob(f'results/{job_id}/amrrules_interpreted.tsv').exists()
         except Exception as e:
             print(f"Error fetching results from GCS for completed job {job_id}: {e}")
@@ -549,20 +588,36 @@ def results_page(job_id):
 @app.route('/get-results/<user_id>', methods=['GET'])
 def return_results(user_id):
     """Returns the results of the analysis if they're available"""
+    db = get_firestore_client()
+    doc = db.collection("amr_jobs").document(user_id).get()
+
+    if doc.exists:
+        job_data = doc.to_dict()
+        status = job_data.get("status", "Queued")
+        if status == "Failed":
+            storage_client = get_storage_client()
+            bucket = storage_client.bucket(OUTPUT_BUCKET)
+            stderr_available = bool(bucket.blob(f'results/{user_id}/stderr.txt').exists())
+            error_msg = job_data.get("error_message", "Unknown error")
+            return jsonify({'error': f"Analysis failed: {error_msg}", 'stderr_available': stderr_available}), 500
+        if status in ("Queued", "Processing"):
+            return jsonify({'status': status}), 200
+
     storage_client = get_storage_client()
     bucket = storage_client.bucket(OUTPUT_BUCKET)
     blob = bucket.blob(f'results/{user_id}/results.tsv')
     stderr_available = bool(bucket.blob(f'results/{user_id}/stderr.txt').exists())
     nucleotide_available = bool(bucket.blob(f'results/{user_id}/nucleotide.fna').exists())
     protein_available = bool(bucket.blob(f'results/{user_id}/protein.faa').exists())
-    amrrules_summary_available = bool(bucket.blob(f'results/{user_id}/amrrules_summary.tsv').exists())
+    amrrules_summary_available = bool(
+        bucket.blob(f'results/{user_id}/amrrules_genome_summary.tsv').exists() or
+        bucket.blob(f'results/{user_id}/amrrules_summary.tsv').exists()
+    )
     amrrules_interpreted_available = bool(bucket.blob(f'results/{user_id}/amrrules_interpreted.tsv').exists())
     try:
         results = tabulize(blob.download_as_bytes())
         
         # Fetch job metadata for additional status fields
-        db = get_firestore_client()
-        doc = db.collection("amr_jobs").document(user_id).get()
         job = doc.to_dict() if doc.exists else {}
         
         worker_version = job.get('worker_version', 'unknown')
@@ -580,23 +635,12 @@ def return_results(user_id):
             'worker_version': worker_version
         }), 200
     except NotFound:
-        # Check job status in Firestore
-        try:
-            db = get_firestore_client()
-            doc = db.collection("amr_jobs").document(user_id).get()
-            if doc.exists:
-                job_data = doc.to_dict()
-                status = job_data.get("status", "Queued")
-                if status == "Failed":
-                    error_msg = job_data.get("error_message", "Unknown error")
-                    return jsonify({'error': f"Analysis failed: {error_msg}", 'stderr_available': stderr_available}), 500
-                if status == "Completed":
-                    # Job completed but result files have been cleaned up
-                    return jsonify({'status': 'Expired'}), 200
-                # Job is still pending (Queued or Processing)
-                return jsonify({'status': status}), 200
-        except Exception as e:
-            print(f"Error checking Firestore in return_results: {e}")
+        if doc.exists:
+            job_data = doc.to_dict()
+            status = job_data.get("status", "Queued")
+            if status == "Completed":
+                # Job completed but result files have been cleaned up
+                return jsonify({'status': 'Expired'}), 200
 
         return '', 204
 
@@ -645,15 +689,74 @@ def protein_output(user_id):
     """Serves the protein FASTA output file."""
     return _serve_gcs_result_file(user_id, 'protein.faa', 'text/plain')
 
+def _render_tsv_table_view(user_id, filename_candidates, page_title):
+    """Helper to serve an HTML table view of a TSV file with a download button, or raw download."""
+    storage_client = get_storage_client()
+    bucket = storage_client.bucket(OUTPUT_BUCKET)
+
+    target_fn = None
+    blob = None
+    for fn in filename_candidates:
+        b = bucket.blob(f'results/{user_id}/{fn}')
+        if b.exists():
+            target_fn = fn
+            blob = b
+            break
+
+    if not blob:
+        return render_template('404.html', url=request.url), 404
+
+    if request.args.get('download') or request.args.get('raw'):
+        return _serve_gcs_result_file(user_id, target_fn, 'text/plain', as_attachment=True)
+
+    job_name = None
+    worker_version = "unknown"
+    try:
+        db = get_firestore_client()
+        doc = db.collection("amr_jobs").document(user_id).get()
+        if doc.exists:
+            job_data = doc.to_dict()
+            job_name = job_data.get("job_name")
+            worker_version = job_data.get("worker_version", "unknown")
+    except Exception as e:
+        logging.warning(f"Error fetching Firestore doc for {user_id}: {e}")
+
+    try:
+        tsv_bytes = blob.download_as_bytes()
+        table_html = tabulize(tsv_bytes)
+        return render_template(
+            'table_view.html',
+            page_title=page_title,
+            job_id=user_id,
+            job_name=job_name,
+            filename=target_fn,
+            table_html=table_html,
+            worker_version=worker_version
+        )
+    except NotFound:
+        return render_template('404.html', url=request.url), 404
+    except Exception as e:
+        logging.error(f"Error rendering table view for {user_id}: {e}", exc_info=True)
+        return jsonify({'error': 'Failed to render table view.'}), 500
+
 @app.route('/amrrules-summary/<user_id>')
+@app.route('/amrrules-genome-summary/<user_id>')
 def amrrules_summary_output(user_id):
-    """Serves the AMRrules summary TSV output file."""
-    return _serve_gcs_result_file(user_id, 'amrrules_summary.tsv', 'text/plain', as_attachment=True)
+    """Serves the AMRrules genome summary table view or TSV download."""
+    return _render_tsv_table_view(
+        user_id,
+        ['amrrules_genome_summary.tsv', 'amrrules_summary.tsv'],
+        'AMRrules Genome Summary'
+    )
 
 @app.route('/amrrules-interpreted/<user_id>')
 def amrrules_interpreted_output(user_id):
-    """Serves the AMRrules interpreted TSV output file."""
-    return _serve_gcs_result_file(user_id, 'amrrules_interpreted.tsv', 'text/plain', as_attachment=True)
+    """Serves the AMRrules interpreted table view or TSV download."""
+    return _render_tsv_table_view(
+        user_id,
+        ['amrrules_interpreted.tsv'],
+        'AMRrules Interpreted Results'
+    )
 
 @app.route('/input/<job_id>/<filename>')
 def input_file(job_id, filename):

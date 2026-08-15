@@ -113,13 +113,21 @@ class TestIndex:
         # Reset cached versions so each test starts clean
         main.cached_db_version = None
         main.cached_software_version = None
+        main.cached_amrrules_version = None
 
-        # Default: both version blobs exist
+        # Default: all version blobs exist
         db_blob = _make_blob(exists=True, content=b"2024-01-01.2")
         sw_blob = _make_blob(exists=True, content=b"4.2.7")
-        MOCK_STORAGE.bucket.return_value.blob.side_effect = lambda name: (
-            db_blob if "database_version" in name else sw_blob
-        )
+        amr_blob = _make_blob(exists=True, content=b"1.2.3")
+        
+        def get_blob(name):
+            if "database_version" in name:
+                return db_blob
+            elif "software_version" in name:
+                return sw_blob
+            return amr_blob
+
+        MOCK_STORAGE.bucket.return_value.blob.side_effect = get_blob
 
     def test_returns_200(self):
         resp = client.get("/")
@@ -137,9 +145,14 @@ class TestIndex:
         resp = client.get("/")
         assert b"4.2.7" in resp.data
 
+    def test_shows_amrrules_version(self):
+        resp = client.get("/")
+        assert b"1.2.3" in resp.data
+
     def test_pending_when_db_blob_missing(self):
         main.cached_db_version = None
         main.cached_software_version = None
+        main.cached_amrrules_version = None
         MOCK_STORAGE.bucket.return_value.blob.side_effect = None
         MOCK_STORAGE.bucket.return_value.blob.return_value = _make_blob(exists=False)
         resp = client.get("/")
@@ -149,10 +162,26 @@ class TestIndex:
     def test_pending_when_software_blob_missing(self):
         main.cached_db_version = None
         main.cached_software_version = None
+        main.cached_amrrules_version = None
         db_blob = _make_blob(exists=True, content=b"2024-01-01.2")
         sw_blob = _make_blob(exists=False)
+        amr_blob = _make_blob(exists=True, content=b"1.2.3")
         MOCK_STORAGE.bucket.return_value.blob.side_effect = lambda name: (
-            db_blob if "database_version" in name else sw_blob
+            db_blob if "database_version" in name else (sw_blob if "software_version" in name else amr_blob)
+        )
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert b"Run job to refresh" in resp.data
+
+    def test_pending_when_amrrules_blob_missing(self):
+        main.cached_db_version = None
+        main.cached_software_version = None
+        main.cached_amrrules_version = None
+        db_blob = _make_blob(exists=True, content=b"2024-01-01.2")
+        sw_blob = _make_blob(exists=True, content=b"4.2.7")
+        amr_blob = _make_blob(exists=False)
+        MOCK_STORAGE.bucket.return_value.blob.side_effect = lambda name: (
+            db_blob if "database_version" in name else (sw_blob if "software_version" in name else amr_blob)
         )
         resp = client.get("/")
         assert resp.status_code == 200
@@ -161,6 +190,7 @@ class TestIndex:
     def test_unknown_when_db_fetch_raises_exception(self):
         main.cached_db_version = None
         main.cached_software_version = None
+        main.cached_amrrules_version = None
         MOCK_STORAGE.bucket.return_value.blob.side_effect = Exception("Storage error")
         resp = client.get("/")
         assert resp.status_code == 200
@@ -169,6 +199,7 @@ class TestIndex:
     def test_unknown_when_software_fetch_raises_exception(self):
         main.cached_db_version = None
         main.cached_software_version = None
+        main.cached_amrrules_version = None
         db_blob = _make_blob(exists=True, content=b"2024-01-01.2")
 
         def side_effect(name):
@@ -313,6 +344,14 @@ class TestAnalyze:
         assert set_data["nuc_filename"] == "sequence1.fasta"
         assert set_data["prot_filename"] == "protein_2.fasta"
         assert set_data["gff_filename"] == "anno-1.gff"
+
+    def test_firestore_doc_includes_upload_duration_seconds(self):
+        mock_doc = MagicMock()
+        MOCK_FIRESTORE.collection.return_value.document.return_value = mock_doc
+        self._post_analyze(nuc_file=True)
+        set_data = mock_doc.set.call_args[0][0]
+        assert "upload_duration_seconds" in set_data
+        assert isinstance(set_data["upload_duration_seconds"], float)
 
     def test_firestore_doc_set_to_pending(self):
         mock_doc = MagicMock()
@@ -483,6 +522,20 @@ class TestGetResults:
         resp = client.get("/get-results/test-job-id")
         assert resp.status_code == 200
         assert resp.get_json()["status"] == "Queued"
+
+    def test_returns_processing_status_even_if_results_tsv_exists(self):
+        blob = _make_blob(exists=True, content=self.TSV_CONTENT)
+        MOCK_STORAGE.bucket.return_value.blob.side_effect = None
+        MOCK_STORAGE.bucket.return_value.blob.return_value = blob
+
+        mock_doc = MagicMock(exists=True)
+        mock_doc.to_dict.return_value = {"status": "Processing"}
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = mock_doc
+
+        resp = client.get("/get-results/test-job-id")
+        assert resp.status_code == 200
+        assert resp.get_json()["status"] == "Processing"
+        assert "result" not in resp.get_json()
 
     def test_returns_500_when_job_failed(self):
         blob = _make_blob(exists=False)
@@ -958,18 +1011,72 @@ class TestAMRrulesIntegration:
         msg = json.loads(message_bytes.decode("utf-8"))
         assert msg["parameters"].get("amrrules_organism") == "s__Enterobacter hormaechei"
 
-    def test_amrrules_summary_download_route(self):
-        """GET /amrrules-summary/<id> returns attachment when file exists."""
-        mock_blob = _make_blob(exists=True, content=b"gene\tdrug\tinterpretation\n")
+    def test_amrrules_summary_table_view_route(self):
+        """GET /amrrules-summary/<id> returns HTML table view with download button."""
+        mock_blob = _make_blob(exists=True, content=b"gene\tdrug\tinterpretation\ngyrA\tCiprofloxacin\tResistant\n")
         MOCK_STORAGE.bucket.return_value.blob.return_value = mock_blob
         resp = client.get("/amrrules-summary/job-123")
         assert resp.status_code == 200
-        assert b"gene\tdrug" in resp.data
+        assert b"AMRrules Genome Summary" in resp.data
+        assert b"<table" in resp.data
+        assert b"Download amrrules_genome_summary.tsv" in resp.data
+        assert b"Back to Results" in resp.data
+        assert b"gyrA" in resp.data
+        assert b"Ciprofloxacin" in resp.data
 
-    def test_amrrules_interpreted_download_route(self):
-        """GET /amrrules-interpreted/<id> returns attachment when file exists."""
+    def test_amrrules_summary_download_route(self):
+        """GET /amrrules-summary/<id>?download=true returns attachment when file exists."""
         mock_blob = _make_blob(exists=True, content=b"gene\tdrug\tinterpretation\n")
+        MOCK_STORAGE.bucket.return_value.blob.return_value = mock_blob
+        resp = client.get("/amrrules-summary/job-123?download=true")
+        assert resp.status_code == 200
+        assert b"gene\tdrug" in resp.data
+        assert "attachment" in resp.headers.get("Content-Disposition", "")
+
+    def test_amrrules_interpreted_table_view_route(self):
+        """GET /amrrules-interpreted/<id> returns HTML table view with download button."""
+        mock_blob = _make_blob(exists=True, content=b"gene\tdrug\tinterpretation\nblaCTX-M\tCefotaxime\tResistant\n")
         MOCK_STORAGE.bucket.return_value.blob.return_value = mock_blob
         resp = client.get("/amrrules-interpreted/job-123")
         assert resp.status_code == 200
+        assert b"AMRrules Interpreted Results" in resp.data
+        assert b"<table" in resp.data
+        assert b"Download amrrules_interpreted.tsv" in resp.data
+        assert b"Back to Results" in resp.data
+        assert b"blaCTX-M" in resp.data
+
+    def test_amrrules_interpreted_download_route(self):
+        """GET /amrrules-interpreted/<id>?download=true returns attachment when file exists."""
+        mock_blob = _make_blob(exists=True, content=b"gene\tdrug\tinterpretation\n")
+        MOCK_STORAGE.bucket.return_value.blob.return_value = mock_blob
+        resp = client.get("/amrrules-interpreted/job-123?download=true")
+        assert resp.status_code == 200
         assert b"gene\tdrug" in resp.data
+        assert "attachment" in resp.headers.get("Content-Disposition", "")
+
+    def test_amrrules_table_view_404_when_missing(self):
+        """GET /amrrules-summary/<id> returns 404 when file does not exist."""
+        mock_blob = _make_blob(exists=False)
+        MOCK_STORAGE.bucket.return_value.blob.return_value = mock_blob
+        resp = client.get("/amrrules-summary/job-missing")
+        assert resp.status_code == 404
+
+    def test_results_page_renders_amrrules_summary_and_interpreted_links(self):
+        """Completed results page renders amrrules_summary.tsv and amrrules_interpreted.tsv link text."""
+        doc = MagicMock()
+        doc.exists = True
+        doc.to_dict.return_value = {
+            "job_id": "amr-job-123",
+            "status": "Completed",
+            "result_uri": "gs://bucket/results.tsv",
+            "created_at": datetime(2026, 5, 29, 9, 0, 0, tzinfo=timezone.utc)
+        }
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = doc
+        mock_blob = _make_blob(exists=True, content=b"Gene\tDrug\n")
+        MOCK_STORAGE.bucket.return_value.blob.return_value = mock_blob
+
+        resp = client.get("/results/amr-job-123")
+        assert resp.status_code == 200
+        assert b"amrrules_genome_summary.tsv" in resp.data
+        assert b"amrrules_interpreted.tsv" in resp.data
+

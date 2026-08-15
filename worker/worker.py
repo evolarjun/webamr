@@ -11,8 +11,6 @@ import os
 import re
 import json
 import base64
-import gzip
-import shutil
 import subprocess
 import threading
 from flask import Flask, request, jsonify
@@ -68,6 +66,16 @@ def upload_versions():
         software_blob.upload_from_string(software_version)
     except Exception as e:
         print(f"Failed to get/upload software version: {e}")
+
+    # Upload AMRrules Version
+    try:
+        import importlib.metadata
+        print(f"Uploading AMRrules version to gs://{OUTPUT_BUCKET}/config/amrrules_version.txt")
+        amrrules_version = importlib.metadata.version("amrrules")
+        amrrules_blob = bucket.blob("config/amrrules_version.txt")
+        amrrules_blob.upload_from_string(amrrules_version)
+    except Exception as e:
+        print(f"Failed to get/upload amrrules version: {e}")
 
 # Upload config once on container cold-start in a background thread to avoid blocking Gunicorn startup
 try:
@@ -157,7 +165,11 @@ def run_amrfinder(
 
     # Always save stderr to a file so it can be uploaded and reviewed
     with open(stderr_path, "w") as f:
-        f.write(result.stderr)
+        f.write("=== AMRFinderPlus Log ===\n")
+        if result.stderr:
+            f.write(result.stderr)
+        if result.stdout:
+            f.write("\n" + result.stdout)
 
     if result.returncode != 0:
         raise Exception(f"AMRFinderPlus failed: {result.stderr}")
@@ -165,7 +177,7 @@ def run_amrfinder(
     return result.stdout
 
 
-def run_amrrules(*, amrfp_output_tsv, amrrules_organism, output_prefix, job_id):
+def run_amrrules(*, amrfp_output_tsv, amrrules_organism, output_prefix, job_id, stderr_path=None):
     """Build and execute the amrrules command on AMRFinderPlus output."""
     cmd = [
         "amrrules",
@@ -177,6 +189,17 @@ def run_amrrules(*, amrfp_output_tsv, amrrules_organism, output_prefix, job_id):
 
     print(f"Executing AMRrules: {' '.join(cmd)}")
     result = subprocess.run(cmd, capture_output=True, text=True)
+
+    if stderr_path and os.path.exists(stderr_path):
+        try:
+            with open(stderr_path, "a") as f:
+                f.write("\n\n=== AMRrules Log ===\n")
+                if result.stderr:
+                    f.write(result.stderr)
+                if result.stdout:
+                    f.write("\n" + result.stdout)
+        except Exception as log_err:
+            print(f"Failed to append AMRrules log to stderr_path: {log_err}")
 
     if result.returncode != 0:
         raise Exception(f"AMRrules failed: {result.stderr}")
@@ -299,16 +322,6 @@ def handle_pubsub_push():
         _log(job_id, "Updating status to Processing...")
         doc_ref.update({"status": "Processing"})
 
-        def _decompress_if_gzipped(local_path):
-            if local_path and local_path.endswith(".gz"):
-                uncompressed = local_path[:-3]
-                with gzip.open(local_path, "rb") as f_in:
-                    with open(uncompressed, "wb") as f_out:
-                        shutil.copyfileobj(f_in, f_out)
-                cleanup_paths.append(uncompressed)
-                return uncompressed
-            return local_path
-
         # Download each named input file (nucleotide, protein, GFF) if provided
         for attr, filename in [("nuc", nuc_filename), ("prot", prot_filename), ("gff", gff_filename)]:
             if not filename:
@@ -316,13 +329,12 @@ def handle_pubsub_push():
             local_path = f"/tmp/{job_id}_{filename}"
             download_blob(f"{base_gcs_uri}/{filename}", local_path)
             cleanup_paths.append(local_path)
-            decompressed_path = _decompress_if_gzipped(local_path)
             if attr == "nuc":
-                local_nuc_input = decompressed_path
+                local_nuc_input = local_path
             elif attr == "prot":
-                local_prot_input = decompressed_path
+                local_prot_input = local_path
             elif attr == "gff":
-                local_gff_input = decompressed_path
+                local_gff_input = local_path
 
         # Legacy fallback: older Pub/Sub messages send a single gcs_uri
         # without separate nuc_filename/prot_filename fields.
@@ -332,12 +344,10 @@ def handle_pubsub_push():
                 local_prot_input = f"/tmp/{job_id}_input.fasta"
                 download_blob(gcs_uri, local_prot_input)
                 cleanup_paths.append(local_prot_input)
-                local_prot_input = _decompress_if_gzipped(local_prot_input)
             else:
                 local_nuc_input = f"/tmp/{job_id}_input.fasta"
                 download_blob(gcs_uri, local_nuc_input)
                 cleanup_paths.append(local_nuc_input)
-                local_nuc_input = _decompress_if_gzipped(local_nuc_input)
 
         run_amrfinder(
             nuc_input=local_nuc_input,
@@ -351,7 +361,6 @@ def handle_pubsub_push():
         )
 
         upload_blob(local_output, f"results/{job_id}/results.tsv")
-        upload_blob(local_stderr, f"results/{job_id}/stderr.txt")
 
         if os.path.exists(local_nuc):
             upload_blob(local_nuc, f"results/{job_id}/nucleotide.fna")
@@ -362,9 +371,10 @@ def handle_pubsub_push():
         amrrules_error_msg = None
         if amrrules_organism:
             amrrules_prefix = f"/tmp/{job_id}_amrrules"
+            local_genome_summary = f"{amrrules_prefix}_genome_summary.tsv"
             local_summary = f"{amrrules_prefix}_summary.tsv"
             local_interpreted = f"{amrrules_prefix}_interpreted.tsv"
-            cleanup_paths.extend([local_summary, local_interpreted])
+            cleanup_paths.extend([local_genome_summary, local_summary, local_interpreted])
             try:
                 _log(job_id, f"Running AMRrules for organism '{amrrules_organism}'...")
                 run_amrrules(
@@ -372,14 +382,22 @@ def handle_pubsub_push():
                     amrrules_organism=amrrules_organism,
                     output_prefix=amrrules_prefix,
                     job_id=job_id,
+                    stderr_path=local_stderr,
                 )
-                if os.path.exists(local_summary):
+                if os.path.exists(local_genome_summary):
+                    upload_blob(local_genome_summary, f"results/{job_id}/amrrules_genome_summary.tsv")
+                    upload_blob(local_genome_summary, f"results/{job_id}/amrrules_summary.tsv")
+                elif os.path.exists(local_summary):
+                    upload_blob(local_summary, f"results/{job_id}/amrrules_genome_summary.tsv")
                     upload_blob(local_summary, f"results/{job_id}/amrrules_summary.tsv")
                 if os.path.exists(local_interpreted):
                     upload_blob(local_interpreted, f"results/{job_id}/amrrules_interpreted.tsv")
             except Exception as amr_err:
                 _log(job_id, f"AMRrules soft failure: {amr_err}")
                 amrrules_error_msg = str(amr_err)
+
+        if os.path.exists(local_stderr):
+            upload_blob(local_stderr, f"results/{job_id}/stderr.txt")
 
         # Mark job as completed
         update_data = {
