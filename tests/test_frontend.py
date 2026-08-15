@@ -1062,7 +1062,7 @@ class TestAMRrulesIntegration:
         assert resp.status_code == 404
 
     def test_results_page_renders_amrrules_summary_and_interpreted_links(self):
-        """Completed results page renders amrrules_summary.tsv and amrrules_interpreted.tsv link text."""
+        """Completed results page renders amrrules links in the same tab and displays versions."""
         doc = MagicMock()
         doc.exists = True
         doc.to_dict.return_value = {
@@ -1079,4 +1079,55 @@ class TestAMRrulesIntegration:
         assert resp.status_code == 200
         assert b"amrrules_genome_summary.tsv" in resp.data
         assert b"amrrules_interpreted.tsv" in resp.data
+        assert b'<a href="/amrrules-summary/amr-job-123">amrrules_genome_summary.tsv</a>' in resp.data
+        assert b'<a href="/amrrules-interpreted/amr-job-123">amrrules_interpreted.tsv</a>' in resp.data
+        assert b"AMRFinderPlus" in resp.data
+        assert b"database version" in resp.data
+
+    def test_results_page_renders_stored_job_versions(self):
+        """Results page prioritizes versions recorded in Firestore over global config versions."""
+        doc = MagicMock()
+        doc.exists = True
+        doc.to_dict.return_value = {
+            "job_id": "amr-job-legacy",
+            "status": "Completed",
+            "result_uri": "gs://bucket/results.tsv",
+            "software_version": "3.10.5",
+            "database_version": "2023-08-08.1",
+            "amrrules_version": "0.1.2",
+            "created_at": datetime(2026, 5, 29, 9, 0, 0, tzinfo=timezone.utc)
+        }
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = doc
+        mock_blob = _make_blob(exists=True, content=b"Gene\tDrug\n")
+        MOCK_STORAGE.bucket.return_value.blob.return_value = mock_blob
+
+        resp = client.get("/results/amr-job-legacy")
+        assert resp.status_code == 200
+        assert b"3.10.5" in resp.data
+        assert b"2023-08-08.1" in resp.data
+        assert b"0.1.2" in resp.data
+
+    def test_get_results_returns_recorded_versions(self):
+        """GET /get-results/<id> returns recorded software, db, and amrrules versions."""
+        doc = MagicMock()
+        doc.exists = True
+        doc.to_dict.return_value = {
+            "job_id": "amr-job-789",
+            "status": "Completed",
+            "software_version": "3.12.0",
+            "database_version": "2024-05-02.1",
+            "amrrules_version": "0.3.1",
+            "worker_version": "0.2.16",
+        }
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = doc
+        mock_blob = _make_blob(exists=True, content=b"Header1\tHeader2\nVal1\tVal2\n")
+        MOCK_STORAGE.bucket.return_value.blob.return_value = mock_blob
+
+        resp = client.get("/get-results/amr-job-789")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["software_version"] == "3.12.0"
+        assert data["database_version"] == "2024-05-02.1"
+        assert data["amrrules_version"] == "0.3.1"
+        assert data["worker_version"] == "0.2.16"
 

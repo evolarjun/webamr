@@ -245,47 +245,41 @@ def inject_version():
 def version_info():
     return jsonify({"frontend_version": APP_VERSION})
 
-@app.route("/")
-def index():
-    # print("Inside index!")
+def _get_versions():
+    """Retrieve or cache AMRFinderPlus DB, software, and AMRrules versions from GCS."""
     global cached_db_version, cached_software_version, cached_amrrules_version
-    organism_select_options = organism_select()
-    
     if not cached_db_version or not cached_software_version or not cached_amrrules_version:
         try:
             storage_client = get_storage_client()
             bucket = storage_client.bucket(OUTPUT_BUCKET)
             try:
-                blob = bucket.blob("config/database_version.txt")
-                cached_db_version = blob.download_as_string().decode('utf-8').strip()
-                db_v = cached_db_version
-                blob = bucket.blob("config/software_version.txt")
-                cached_software_version = blob.download_as_string().decode('utf-8').strip()
-                soft_v = cached_software_version
-                try:
-                    blob = bucket.blob("config/amrrules_version.txt")
-                    cached_amrrules_version = blob.download_as_string().decode('utf-8').strip()
-                    amrrules_v = cached_amrrules_version
-                except NotFound:
-                    amrrules_v = "Run job to refresh"
+                if not cached_db_version:
+                    blob = bucket.blob("config/database_version.txt")
+                    cached_db_version = blob.download_as_string().decode('utf-8').strip()
+                if not cached_software_version:
+                    blob = bucket.blob("config/software_version.txt")
+                    cached_software_version = blob.download_as_string().decode('utf-8').strip()
+                if not cached_amrrules_version:
+                    try:
+                        blob = bucket.blob("config/amrrules_version.txt")
+                        cached_amrrules_version = blob.download_as_string().decode('utf-8').strip()
+                    except NotFound:
+                        cached_amrrules_version = "Run job to refresh"
             except NotFound:
-                return render_template('index.html', 
-                                       organism_select=organism_select_options, 
-                    database_version="Run job to refresh", 
-                    software_version="Run job to refresh",
-                    amrrules_version="Run job to refresh",
-                    organism_mapping=json.dumps(ORGANISM_MAPPING),
-                    amrrules_species=AMRRULES_SPECIES)
+                return "Run job to refresh", "Run job to refresh", "Run job to refresh"
         except Exception as e:
-            print(f"Error fetching DB version: {e}")
-            # Don't cache error/unknown so we can retry
-            db_v = "Error retrieving version"
-            soft_v = "Error retrieving version"
-            amrrules_v = "Error retrieving version"
-    else:
-        db_v = cached_db_version
-        soft_v = cached_software_version
-        amrrules_v = cached_amrrules_version
+            print(f"Error fetching versions: {e}")
+            return "Error retrieving version", "Error retrieving version", "Error retrieving version"
+    return (
+        cached_db_version or "unknown",
+        cached_software_version or "unknown",
+        cached_amrrules_version or "unknown"
+    )
+
+@app.route("/")
+def index():
+    organism_select_options = organism_select()
+    db_v, soft_v, amrrules_v = _get_versions()
     return render_template('index.html', organism_select=organism_select_options, 
         database_version=db_v, software_version=soft_v, amrrules_version=amrrules_v,
         organism_mapping=json.dumps(ORGANISM_MAPPING),
@@ -563,6 +557,17 @@ def results_page(job_id):
         except Exception as e:
             print(f"Error calculating retention date: {e}")
 
+    db_v = job_data.get("database_version")
+    soft_v = job_data.get("software_version")
+    amrrules_v = job_data.get("amrrules_version")
+
+    # Fallback to current config versions only for legacy jobs that didn't record them
+    if not db_v or not soft_v or not amrrules_v:
+        curr_db_v, curr_soft_v, curr_amrrules_v = _get_versions()
+        db_v = db_v or curr_db_v
+        soft_v = soft_v or curr_soft_v
+        amrrules_v = amrrules_v or curr_amrrules_v
+
     return render_template(
         'results.html',
         job_id=job_id,
@@ -581,7 +586,10 @@ def results_page(job_id):
         amrrules_error=amrrules_error,
         created_at=job_data.get("created_at").isoformat() if hasattr(job_data.get("created_at"), "isoformat") else None,
         retention_date=retention_date_str,
-        worker_version=job_data.get("worker_version", "unknown")
+        worker_version=job_data.get("worker_version", "unknown"),
+        database_version=db_v,
+        software_version=soft_v,
+        amrrules_version=amrrules_v,
     )
 
 
@@ -622,6 +630,9 @@ def return_results(user_id):
         
         worker_version = job.get('worker_version', 'unknown')
         amrrules_error = job.get('amrrules_error', None)
+        software_version = job.get('software_version')
+        database_version = job.get('database_version')
+        amrrules_version = job.get('amrrules_version')
 
         return jsonify({
             'result': results, 
@@ -632,7 +643,10 @@ def return_results(user_id):
             'amrrules_summary_available': amrrules_summary_available,
             'amrrules_interpreted_available': amrrules_interpreted_available,
             'amrrules_error': amrrules_error,
-            'worker_version': worker_version
+            'worker_version': worker_version,
+            'software_version': software_version,
+            'database_version': database_version,
+            'amrrules_version': amrrules_version
         }), 200
     except NotFound:
         if doc.exists:

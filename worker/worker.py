@@ -43,39 +43,76 @@ def get_firestore_client():
     return _firestore_client
 
 
-def upload_versions():
-    """Uploads the local AMRFinder database and software versions to GCS configuration path."""
-    storage_client = get_storage_client()
-    bucket = storage_client.bucket(OUTPUT_BUCKET)
-    
-    # Upload Database Version
-    version_file = "/etc/amrfinder_db_version.txt"
-    if os.path.exists(version_file):
-        print(f"Uploading AMRFinder DB version to gs://{OUTPUT_BUCKET}/config/database_version.txt")
-        blob = bucket.blob("config/database_version.txt")
-        blob.upload_from_filename(version_file)
-    else:
-        print("WARNING: Could not find /etc/amrfinder_db_version.txt!")
-
-    # Upload Software Version
+def get_installed_versions():
+    """Returns a dict of the currently installed tool and database versions."""
+    db_version = None
     try:
-        print(f"Uploading AMRFinder software version to gs://{OUTPUT_BUCKET}/config/software_version.txt")
+        result = subprocess.run(["amrfinder", "--database_version"], capture_output=True, text=True, check=True)
+        db_version = result.stdout.strip()
+    except Exception as e:
+        version_file = "/etc/amrfinder_db_version.txt"
+        if os.path.exists(version_file):
+            try:
+                with open(version_file, "r") as f:
+                    db_version = f.read().strip()
+            except Exception as read_err:
+                print(f"Failed to read {version_file}: {read_err}")
+        else:
+            print(f"Failed to get amrfinder database version: {e}")
+
+    software_version = None
+    try:
         result = subprocess.run(["amrfinder", "--version"], capture_output=True, text=True, check=True)
         software_version = result.stdout.strip()
-        software_blob = bucket.blob("config/software_version.txt")
-        software_blob.upload_from_string(software_version)
     except Exception as e:
-        print(f"Failed to get/upload software version: {e}")
+        print(f"Failed to get amrfinder software version: {e}")
 
-    # Upload AMRrules Version
+    amrrules_version = None
     try:
         import importlib.metadata
-        print(f"Uploading AMRrules version to gs://{OUTPUT_BUCKET}/config/amrrules_version.txt")
         amrrules_version = importlib.metadata.version("amrrules")
-        amrrules_blob = bucket.blob("config/amrrules_version.txt")
-        amrrules_blob.upload_from_string(amrrules_version)
     except Exception as e:
-        print(f"Failed to get/upload amrrules version: {e}")
+        print(f"Failed to get amrrules version: {e}")
+
+    return {
+        "database_version": db_version,
+        "software_version": software_version,
+        "amrrules_version": amrrules_version,
+    }
+
+
+def upload_versions():
+    """Uploads the local AMRFinder database, software, and AMRrules versions to GCS configuration path."""
+    storage_client = get_storage_client()
+    bucket = storage_client.bucket(OUTPUT_BUCKET)
+    versions = get_installed_versions()
+
+    # Upload Database Version
+    if versions.get("database_version"):
+        try:
+            print(f"Uploading AMRFinder DB version to gs://{OUTPUT_BUCKET}/config/database_version.txt")
+            blob = bucket.blob("config/database_version.txt")
+            blob.upload_from_string(versions["database_version"])
+        except Exception as e:
+            print(f"Failed to upload DB version: {e}")
+
+    # Upload Software Version
+    if versions.get("software_version"):
+        try:
+            print(f"Uploading AMRFinder software version to gs://{OUTPUT_BUCKET}/config/software_version.txt")
+            software_blob = bucket.blob("config/software_version.txt")
+            software_blob.upload_from_string(versions["software_version"])
+        except Exception as e:
+            print(f"Failed to upload software version: {e}")
+
+    # Upload AMRrules Version
+    if versions.get("amrrules_version"):
+        try:
+            print(f"Uploading AMRrules version to gs://{OUTPUT_BUCKET}/config/amrrules_version.txt")
+            amrrules_blob = bucket.blob("config/amrrules_version.txt")
+            amrrules_blob.upload_from_string(versions["amrrules_version"])
+        except Exception as e:
+            print(f"Failed to upload amrrules version: {e}")
 
 # Upload config once on container cold-start in a background thread to avoid blocking Gunicorn startup
 try:
@@ -400,10 +437,14 @@ def handle_pubsub_push():
             upload_blob(local_stderr, f"results/{job_id}/stderr.txt")
 
         # Mark job as completed
+        versions = get_installed_versions()
         update_data = {
             "status": "Completed",
             "result_uri": f"gs://{OUTPUT_BUCKET}/results/{job_id}/results.tsv",
             "worker_version": APP_VERSION,
+            "software_version": versions.get("software_version"),
+            "database_version": versions.get("database_version"),
+            "amrrules_version": versions.get("amrrules_version"),
             "error_message": None,
             "amrrules_error": amrrules_error_msg,
         }

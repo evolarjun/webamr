@@ -21,6 +21,8 @@
     &nbsp;<button onclick="copyLink()" title="Copy link">Copy link</button> &nbsp;&nbsp; data will be retained on the server until {{ retention_date }} <br />
   <a href="/docs">[docs]</a>
   </p>
+  <pre>AMRFinderPlus <a id="software-version-link" href="https://github.com/ncbi/amr/releases/tag/amrfinder_v{{ software_version }}"><span id="software-version-text">{{ software_version }}</span></a> database version <span id="database-version-text">{{ database_version }}</span>
+AMRrules <span id="amrrules-version-text">{{ amrrules_version }}</span></pre>
   {% if job_name %}
   <p>
   <strong>Job name:</strong> <code id="job-name">{{ job_name }}</code><br />
@@ -51,10 +53,10 @@
   <div id="results">
     <button onclick="downloadResults('{{ job_id }}')" style="margin-bottom: 10px;">Download Results</button>
     {% if amrrules_summary_available %}
-    &nbsp;<a href="/amrrules-summary/{{ job_id }}" target="_blank">amrrules_genome_summary.tsv</a> &nbsp;&nbsp;&nbsp;
+    &nbsp;<a href="/amrrules-summary/{{ job_id }}">amrrules_genome_summary.tsv</a> &nbsp;&nbsp;&nbsp;
     {% endif %}
     {% if amrrules_interpreted_available %}
-    &nbsp;<a href="/amrrules-interpreted/{{ job_id }}" target="_blank">amrrules_interpreted.tsv</a> &nbsp;&nbsp;&nbsp;
+    &nbsp;<a href="/amrrules-interpreted/{{ job_id }}">amrrules_interpreted.tsv</a> &nbsp;&nbsp;&nbsp;
     {% endif %}
     {% if stderr_available %}
     &nbsp;<a href="/stderr/{{ job_id }}" target="_blank">View STDERR log</a>
@@ -67,10 +69,10 @@
     <p><a href="/protein/{{ job_id }}" target="_blank">Download Protein FASTA</a></p>
     {% endif %}
     {% if amrrules_summary_available %}
-    <p><a href="/amrrules-summary/{{ job_id }}" target="_blank">amrrules_genome_summary.tsv</a></p>
+    <p><a href="/amrrules-summary/{{ job_id }}">amrrules_genome_summary.tsv</a></p>
     {% endif %}
     {% if amrrules_interpreted_available %}
-    <p><a href="/amrrules-interpreted/{{ job_id }}" target="_blank">amrrules_interpreted.tsv</a></p>
+    <p><a href="/amrrules-interpreted/{{ job_id }}">amrrules_interpreted.tsv</a></p>
     {% endif %}
     {% if amrrules_error %}
     <p class="error"><strong>AMRrules notice:</strong> {{ amrrules_error }}</p>
@@ -219,6 +221,20 @@
                 workerDisplay.textContent = ' | Worker v' + data.worker_version;
               }
             }
+            if (data.software_version && data.software_version !== 'unknown') {
+              const softText = document.getElementById('software-version-text');
+              const softLink = document.getElementById('software-version-link');
+              if (softText) softText.textContent = data.software_version;
+              if (softLink) softLink.href = 'https://github.com/ncbi/amr/releases/tag/amrfinder_v' + data.software_version;
+            }
+            if (data.database_version && data.database_version !== 'unknown') {
+              const dbText = document.getElementById('database-version-text');
+              if (dbText) dbText.textContent = data.database_version;
+            }
+            if (data.amrrules_version && data.amrrules_version !== 'unknown') {
+              const amrText = document.getElementById('amrrules-version-text');
+              if (amrText) amrText.textContent = data.amrrules_version;
+            }
             if (data.error) {
               clearInterval(pollInterval);
               if (timerInterval) clearInterval(timerInterval);
@@ -241,10 +257,10 @@
               resultsDiv.appendChild(downloadButton);
 
               if (data.amrrules_summary_available) {
-                resultsDiv.insertAdjacentHTML('beforeend', '&nbsp;<a href="/amrrules-summary/' + jobId + '" target="_blank">amrrules_genome_summary.tsv</a> &nbsp;&nbsp;&nbsp;');
+                resultsDiv.insertAdjacentHTML('beforeend', '&nbsp;<a href="/amrrules-summary/' + jobId + '">amrrules_genome_summary.tsv</a> &nbsp;&nbsp;&nbsp;');
               }
               if (data.amrrules_interpreted_available) {
-                resultsDiv.insertAdjacentHTML('beforeend', '&nbsp;<a href="/amrrules-interpreted/' + jobId + '" target="_blank">amrrules_interpreted.tsv</a> &nbsp;&nbsp;&nbsp;');
+                resultsDiv.insertAdjacentHTML('beforeend', '&nbsp;<a href="/amrrules-interpreted/' + jobId + '">amrrules_interpreted.tsv</a> &nbsp;&nbsp;&nbsp;');
               }
               if (data.stderr_available) {
                 resultsDiv.insertAdjacentHTML('beforeend', '&nbsp;<a href="/stderr/' + jobId + '" target="_blank">View STDERR log</a>');
@@ -264,12 +280,12 @@
               }
               if (data.amrrules_summary_available) {
                 const summaryLink = document.createElement('p');
-                summaryLink.innerHTML = '<a href="/amrrules-summary/' + jobId + '" target="_blank">amrrules_summary.tsv</a>';
+                summaryLink.innerHTML = '<a href="/amrrules-summary/' + jobId + '">amrrules_genome_summary.tsv</a>';
                 resultsDiv.appendChild(summaryLink);
               }
               if (data.amrrules_interpreted_available) {
                 const interpLink = document.createElement('p');
-                interpLink.innerHTML = '<a href="/amrrules-interpreted/' + jobId + '" target="_blank">amrrules_interpreted.tsv</a>';
+                interpLink.innerHTML = '<a href="/amrrules-interpreted/' + jobId + '">amrrules_interpreted.tsv</a>';
                 resultsDiv.appendChild(interpLink);
               }
               if (data.amrrules_error) {

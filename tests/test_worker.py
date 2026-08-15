@@ -333,18 +333,23 @@ class TestHandlePubsubPush:
         resp = flask_client.post("/", json=_make_push_body())
         assert resp.status_code == 200
 
+    @patch("worker.get_installed_versions", return_value={"software_version": "4.0.1", "database_version": "2024-01-01.1", "amrrules_version": "0.1.0"})
     @patch("worker.upload_blob", return_value="gs://output/results/job-abc/results.tsv")
     @patch("worker.run_amrfinder")
     @patch("worker.download_blob")
-    def test_successful_job_updates_status_to_completed(self, mock_dl, mock_run, mock_ul):
+    def test_successful_job_updates_status_to_completed(self, mock_dl, mock_run, mock_ul, mock_ver):
         mock_run.return_value = ""
         mock_doc = MagicMock()
         worker.get_firestore_client().collection.return_value.document.return_value = mock_doc
 
         flask_client.post("/", json=_make_push_body(job_id="job-xyz"))
 
-        update_calls = [str(c) for c in mock_doc.update.call_args_list]
-        assert any("Completed" in s for s in update_calls)
+        update_calls = [c[0][0] for c in mock_doc.update.call_args_list if c[0]]
+        completed_call = next(c for c in update_calls if c.get("status") == "Completed")
+        assert completed_call["software_version"] == "4.0.1"
+        assert completed_call["database_version"] == "2024-01-01.1"
+        assert completed_call["amrrules_version"] == "0.1.0"
+        assert completed_call["worker_version"] == worker.APP_VERSION
 
     @patch("worker.run_amrfinder", side_effect=Exception("amrfinder crashed"))
     @patch("worker.download_blob")
@@ -497,3 +502,39 @@ class TestUploadVersions:
 
         # Should not raise exception
         worker.upload_versions()
+
+
+class TestGetInstalledVersions:
+    @patch("importlib.metadata.version", return_value="0.3.1")
+    @patch("worker.subprocess.run")
+    def test_get_installed_versions_success(self, mock_run, mock_pkg_ver):
+        def _mock_subprocess(cmd, **kwargs):
+            if "--database_version" in cmd:
+                return MagicMock(stdout="2024-05-02.1\n")
+            if "--version" in cmd:
+                return MagicMock(stdout="3.12.0\n")
+            return MagicMock(stdout="")
+
+        mock_run.side_effect = _mock_subprocess
+        versions = worker.get_installed_versions()
+        assert versions["database_version"] == "2024-05-02.1"
+        assert versions["software_version"] == "3.12.0"
+        assert versions["amrrules_version"] == "0.3.1"
+
+    @patch("importlib.metadata.version", side_effect=Exception("Not found"))
+    @patch("worker.subprocess.run")
+    @patch("worker.os.path.exists", return_value=True)
+    @patch("builtins.open", new_callable=mock_open, read_data="2023-12-01.1\n")
+    def test_get_installed_versions_fallback_file(self, mock_file, mock_exists, mock_run, mock_pkg_ver):
+        def _mock_subprocess(cmd, **kwargs):
+            if "--database_version" in cmd:
+                raise Exception("CLI flag unsupported")
+            if "--version" in cmd:
+                return MagicMock(stdout="3.11.0\n")
+            return MagicMock(stdout="")
+
+        mock_run.side_effect = _mock_subprocess
+        versions = worker.get_installed_versions()
+        assert versions["database_version"] == "2023-12-01.1"
+        assert versions["software_version"] == "3.11.0"
+        assert versions["amrrules_version"] is None
