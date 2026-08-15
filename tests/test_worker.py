@@ -507,34 +507,42 @@ class TestUploadVersions:
 class TestGetInstalledVersions:
     @patch("importlib.metadata.version", return_value="0.3.1")
     @patch("worker.subprocess.run")
-    def test_get_installed_versions_success(self, mock_run, mock_pkg_ver):
-        def _mock_subprocess(cmd, **kwargs):
-            if "--database_version" in cmd:
-                return MagicMock(stdout="2024-05-02.1\n")
-            if "--version" in cmd:
-                return MagicMock(stdout="3.12.0\n")
-            return MagicMock(stdout="")
+    def test_get_installed_versions_success_from_amrfinder_V(self, mock_run, mock_pkg_ver):
+        mock_output = (
+            "Software directory: '/usr/local/bin/'\n"
+            "Software version: 4.2.7\n"
+            "Database directory: '/usr/local/share/data/2026-03-24.1'\n"
+            "Database version: 2026-03-24.1\n"
+        )
+        mock_run.return_value = MagicMock(stdout=mock_output)
 
-        mock_run.side_effect = _mock_subprocess
         versions = worker.get_installed_versions()
-        assert versions["database_version"] == "2024-05-02.1"
-        assert versions["software_version"] == "3.12.0"
+        assert versions["database_version"] == "2026-03-24.1"
+        assert versions["software_version"] == "4.2.7"
         assert versions["amrrules_version"] == "0.3.1"
 
     @patch("importlib.metadata.version", side_effect=Exception("Not found"))
-    @patch("worker.subprocess.run")
-    @patch("worker.os.path.exists", return_value=True)
-    @patch("builtins.open", new_callable=mock_open, read_data="2023-12-01.1\n")
-    def test_get_installed_versions_fallback_file(self, mock_file, mock_exists, mock_run, mock_pkg_ver):
-        def _mock_subprocess(cmd, **kwargs):
-            if "--database_version" in cmd:
-                raise Exception("CLI flag unsupported")
-            if "--version" in cmd:
-                return MagicMock(stdout="3.11.0\n")
-            return MagicMock(stdout="")
-
-        mock_run.side_effect = _mock_subprocess
+    @patch("worker.subprocess.run", side_effect=Exception("CLI error"))
+    def test_get_installed_versions_handles_cli_failure(self, mock_run, mock_pkg_ver):
         versions = worker.get_installed_versions()
-        assert versions["database_version"] == "2023-12-01.1"
-        assert versions["software_version"] == "3.11.0"
+        assert versions["database_version"] is None
+        assert versions["software_version"] is None
         assert versions["amrrules_version"] is None
+
+    @patch("importlib.metadata.version", return_value="0.3.1")
+    @patch("worker.subprocess.run")
+    def test_get_installed_versions_strips_directories(self, mock_run, mock_pkg_ver):
+        mock_output = (
+            "Software directory: '/usr/local/bin/'\n"
+            "Software version: 3.12.8\n"
+            "Database directory: '/usr/local/share/data/2024-05-02.1/'\n"
+            "Database version: 2024-05-02.1\n"
+        )
+        mock_run.return_value = MagicMock(stdout=mock_output)
+
+        versions = worker.get_installed_versions()
+        assert versions["database_version"] == "2024-05-02.1"
+        assert versions["software_version"] == "3.12.8"
+        assert versions["amrrules_version"] == "0.3.1"
+
+

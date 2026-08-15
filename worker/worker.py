@@ -43,29 +43,37 @@ def get_firestore_client():
     return _firestore_client
 
 
+def _parse_software_version(output_str):
+    """Extract software version number from amrfinder output."""
+    if not output_str:
+        return None
+    match = re.search(r'Software\s+version:\s*([^\s\r\n\'"]+)', output_str, re.IGNORECASE)
+    if match:
+        return match.group(1).strip().strip("'\"")
+    return output_str.strip().strip("'\"")
+
+
+def _parse_database_version(output_str):
+    """Extract database version string from amrfinder output."""
+    if not output_str:
+        return None
+    match = re.search(r'Database\s+version:\s*([^\s\r\n\'"]+)', output_str, re.IGNORECASE)
+    if match:
+        return match.group(1).strip().strip("'\"")
+    return output_str.strip().strip("'\"")
+
+
 def get_installed_versions():
     """Returns a dict of the currently installed tool and database versions."""
     db_version = None
-    try:
-        result = subprocess.run(["amrfinder", "--database_version"], capture_output=True, text=True, check=True)
-        db_version = result.stdout.strip()
-    except Exception as e:
-        version_file = "/etc/amrfinder_db_version.txt"
-        if os.path.exists(version_file):
-            try:
-                with open(version_file, "r") as f:
-                    db_version = f.read().strip()
-            except Exception as read_err:
-                print(f"Failed to read {version_file}: {read_err}")
-        else:
-            print(f"Failed to get amrfinder database version: {e}")
-
     software_version = None
+
     try:
-        result = subprocess.run(["amrfinder", "--version"], capture_output=True, text=True, check=True)
-        software_version = result.stdout.strip()
+        result = subprocess.run(["amrfinder", "-V"], capture_output=True, text=True, check=True)
+        db_version = _parse_database_version(result.stdout)
+        software_version = _parse_software_version(result.stdout)
     except Exception as e:
-        print(f"Failed to get amrfinder software version: {e}")
+        print(f"Failed to get AMRFinderPlus versions from amrfinder -V: {e}")
 
     amrrules_version = None
     try:

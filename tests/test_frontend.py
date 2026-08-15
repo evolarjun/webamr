@@ -1131,3 +1131,4 @@ class TestAMRrulesIntegration:
         assert data["amrrules_version"] == "0.3.1"
         assert data["worker_version"] == "0.2.16"
 
+

@@ -54,9 +54,8 @@ RUN ARCH=$(uname -m) \
 # Copy AMRFinderPlus binaries
 COPY --from=builder /amrfinder/ /usr/local/bin/
 
-# Download AMRFinderPlus databases at build time and extract version
-RUN amrfinder -u \
-  && amrfinder --database_version | awk -F ': ' '/Database version/ {print $2}' > /etc/amrfinder_db_version.txt
+# Download AMRFinderPlus databases at build time
+RUN amrfinder -u
 
 WORKDIR /app
 
