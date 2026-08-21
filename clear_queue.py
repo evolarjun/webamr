@@ -17,25 +17,29 @@ def clear_queued_jobs():
     print(f"Clearing queued jobs in Firestore for project: {project_id}...\n")
 
     try:
+        # Collect both Queued and Processing jobs
         queued_docs = list(db.collection("amr_jobs").where("status", "==", "Queued").stream())
-        if not queued_docs:
-             print("No queued jobs to clear.")
-        else:
-             for doc in queued_docs:
-                  doc.reference.update({
-                      "status": "Failed",
-                      "error_message": "Job timed out and was cleared from the system queue by the administrator."
-                  })
-                  print(f"Updated job {doc.id} to Failed.")
-        
         processing_docs = list(db.collection("amr_jobs").where("status", "==", "Processing").stream())
-        if processing_docs:
-             for doc in processing_docs:
-                  doc.reference.update({
-                      "status": "Failed",
-                      "error_message": "Job timed out and was cleared from the system queue by the administrator."
-                  })
-                  print(f"Updated job {doc.id} to Failed.")
+
+        all_docs = queued_docs + processing_docs
+
+        if not all_docs:
+             print("No queued or processing jobs to clear.")
+             return
+
+        # Firestore batches are limited to 500 operations
+        BATCH_SIZE = 500
+        for i in range(0, len(all_docs), BATCH_SIZE):
+            chunk = all_docs[i:i + BATCH_SIZE]
+            batch = db.batch()
+            for doc in chunk:
+                batch.update(doc.reference, {
+                    "status": "Failed",
+                    "error_message": "Job timed out and was cleared from the system queue by the administrator."
+                })
+            batch.commit()
+            for doc in chunk:
+                print(f"Updated job {doc.id} to Failed.")
 
     except Exception as e:
         print(f"Error updating Firestore database: {e}")
