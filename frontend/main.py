@@ -18,7 +18,6 @@ from datetime import timezone
 
 # set values to environment variables else listed here
 UPLOAD_FOLDER_BASE = os.environ.get('UPLOAD_FOLDER_BASE', 'uploads')
-RESULTS_FOLDER_BASE = os.environ.get('RESULTS_FOLDER_BASE', 'results')
 # base bucket name for app
 PROJECT_ID = os.environ.get('PROJECT_ID', 'amrfinder')
 BUCKET_NAME = os.environ.get('BUCKET_NAME', f'amr-input-bucket-{PROJECT_ID}')
