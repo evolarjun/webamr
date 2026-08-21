@@ -148,6 +148,15 @@ docker stop amr-test && docker rm amr-test
 ```
 
 ---
+### Debugging
+
+To run the Flask frontend locally in debug mode (enables debug logs and auto-reload), set the `FLASK_DEBUG` environment variable:
+```bash
+export FLASK_DEBUG=1
+python -m flask --app frontend/main run -p 8080
+```
+
+---
 
 ## Run Everything
 

@@ -687,7 +687,7 @@ def favicon():
 
 
 def main():
-    app.debug = True
+    app.debug = os.environ.get('FLASK_DEBUG', '0').lower() in ['1', 'true']
     app.run(port=int(os.environ.get('PORT', 8080)))
 
 if __name__ == "__main__":
