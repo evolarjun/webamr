@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import threading
 from flask import Flask, request, jsonify
+from werkzeug.utils import secure_filename
 from google.cloud import storage, firestore
 
 try:
@@ -313,7 +314,8 @@ def handle_pubsub_push():
         for attr, filename in [("nuc", nuc_filename), ("prot", prot_filename), ("gff", gff_filename)]:
             if not filename:
                 continue
-            local_path = f"/tmp/{job_id}_{filename}"
+            safe_filename = secure_filename(filename)
+            local_path = f"/tmp/{job_id}_{safe_filename}"
             download_blob(f"{base_gcs_uri}/{filename}", local_path)
             cleanup_paths.append(local_path)
             decompressed_path = _decompress_if_gzipped(local_path)
