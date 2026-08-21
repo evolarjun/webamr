@@ -9,7 +9,6 @@ Usage:
 
 import os
 import sys
-from datetime import timezone
 
 
 def get_required_env(name: str) -> str:
