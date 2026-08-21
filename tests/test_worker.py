@@ -58,13 +58,21 @@ def teardown_module(module):
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_push_body(job_id="job-abc", gcs_uri="gs://bucket/uploads/in.fasta", params=None):
+def _make_push_body(job_id="job-abc", gcs_uri="gs://bucket/uploads/in.fasta", params=None, nuc_filename=None, prot_filename=None, gff_filename=None):
     """Build a Pub/Sub push envelope as Cloud Run would receive it."""
-    payload = json.dumps({
+    payload_dict = {
         "job_id": job_id,
         "gcs_uri": gcs_uri,
         "parameters": params or {},
-    }).encode("utf-8")
+    }
+    if nuc_filename is not None:
+        payload_dict["nuc_filename"] = nuc_filename
+    if prot_filename is not None:
+        payload_dict["prot_filename"] = prot_filename
+    if gff_filename is not None:
+        payload_dict["gff_filename"] = gff_filename
+
+    payload = json.dumps(payload_dict).encode("utf-8")
     return {
         "message": {
             "data": base64.b64encode(payload).decode("utf-8"),
@@ -324,6 +332,40 @@ class TestHandlePubsubPush:
         assert resp.status_code == 200
         # run_amrfinder is keyword-only; verify params was coerced to an empty dict
         assert mock_run.call_args.kwargs["params"] == {}
+
+    @patch("worker.upload_blob", return_value="gs://output/results/job-abc/results.tsv")
+    @patch("worker.run_amrfinder")
+    @patch("worker.download_blob")
+    def test_path_traversal_prevention(self, mock_dl, mock_run, mock_ul):
+        mock_run.return_value = ""
+        mock_doc = MagicMock()
+        worker.get_firestore_client().collection.return_value.document.return_value = mock_doc
+
+        # Inject path traversal payload
+        body = _make_push_body(
+            job_id="job-sec",
+            gcs_uri="gs://bucket/uploads/in.fasta",
+            nuc_filename="../../../etc/passwd"
+        )
+        resp = flask_client.post("/", json=body)
+        assert resp.status_code == 200
+
+        # Check what was passed to download_blob for the local_path
+        # Should be sanitized to just 'etc_passwd' preventing writing outside /tmp
+        # werkzeug secure_filename turns '../../../etc/passwd' into 'etc_passwd'
+        expected_local_path = "/tmp/job-sec_etc_passwd"
+
+        # Look through the calls to download_blob to find the one matching our nuc_filename
+        download_calls = mock_dl.call_args_list
+        found = False
+        for call in download_calls:
+            gcs_uri, local_path = call.args
+            if gcs_uri.endswith("../../../etc/passwd"):
+                assert local_path == expected_local_path, f"Path was not sanitized! Expected {expected_local_path}, got {local_path}"
+                found = True
+                break
+
+        assert found, "download_blob was not called with the expected GCS URI"
 
     @patch("worker.upload_blob", return_value="gs://output/results/job-abc/results.tsv")
     @patch("worker.run_amrfinder")
