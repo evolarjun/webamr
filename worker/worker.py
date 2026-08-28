@@ -11,8 +11,7 @@ import os
 import re
 import json
 import base64
-import gzip
-import shutil
+import shlex
 import subprocess
 import threading
 from flask import Flask, request, jsonify
@@ -46,29 +45,84 @@ def get_firestore_client():
     return _firestore_client
 
 
+def _parse_software_version(output_str):
+    """Extract software version number from amrfinder output."""
+    if not output_str:
+        return None
+    match = re.search(r'Software\s+version:\s*([^\s\r\n\'"]+)', output_str, re.IGNORECASE)
+    if match:
+        return match.group(1).strip().strip("'\"")
+    return output_str.strip().strip("'\"")
+
+
+def _parse_database_version(output_str):
+    """Extract database version string from amrfinder output."""
+    if not output_str:
+        return None
+    match = re.search(r'Database\s+version:\s*([^\s\r\n\'"]+)', output_str, re.IGNORECASE)
+    if match:
+        return match.group(1).strip().strip("'\"")
+    return output_str.strip().strip("'\"")
+
+
+def get_installed_versions():
+    """Returns a dict of the currently installed tool and database versions."""
+    db_version = None
+    software_version = None
+
+    try:
+        result = subprocess.run(["amrfinder", "-V"], capture_output=True, text=True, check=True)
+        db_version = _parse_database_version(result.stdout)
+        software_version = _parse_software_version(result.stdout)
+    except Exception as e:
+        print(f"Failed to get AMRFinderPlus versions from amrfinder -V: {e}")
+
+    amrrules_version = None
+    try:
+        import importlib.metadata
+        amrrules_version = importlib.metadata.version("amrrules")
+    except Exception as e:
+        print(f"Failed to get amrrules version: {e}")
+
+    return {
+        "database_version": db_version,
+        "software_version": software_version,
+        "amrrules_version": amrrules_version,
+    }
+
+
 def upload_versions():
-    """Uploads the local AMRFinder database and software versions to GCS configuration path."""
+    """Uploads the local AMRFinder database, software, and AMRrules versions to GCS configuration path."""
     storage_client = get_storage_client()
     bucket = storage_client.bucket(OUTPUT_BUCKET)
-    
+    versions = get_installed_versions()
+
     # Upload Database Version
-    version_file = "/etc/amrfinder_db_version.txt"
-    if os.path.exists(version_file):
-        print(f"Uploading AMRFinder DB version to gs://{OUTPUT_BUCKET}/config/database_version.txt")
-        blob = bucket.blob("config/database_version.txt")
-        blob.upload_from_filename(version_file)
-    else:
-        print("WARNING: Could not find /etc/amrfinder_db_version.txt!")
+    if versions.get("database_version"):
+        try:
+            print(f"Uploading AMRFinder DB version to gs://{OUTPUT_BUCKET}/config/database_version.txt")
+            blob = bucket.blob("config/database_version.txt")
+            blob.upload_from_string(versions["database_version"])
+        except Exception as e:
+            print(f"Failed to upload DB version: {e}")
 
     # Upload Software Version
-    try:
-        print(f"Uploading AMRFinder software version to gs://{OUTPUT_BUCKET}/config/software_version.txt")
-        result = subprocess.run(["amrfinder", "--version"], capture_output=True, text=True, check=True)
-        software_version = result.stdout.strip()
-        software_blob = bucket.blob("config/software_version.txt")
-        software_blob.upload_from_string(software_version)
-    except Exception as e:
-        print(f"Failed to get/upload software version: {e}")
+    if versions.get("software_version"):
+        try:
+            print(f"Uploading AMRFinder software version to gs://{OUTPUT_BUCKET}/config/software_version.txt")
+            software_blob = bucket.blob("config/software_version.txt")
+            software_blob.upload_from_string(versions["software_version"])
+        except Exception as e:
+            print(f"Failed to upload software version: {e}")
+
+    # Upload AMRrules Version
+    if versions.get("amrrules_version"):
+        try:
+            print(f"Uploading AMRrules version to gs://{OUTPUT_BUCKET}/config/amrrules_version.txt")
+            amrrules_blob = bucket.blob("config/amrrules_version.txt")
+            amrrules_blob.upload_from_string(versions["amrrules_version"])
+        except Exception as e:
+            print(f"Failed to upload amrrules version: {e}")
 
 # Upload config once on container cold-start in a background thread to avoid blocking Gunicorn startup
 try:
@@ -113,6 +167,7 @@ def run_amrfinder(
     nucleotide_path,
     protein_path,
     params,
+    job_name=None,
 ):
     """Build and execute the amrfinder command."""
     cmd = ["amrfinder"]
@@ -125,6 +180,10 @@ def run_amrfinder(
         cmd.extend(["--gff", gff_input])
 
     cmd.extend(["--output", output_tsv])
+
+    name = job_name or params.get("job_name") or params.get("name")
+    if name:
+        cmd.extend(["--name", str(name)])
 
     if nuc_input and params.get("has_nucleotide"):
         cmd.extend(["--nucleotide_output", nucleotide_path])
@@ -158,7 +217,11 @@ def run_amrfinder(
 
     # Always save stderr to a file so it can be uploaded and reviewed
     with open(stderr_path, "w") as f:
-        f.write(result.stderr)
+        f.write("=== AMRFinderPlus Log ===\n")
+        if result.stderr:
+            f.write(result.stderr)
+        if result.stdout:
+            f.write("\n" + result.stdout)
 
     if result.returncode != 0:
         raise Exception(f"AMRFinderPlus failed: {result.stderr}")
@@ -166,18 +229,31 @@ def run_amrfinder(
     return result.stdout
 
 
-def run_amrrules(*, amrfp_output_tsv, amrrules_organism, output_prefix, job_id):
+def run_amrrules(*, amrfp_output_tsv, amrrules_organism, output_prefix, sample_id=None, job_id=None, stderr_path=None):
     """Build and execute the amrrules command on AMRFinderPlus output."""
+    sid = sample_id or job_id
     cmd = [
         "amrrules",
         "--input", amrfp_output_tsv,
         "--output-prefix", output_prefix,
         "--organism", amrrules_organism,
-        "--sample-id", str(job_id),
+        "--sample-id", str(sid),
     ]
 
-    print(f"Executing AMRrules: {' '.join(cmd)}")
+    cmd_str = shlex.join(cmd)
+    print(f"Executing AMRrules: {cmd_str}")
     result = subprocess.run(cmd, capture_output=True, text=True)
+
+    if stderr_path and os.path.exists(stderr_path):
+        try:
+            with open(stderr_path, "a") as f:
+                f.write(f"\n\n=== AMRrules Log ===\nCommand: {cmd_str}\n\n")
+                if result.stderr:
+                    f.write(result.stderr)
+                if result.stdout:
+                    f.write("\n" + result.stdout)
+        except Exception as log_err:
+            print(f"Failed to append AMRrules log to stderr_path: {log_err}")
 
     if result.returncode != 0:
         raise Exception(f"AMRrules failed: {result.stderr}")
@@ -240,6 +316,16 @@ def _validate_payload(envelope):
         print(f"Malformed message - gcs_uri must start with 'gs://'. Got: {gcs_uri!r}")
         return None, (jsonify({"error": "Malformed message, gcs_uri must start with gs://"}), 200)
 
+    job_name = payload.get("job_name")
+    if job_name is not None:
+        if not isinstance(job_name, str):
+            print(f"Malformed message - job_name must be a string. Got: {job_name!r}")
+            return None, (jsonify({"error": "Malformed message, job_name must be a string"}), 200)
+        clean_job_name = job_name.strip()
+        if len(clean_job_name) > 100 or (clean_job_name and not re.fullmatch(r"[A-Za-z0-9 _-]+", clean_job_name)):
+            print(f"Malformed message - job_name contains invalid characters or exceeds 100 characters. Got: {job_name!r}")
+            return None, (jsonify({"error": "Malformed message, job_name contains invalid characters or exceeds 100 characters"}), 200)
+
     # Ensure parameters is a dict; fall back to empty dict if malformed
     params = payload.get("parameters", {})
     if not isinstance(params, dict):
@@ -289,7 +375,7 @@ def handle_pubsub_push():
     local_prot_input = None
     local_gff_input = None
 
-    local_output = f"/tmp/{job_id}_output.tsv"
+    local_output = f"/tmp/{job_id}_amrfinder.tsv"
     local_stderr = f"/tmp/{job_id}_stderr.txt"
     local_nuc = f"/tmp/{job_id}_nucleotide.fna"
     local_prot = f"/tmp/{job_id}_protein.faa"
@@ -341,6 +427,13 @@ def handle_pubsub_push():
                 cleanup_paths.append(local_nuc_input)
                 local_nuc_input = _decompress_if_gzipped(local_nuc_input)
 
+        job_name = payload.get("job_name")
+        clean_job_name = None
+        if job_name and isinstance(job_name, str):
+            clean = job_name.strip()
+            if clean and len(clean) <= 100 and re.fullmatch(r"[A-Za-z0-9 _-]+", clean):
+                clean_job_name = clean
+
         run_amrfinder(
             nuc_input=local_nuc_input,
             prot_input=local_prot_input,
@@ -350,10 +443,10 @@ def handle_pubsub_push():
             nucleotide_path=local_nuc,
             protein_path=local_prot,
             params=params,
+            job_name=clean_job_name,
         )
 
         upload_blob(local_output, f"results/{job_id}/results.tsv")
-        upload_blob(local_stderr, f"results/{job_id}/stderr.txt")
 
         if os.path.exists(local_nuc):
             upload_blob(local_nuc, f"results/{job_id}/nucleotide.fna")
@@ -364,18 +457,26 @@ def handle_pubsub_push():
         amrrules_error_msg = None
         if amrrules_organism:
             amrrules_prefix = f"/tmp/{job_id}_amrrules"
+            local_genome_summary = f"{amrrules_prefix}_genome_summary.tsv"
             local_summary = f"{amrrules_prefix}_summary.tsv"
             local_interpreted = f"{amrrules_prefix}_interpreted.tsv"
-            cleanup_paths.extend([local_summary, local_interpreted])
+            cleanup_paths.extend([local_genome_summary, local_summary, local_interpreted])
             try:
-                _log(job_id, f"Running AMRrules for organism '{amrrules_organism}'...")
+                sample_id = clean_job_name if clean_job_name else job_id
+
+                _log(job_id, f"Running AMRrules for organism '{amrrules_organism}' with sample ID '{sample_id}'...")
                 run_amrrules(
                     amrfp_output_tsv=local_output,
                     amrrules_organism=amrrules_organism,
                     output_prefix=amrrules_prefix,
-                    job_id=job_id,
+                    sample_id=sample_id,
+                    stderr_path=local_stderr,
                 )
-                if os.path.exists(local_summary):
+                if os.path.exists(local_genome_summary):
+                    upload_blob(local_genome_summary, f"results/{job_id}/amrrules_genome_summary.tsv")
+                    upload_blob(local_genome_summary, f"results/{job_id}/amrrules_summary.tsv")
+                elif os.path.exists(local_summary):
+                    upload_blob(local_summary, f"results/{job_id}/amrrules_genome_summary.tsv")
                     upload_blob(local_summary, f"results/{job_id}/amrrules_summary.tsv")
                 if os.path.exists(local_interpreted):
                     upload_blob(local_interpreted, f"results/{job_id}/amrrules_interpreted.tsv")
@@ -383,11 +484,18 @@ def handle_pubsub_push():
                 _log(job_id, f"AMRrules soft failure: {amr_err}")
                 amrrules_error_msg = str(amr_err)
 
+        if os.path.exists(local_stderr):
+            upload_blob(local_stderr, f"results/{job_id}/stderr.txt")
+
         # Mark job as completed
+        versions = get_installed_versions()
         update_data = {
             "status": "Completed",
             "result_uri": f"gs://{OUTPUT_BUCKET}/results/{job_id}/results.tsv",
             "worker_version": APP_VERSION,
+            "software_version": versions.get("software_version"),
+            "database_version": versions.get("database_version"),
+            "amrrules_version": versions.get("amrrules_version"),
             "error_message": None,
             "amrrules_error": amrrules_error_msg,
         }

@@ -15,24 +15,39 @@
   <h1>Web interface for AMRFinderPlus</h1>
   <p><a href="/">← Back to Home</a></p>
   <p>
-  This is a mostly vibe-coded web interface for <a href="https://github.com/ncbi/amr/wiki">AMRFinderPlus</a> created as a personal side-project. See <a href="https://github.com/ncbi/amr/wiki">AMRFinderPlus documentation</a> for details on AMRFinderPlus. A brief description of the options for this site is below, and results can be downloaded in the native tab-delimited format output by AMRFinderPlus. Suggestions for improvements or bug reports made as <a href="https://github.com/evolarjun/webamr/issues">GitHub issues</a> are much appreciated.
+    This is a mostly vibe-coded web interface for <a href="https://github.com/ncbi/amr/wiki">AMRFinderPlus</a> created
+    as a personal side-project. See <a href="https://github.com/ncbi/amr/wiki">AMRFinderPlus documentation</a> for
+    details on AMRFinderPlus. A brief description of the options for this site is below, and results can be downloaded
+    in the native tab-delimited format output by AMRFinderPlus. Suggestions for improvements or bug reports made as <a
+      href="https://github.com/evolarjun/webamr/issues">GitHub issues</a> are much appreciated.
   </p>
 
   <p>
-  Always runs AMRFinderPlus with the following options: <code>--plus</code> <code>--print_node</code>
+    Always runs AMRFinderPlus with the following options: <code>--plus</code> <code>--print_node</code>
   </p>
 
   <h1>Input Settings</h1>
 
   <section id="job-name">
     <h2>Job Name (Optional)</h2>
-    <p>A user-defined name to help you identify and organize your analysis results. This name will appear on the results page and in the output filenames. 
+    <p>A user-defined name to help you identify and organize your analysis results. This name will appear on the results
+      page and is used as the sample name in AMRrules output.
+    </p>
+    <p>Requirements:
+    <ul>
+      <li>Maximum 100 characters.</li>
+      <li>Allowed characters: letters (A-Z, a-z), digits (0-9), spaces, underscores (<code>_</code>), and hyphens
+        (<code>-</code>).</li>
+      <li>Other special characters (e.g. <code>@</code>, <code>!</code>, <code>/</code>) are not allowed.</li>
+    </ul>
     </p>
   </section>
 
   <section id="nucleotide-file">
     <h2>Select an assembled nucleotide file (<code>-n</code>, <code>--nucleotide</code>)</h2>
-    <p>An assembled nucleotide FASTA file to search. May be gzipped with a .gz extension. This enables searching with translated BLAST, identifying frame shifts, and, with the "Organism" option below, to identify non-coding point mutations.
+    <p>An assembled nucleotide FASTA file to search. May be gzipped with a .gz extension. This enables searching with
+      translated BLAST, identifying frame shifts, and, with the "Organism" option below, to identify non-coding point
+      mutations.
     </p>
     <p>See the AMRFinderPlus documentation for <a
         href="https://github.com/ncbi/amr/wiki/Running-AMRFinderPlus#-p-protein_fasta-and--n-nucleotide_fasta"
@@ -41,7 +56,8 @@
 
   <section id="protein-file">
     <h2>Select a protein file (<code>-p</code>, <code>--protein</code>)</h2>
-    <p>A protein FASTA file to search. May be gzipped with a .gz extension. This enables the identification of genes by HMMs which enables more sensitive detection of distant AMR genes.
+    <p>A protein FASTA file to search. May be gzipped with a .gz extension. This enables the identification of genes by
+      HMMs which enables more sensitive detection of distant AMR genes.
     </p>
     <p>See the AMRFinderPlus documentation for <a
         href="https://github.com/ncbi/amr/wiki/Running-AMRFinderPlus#-p-protein_fasta-and--n-nucleotide_fasta"
@@ -53,14 +69,15 @@
     <p>A GFF3 format file containing gene annotations. This file provides the genomic coordinates and identifiers for
       the proteins in the nucleotide sequence. If you provide a GFF file, you should also provide the corresponding
       nucleotide and protein files to enable full AMRFinderPlus functionality.</p>
-    <p>See the AMRFinderPlus documentation for <a href="https://github.com/ncbi/amr/wiki/Running-AMRFinderPlus#-g-gff_file"
-        target="_blank">GFF files</a>.</p>
+    <p>See the AMRFinderPlus documentation for <a
+        href="https://github.com/ncbi/amr/wiki/Running-AMRFinderPlus#-g-gff_file" target="_blank">GFF files</a>.</p>
   </section>
 
   <section id="annotation-format">
     <h2>Annotation Format (<code>--annotation_format</code>)</h2>
     <p>Specifies the software or pipeline used to generate the gene annotations (GFF and protein files). This is
-      essential for AMRFinderPlus to correctly parse the sequence headers and coordinates when both Protein and Nucleotide files are provided (the recommended way to run AMRFinderPlus). Supported formats include:
+      essential for AMRFinderPlus to correctly parse the sequence headers and coordinates when both Protein and
+      Nucleotide files are provided (the recommended way to run AMRFinderPlus). Supported formats include:
     </p>
     <ul>
       <li><strong>bakta</strong>: From the Bakta annotation pipeline.</li>
@@ -81,24 +98,38 @@
       thresholds and search for known point mutations that confer resitance.
     </p>
     <p>If "None" is selected, AMRFinderPlus will only perform a general search against its core database.</p>
-    <p>See the AMRFinderPlus documentation for the <a href="https://github.com/ncbi/amr/wiki/Running-AMRFinderPlus#--organism-option" target="_blank"><code>--organism</code>
+    <p>See the AMRFinderPlus documentation for the <a
+        href="https://github.com/ncbi/amr/wiki/Running-AMRFinderPlus#--organism-option"
+        target="_blank"><code>--organism</code>
         option</a>.</p>
   </section>
 
   <section id="amrrules-organism">
     <h2>AMRrules organism (<code>--organism</code> for AMRrules)</h2>
-<p>Sets the <code>--organism</code> option for  <a href="https://docs.amrrules.org/en/latest/index.html">AMRrules</a> to interpret the output of AMRFinderPlus using their expert-derived species-specific interpretation rules. This is different from the AMRFinderPlus <code>--organism</code> option, see the <a href="https://docs.amrrules.org/en/latest/rules.html">AMRrules supported organism documentation</a> for more information.
-
-    
+    <p>Sets the <code>--organism</code> option for <a href="https://docs.amrrules.org/en/latest/index.html">AMRrules</a>
+      to interpret the output of AMRFinderPlus using their expert-derived species-specific interpretation rules. This is
+      different from the AMRFinderPlus <code>--organism</code> option. This site has an automatic mapping for some of
+      the commonly used organisms that is used by default, but that automatic mapping may not be correct for your
+      sequences. See the <a href="https://docs.amrrules.org/en/latest/rules.html">AMRrules supported organism
+        documentation</a> for more information.</p>
+  </section>
 
   <section id="limits">
     <h2>File Size and Usage Limits</h2>
     <p>Because this tool is designed to analyze
-      one bacterial genome at a time, this server has a <strong>10 MB</strong> file size limit for each upload. 
+      one bacterial genome at a time, this server has a <strong>10 MB</strong> file size limit for each upload.
       Larger submissions or multiple genomes may fail or be rejected.</p>
   </section>
 
   Report issues or make suggestions for improvements on <a href="https://github.com/evolarjun/webamr/issues">GitHub</a>
+
+  <section id="output">
+    <h2>Output</h2>
+    <p>Output formats are described in the <a
+        href="https://github.com/ncbi/amr/wiki/Running-AMRFinderPlus#output-format">AMRFinderPlus documentation</a> and
+      <a href="https://docs.amrrules.org/en/latest/interpretation.html#genome-summary-report">AMRrules
+        documentation</a>.</p>
+  </section>
 
   <p><a href="/">← Back to Home</a></p>
 </body>

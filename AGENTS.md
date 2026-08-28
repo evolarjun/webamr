@@ -52,7 +52,7 @@ pytest tests/test_integration.py -v
 
 ## Output
 - No em dashes, smart quotes, or Unicode. ASCII only.
-- Be concise. If unsure, say so. Never guess.
+- Be concise. If unsure, say so. Never guess. Ask questions.
 
 ## Override Rule
 User instructions always override this file.

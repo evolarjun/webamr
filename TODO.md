@@ -1,9 +1,3 @@
-- Fix current bug when running with protein only queries! 
-    - Make sure to add tests for this and for nucleotide-only
-- add links from reference sequence and node (DONE) to browsers
-- Add a report that includes the input filenames and the AMRFinderPlus command-line
+- Reformat the results to clarify "Download AMRFinderPlus output" and possibly add a "Download all results" option to get a gzipped tarball of output files.
 - Add a toggle to show core and plus in above the table
-- Move the STDERR and output files next to the results
 - Add plus option instead of just universal
-- Downloading STDERR should change to just "STDERR" which shows the log contents as Content-type: text/plain
-- Big one: Add running AMRrules

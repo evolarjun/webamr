@@ -13,14 +13,15 @@
 
 <body>
   <h1>Upload your files to run <a href="https://github.com/ncbi/amr/wiki">AMRFinderPlus</a></h1>
-  <h2>And now <a href="https://docs.amrrules.org/en/latest/">AMRrules</a></h2>
-  <span>This is a personal side-project; this software does not reflect the priorities or opinions of my employer, and use of the results is at your own risk.</span><br>
+  <h2>Now includes <a href="https://docs.amrrules.org/en/latest/">AMRrules</a></h2>
   <a href="/docs">[docs]</a>
   <p></p>
-  <pre>AMRFinderPlus <a href="https://github.com/ncbi/amr/releases/tag/amrfinder_v{{ software_version }}"></a>{{ software_version }}</a> database version {{ database_version }}</pre>
+  <pre>AMRFinderPlus <a href="https://github.com/ncbi/amr/releases/tag/amrfinder_v{{ software_version }}">{{ software_version }}</a> database version {{ database_version }}
+AMRrules {{ amrrules_version }}</pre>
   <form id="upload-form" action="/analyze" method="POST" enctype="multipart/form-data">
     <label for="job_name"><a href="/docs#job-name">Job name</a> (optional):</label>
-    <input type="text" name="job_name" id="job_name" maxlength="100"> <br>
+    <input type="text" name="job_name" id="job_name" maxlength="100"><br>
+    <span id="job-name-helper" style="font-size: 0.85em; color: var(--fg-muted); margin-left: 10px;">Optional. Max 100 characters. Letters, numbers, spaces, underscores, and hyphens only.</span><br>
     <label for="file">Assembled <a href="/docs#nucleotide-file">nucleotide FASTA</a>:</label>
     <input type="file" name="nuc_file"> <br>
     <label for="gff_file"><a href="/docs#gff-file">GFF file</a>:</label>
@@ -50,7 +51,7 @@
     
     <br />
 
-    <label for="amrrules_organism"><a href="/docs#amrrules-organism">AMRrules organism (optional)</a>:</label>
+    <label for="amrrules_organism"><a href="/docs#amrrules-organism">AMRrules organism</a> (optional):</label>
     <select id="amrrules_organism" name="amrrules_organism">
       <option value="auto" selected>Auto-mapped from AMRFinderPlus organism</option>
       <option value="none">None / Do not run AMRrules</option>
@@ -101,11 +102,21 @@
     if (amrrulesSelect) amrrulesSelect.addEventListener('change', updateAmrrulesHelper);
     document.addEventListener('DOMContentLoaded', updateAmrrulesHelper);
 
+    const JOB_NAME_RE = /^[A-Za-z0-9 _-]*$/;
+
     function validateForm(showError = true) {
       const nucFile = form.elements['nuc_file'].files[0];
       const protFile = form.elements['prot_file'].files[0];
       const gffFile = form.elements['gff_file'].files[0];
       const submitButton = form.querySelector('button[type="submit"]');
+
+      // Validate job name first -- independent of file selection.
+      const jobName = form.elements['job_name'].value.trim();
+      if (jobName && !JOB_NAME_RE.test(jobName)) {
+        if (showError) statusMsg.innerHTML = '<p class="error">Job name can only contain letters, numbers, spaces, underscores, and hyphens.</p>';
+        submitButton.disabled = true;
+        return false;
+      }
 
       if (!nucFile && !protFile && !gffFile) {
         if (showError) statusMsg.innerHTML = '';
@@ -142,6 +153,7 @@
     form.elements['nuc_file'].addEventListener('change', () => validateForm(true));
     form.elements['prot_file'].addEventListener('change', () => validateForm(true));
     form.elements['gff_file'].addEventListener('change', () => validateForm(true));
+    form.elements['job_name'].addEventListener('input', () => validateForm(true));
 
     form.addEventListener('submit', (event) => {
       event.preventDefault();
@@ -162,40 +174,58 @@
       formData.append('job_name', form.elements['job_name'].value || '');
       formData.append('annotation_format', form.elements['annotation_format'].value || 'standard');
       formData.append('organism', form.elements['organism'].value);
+      if (form.elements['amrrules_organism']) {
+        formData.append('amrrules_organism', form.elements['amrrules_organism'].value);
+      }
 
-      // Disable the submit button and show upload progress
+      // Disable the submit button and show two-stage upload status with animated spinner
       const submitButton = form.querySelector('button[type="submit"]');
       submitButton.disabled = true;
-      statusMsg.innerHTML = '<p>Uploading files…</p>';
+      statusMsg.innerHTML = '<p><span class="spinner"></span><span id="upload-status-text">Uploading files to server…</span></p>';
 
-      fetch('/analyze', {
-        method: 'POST',
-        body: formData
-      })
-        .then(async response => {
-          let data;
-          try {
-            data = await response.json();
-          } catch (e) {
-            const text = await response.text();
-            throw new Error(`Server returned non-JSON response: ${text}`);
-          }
-          if (!response.ok) {
-            throw new Error(data.error || 'Unknown Server Error');
-          }
-          return data;
-        })
-        .then(data => {
-          // Redirect to the dedicated results page
-          window.location.href = data.results_url || `/results/${data.user_id}`;
-        })
-        .catch(error => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', '/analyze', true);
+
+      xhr.upload.onprogress = (e) => {
+        const statusText = document.getElementById('upload-status-text');
+        if (!statusText) return;
+
+        if (e.lengthComputable && e.loaded >= e.total) {
+          statusText.textContent = `Storing files in cloud storage & queuing job…`;
+        } else {
+          statusText.textContent = `Uploading files to server…`;
+        }
+      };
+
+      xhr.onload = () => {
+        let data;
+        try {
+          data = JSON.parse(xhr.responseText);
+        } catch (e) {
           submitButton.disabled = false;
-          console.error('Error:', error);
-          statusMsg.innerHTML = `<p class="error">ERROR: ${error.message || error.toString()}</p>`;
-        });
+          statusMsg.innerHTML = `<p class="error">ERROR: Server returned non-JSON response: ${xhr.responseText}</p>`;
+          return;
+        }
+
+        if (xhr.status >= 200 && xhr.status < 300) {
+          window.location.href = data.results_url || `/results/${data.user_id}`;
+        } else {
+          submitButton.disabled = false;
+          statusMsg.innerHTML = `<p class="error">ERROR: ${data.error || 'Unknown Server Error'}</p>`;
+        }
+      };
+
+      xhr.onerror = () => {
+        submitButton.disabled = false;
+        let userMsg = 'Connection failed. The server may have timed out, restarted, or exceeded memory limits during file upload. Please check network connectivity or try uploading smaller files.';
+        statusMsg.innerHTML = `<p class="error">ERROR: ${userMsg}</p>`;
+      };
+
+      xhr.send(formData);
     });
   </script>
+  <br />
+  <span>Disclaimer: This is a personal side-project. This site and software do not reflect the priorities or opinions of my employer, and use of the results is at your own risk.</span><br />
 
   <div class="page-footer">
     Report issues on <a href="https://github.com/evolarjun/webamr/issues">GitHub</a><br />
