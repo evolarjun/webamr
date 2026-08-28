@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{ page_title }} - AMRFinderPlus</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+  <link rel="alternate icon" href="/static/favicon.ico" type="image/x-icon" />
+  <script src="/static/js/theme-toggle.js"></script>
+</head>
+
+<body>
+  <h1>
+    <a href="/">AMRFinderPlus</a> - {{ page_title }}{% if job_name %}: {{ job_name }}{% endif %}
+  </h1>
+  <p>
+    <strong>Job ID:</strong>
+    <a href="/results/{{ job_id }}"><code>{{ job_id }}</code></a> &nbsp;&nbsp;
+    <a href="/results/{{ job_id }}">&larr; Back to Results</a>
+  </p>
+  {% if job_name %}
+  <p>
+    <strong>Job name:</strong> <code>{{ job_name }}</code>
+  </p>
+  {% endif %}
+
+  <div id="results">
+    <button onclick="downloadTsv()" style="margin-bottom: 10px;">Download {{ filename }}</button>
+    {{ table_html | safe }}
+  </div>
+
+  <script>
+    function downloadTsv() {
+      const url = window.location.pathname + '?download=true';
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = {{ filename | tojson }};
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+
+    /* Column sorting */
+    function sortTable(table, columnIndex, ascending) {
+      const tbody = table.querySelector('tbody');
+      if (!tbody) return;
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+
+      rows.sort((a, b) => {
+        const aText = (a.children[columnIndex] || {}).textContent || '';
+        const bText = (b.children[columnIndex] || {}).textContent || '';
+        const aNum = parseFloat(aText);
+        const bNum = parseFloat(bText);
+
+        if (!isNaN(aNum) && !isNaN(bNum)) {
+          return ascending ? aNum - bNum : bNum - aNum;
+        }
+        const cmp = aText.localeCompare(bText, undefined, { sensitivity: 'base' });
+        return ascending ? cmp : -cmp;
+      });
+
+      rows.forEach(row => tbody.appendChild(row));
+    }
+
+    function initSortHeaders() {
+      const table = document.querySelector('#results table');
+      if (!table) return;
+
+      const headers = table.querySelectorAll('thead th');
+      headers.forEach((th, index) => {
+        if (th.dataset.sortBound) return;
+        th.dataset.sortBound = 'true';
+
+        th.addEventListener('click', () => {
+          const currentDir = th.dataset.sortDir;
+          const ascending = currentDir !== 'asc';
+
+          headers.forEach(h => { h.dataset.sortDir = ''; h.classList.remove('sort-asc', 'sort-desc'); });
+
+          th.dataset.sortDir = ascending ? 'asc' : 'desc';
+          th.classList.add(ascending ? 'sort-asc' : 'sort-desc');
+
+          sortTable(table, index, ascending);
+        });
+      });
+    }
+
+    document.addEventListener('DOMContentLoaded', initSortHeaders);
+  </script>
+
+  <div class="page-footer">
+    Report issues on <a href="https://github.com/evolarjun/webamr/issues">GitHub</a><br />
+
+    WebAMR Frontend v{{ frontend_version }}
+    {% if worker_version and worker_version != 'unknown' %} | Worker v{{ worker_version }}{% endif %}
+  </div>
+</body>
+
+</html>
