@@ -1,4 +1,3 @@
-- If a job name is included then use the --name option to AMRFinderPlus
 - Reformat the results to clarify "Download AMRFinderPlus output" and possibly add a "Download all results" option to get a gzipped tarball of output files.
 - Add a toggle to show core and plus in above the table
 - Add plus option instead of just universal

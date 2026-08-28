@@ -165,6 +165,7 @@ def run_amrfinder(
     nucleotide_path,
     protein_path,
     params,
+    job_name=None,
 ):
     """Build and execute the amrfinder command."""
     cmd = ["amrfinder"]
@@ -177,6 +178,10 @@ def run_amrfinder(
         cmd.extend(["--gff", gff_input])
 
     cmd.extend(["--output", output_tsv])
+
+    name = job_name or params.get("job_name") or params.get("name")
+    if name:
+        cmd.extend(["--name", str(name)])
 
     if nuc_input and params.get("has_nucleotide"):
         cmd.extend(["--nucleotide_output", nucleotide_path])
@@ -405,6 +410,13 @@ def handle_pubsub_push():
                 download_blob(gcs_uri, local_nuc_input)
                 cleanup_paths.append(local_nuc_input)
 
+        job_name = payload.get("job_name")
+        clean_job_name = None
+        if job_name and isinstance(job_name, str):
+            clean = job_name.strip()
+            if clean and len(clean) <= 100 and re.fullmatch(r"[A-Za-z0-9 _-]+", clean):
+                clean_job_name = clean
+
         run_amrfinder(
             nuc_input=local_nuc_input,
             prot_input=local_prot_input,
@@ -414,6 +426,7 @@ def handle_pubsub_push():
             nucleotide_path=local_nuc,
             protein_path=local_prot,
             params=params,
+            job_name=clean_job_name,
         )
 
         upload_blob(local_output, f"results/{job_id}/results.tsv")
@@ -432,12 +445,7 @@ def handle_pubsub_push():
             local_interpreted = f"{amrrules_prefix}_interpreted.tsv"
             cleanup_paths.extend([local_genome_summary, local_summary, local_interpreted])
             try:
-                job_name = payload.get("job_name")
-                sample_id = job_id
-                if job_name and isinstance(job_name, str):
-                    clean_name = job_name.strip()
-                    if clean_name and len(clean_name) <= 100 and re.fullmatch(r"[A-Za-z0-9 _-]+", clean_name):
-                        sample_id = clean_name
+                sample_id = clean_job_name if clean_job_name else job_id
 
                 _log(job_id, f"Running AMRrules for organism '{amrrules_organism}' with sample ID '{sample_id}'...")
                 run_amrrules(

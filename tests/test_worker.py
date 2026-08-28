@@ -244,6 +244,43 @@ class TestRunAmrfinder:
         assert "--gff" in cmd
         assert "/tmp/prot.gff" in cmd
 
+    @patch("builtins.open", mock_open())
+    @patch("worker.subprocess.run")
+    def test_amrfinder_includes_name_flag_when_job_name_provided(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        worker.run_amrfinder(
+            nuc_input="/tmp/in.fasta",
+            prot_input=None,
+            gff_input=None,
+            output_tsv="/tmp/out.tsv",
+            stderr_path="/tmp/stderr.txt",
+            nucleotide_path="/tmp/nuc.fna",
+            protein_path="/tmp/prot.faa",
+            params={},
+            job_name="Sample-01",
+        )
+        cmd = mock_run.call_args[0][0]
+        assert "--name" in cmd
+        assert "Sample-01" in cmd
+
+    @patch("builtins.open", mock_open())
+    @patch("worker.subprocess.run")
+    def test_amrfinder_omits_name_flag_when_no_job_name(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+        worker.run_amrfinder(
+            nuc_input="/tmp/in.fasta",
+            prot_input=None,
+            gff_input=None,
+            output_tsv="/tmp/out.tsv",
+            stderr_path="/tmp/stderr.txt",
+            nucleotide_path="/tmp/nuc.fna",
+            protein_path="/tmp/prot.faa",
+            params={},
+            job_name=None,
+        )
+        cmd = mock_run.call_args[0][0]
+        assert "--name" not in cmd
+
 
 # ---------------------------------------------------------------------------
 # Tests: handle_pubsub_push (the Cloud Run HTTP endpoint)
@@ -453,6 +490,26 @@ class TestHandlePubsubPush:
         assert resp.status_code == 200
         mock_rules.assert_called_once()
         assert mock_rules.call_args[1]["sample_id"] == "Sample Job 100"
+        assert mock_run_af.call_args[1]["job_name"] == "Sample Job 100"
+
+    @patch("worker.upload_blob")
+    @patch("worker.run_amrfinder", return_value="success")
+    @patch("worker.download_blob")
+    @patch("worker.os.path.exists", return_value=False)
+    def test_amrfinder_called_without_job_name_when_omitted(self, mock_exists, mock_dl, mock_run_af, mock_ul):
+        mock_doc = MagicMock()
+        worker.get_firestore_client().collection.return_value.document.return_value = mock_doc
+
+        payload = {
+            "job_id": "job-amr-no-name",
+            "gcs_uri": "gs://b/f.fa",
+            "parameters": {},
+        }
+        body = _make_raw_push_body(json.dumps(payload).encode("utf-8"))
+
+        resp = flask_client.post("/", json=body)
+        assert resp.status_code == 200
+        assert mock_run_af.call_args[1]["job_name"] is None
 
 
 
