@@ -551,6 +551,7 @@ class TestRunAmrrules:
         content = stderr_file.read_text()
         assert "=== AMRFinderPlus Log ===" in content
         assert "=== AMRrules Log ===" in content
+        assert "Command: amrrules --input /tmp/out.tsv --output-prefix /tmp/prefix --organism 's__Escherichia coli' --sample-id job-123" in content
         assert "amrrules stderr log" in content
         assert "amrrules stdout log" in content
 

@@ -11,6 +11,7 @@ import os
 import re
 import json
 import base64
+import shlex
 import subprocess
 import threading
 from flask import Flask, request, jsonify
@@ -238,13 +239,14 @@ def run_amrrules(*, amrfp_output_tsv, amrrules_organism, output_prefix, sample_i
         "--sample-id", str(sid),
     ]
 
-    print(f"Executing AMRrules: {' '.join(cmd)}")
+    cmd_str = shlex.join(cmd)
+    print(f"Executing AMRrules: {cmd_str}")
     result = subprocess.run(cmd, capture_output=True, text=True)
 
     if stderr_path and os.path.exists(stderr_path):
         try:
             with open(stderr_path, "a") as f:
-                f.write("\n\n=== AMRrules Log ===\n")
+                f.write(f"\n\n=== AMRrules Log ===\nCommand: {cmd_str}\n\n")
                 if result.stderr:
                     f.write(result.stderr)
                 if result.stdout:
@@ -372,7 +374,7 @@ def handle_pubsub_push():
     local_prot_input = None
     local_gff_input = None
 
-    local_output = f"/tmp/{job_id}_output.tsv"
+    local_output = f"/tmp/{job_id}_amrfinder.tsv"
     local_stderr = f"/tmp/{job_id}_stderr.txt"
     local_nuc = f"/tmp/{job_id}_nucleotide.fna"
     local_prot = f"/tmp/{job_id}_protein.faa"
