@@ -212,6 +212,39 @@ class TestIndex:
         assert resp.status_code == 200
         assert b"Error retrieving version" in resp.data
 
+    def test_index_contains_job_name_helper_text(self):
+        """Index page should render the job name hint span."""
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert b"job-name-helper" in resp.data
+
+    def test_index_job_name_helper_describes_requirements(self):
+        """Job name hint span should describe the character requirements."""
+        resp = client.get("/")
+        assert b"underscores" in resp.data
+        assert b"hyphens" in resp.data
+
+
+# ---------------------------------------------------------------------------
+# Tests: GET /docs
+# ---------------------------------------------------------------------------
+
+class TestDocsPage:
+    def test_docs_page_returns_200(self):
+        resp = client.get("/docs")
+        assert resp.status_code == 200
+
+    def test_docs_job_name_section_exists(self):
+        resp = client.get("/docs")
+        assert b'id="job-name"' in resp.data
+
+    def test_docs_job_name_describes_character_requirements(self):
+        """Docs page should explain the allowed characters for job name."""
+        resp = client.get("/docs")
+        assert b"underscores" in resp.data
+        assert b"hyphens" in resp.data
+        assert b"100" in resp.data
+
 
 # ---------------------------------------------------------------------------
 # Tests: POST /analyze

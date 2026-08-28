@@ -222,14 +222,15 @@ def run_amrfinder(
     return result.stdout
 
 
-def run_amrrules(*, amrfp_output_tsv, amrrules_organism, output_prefix, job_id, stderr_path=None):
+def run_amrrules(*, amrfp_output_tsv, amrrules_organism, output_prefix, sample_id=None, job_id=None, stderr_path=None):
     """Build and execute the amrrules command on AMRFinderPlus output."""
+    sid = sample_id or job_id
     cmd = [
         "amrrules",
         "--input", amrfp_output_tsv,
         "--output-prefix", output_prefix,
         "--organism", amrrules_organism,
-        "--sample-id", str(job_id),
+        "--sample-id", str(sid),
     ]
 
     print(f"Executing AMRrules: {' '.join(cmd)}")
@@ -306,6 +307,16 @@ def _validate_payload(envelope):
     if not isinstance(gcs_uri, str) or not gcs_uri.startswith("gs://"):
         print(f"Malformed message - gcs_uri must start with 'gs://'. Got: {gcs_uri!r}")
         return None, (jsonify({"error": "Malformed message, gcs_uri must start with gs://"}), 200)
+
+    job_name = payload.get("job_name")
+    if job_name is not None:
+        if not isinstance(job_name, str):
+            print(f"Malformed message - job_name must be a string. Got: {job_name!r}")
+            return None, (jsonify({"error": "Malformed message, job_name must be a string"}), 200)
+        clean_job_name = job_name.strip()
+        if len(clean_job_name) > 100 or (clean_job_name and not re.fullmatch(r"[A-Za-z0-9 _-]+", clean_job_name)):
+            print(f"Malformed message - job_name contains invalid characters or exceeds 100 characters. Got: {job_name!r}")
+            return None, (jsonify({"error": "Malformed message, job_name contains invalid characters or exceeds 100 characters"}), 200)
 
     # Ensure parameters is a dict; fall back to empty dict if malformed
     params = payload.get("parameters", {})
@@ -421,12 +432,19 @@ def handle_pubsub_push():
             local_interpreted = f"{amrrules_prefix}_interpreted.tsv"
             cleanup_paths.extend([local_genome_summary, local_summary, local_interpreted])
             try:
-                _log(job_id, f"Running AMRrules for organism '{amrrules_organism}'...")
+                job_name = payload.get("job_name")
+                sample_id = job_id
+                if job_name and isinstance(job_name, str):
+                    clean_name = job_name.strip()
+                    if clean_name and len(clean_name) <= 100 and re.fullmatch(r"[A-Za-z0-9 _-]+", clean_name):
+                        sample_id = clean_name
+
+                _log(job_id, f"Running AMRrules for organism '{amrrules_organism}' with sample ID '{sample_id}'...")
                 run_amrrules(
                     amrfp_output_tsv=local_output,
                     amrrules_organism=amrrules_organism,
                     output_prefix=amrrules_prefix,
-                    job_id=job_id,
+                    sample_id=sample_id,
                     stderr_path=local_stderr,
                 )
                 if os.path.exists(local_genome_summary):

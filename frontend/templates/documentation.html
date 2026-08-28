@@ -26,7 +26,14 @@
 
   <section id="job-name">
     <h2>Job Name (Optional)</h2>
-    <p>A user-defined name to help you identify and organize your analysis results. This name will appear on the results page and in the output filenames. 
+    <p>A user-defined name to help you identify and organize your analysis results. This name will appear on the results page and is used as the sample name in AMRrules output.
+    </p>
+    <p>Requirements:
+      <ul>
+        <li>Maximum 100 characters.</li>
+        <li>Allowed characters: letters (A-Z, a-z), digits (0-9), spaces, underscores (<code>_</code>), and hyphens (<code>-</code>).</li>
+        <li>Other special characters (e.g. <code>@</code>, <code>!</code>, <code>/</code>) are not allowed.</li>
+      </ul>
     </p>
   </section>
 
@@ -87,7 +94,7 @@
 
   <section id="amrrules-organism">
     <h2>AMRrules organism (<code>--organism</code> for AMRrules)</h2>
-<p>Sets the <code>--organism</code> option for  <a href="https://docs.amrrules.org/en/latest/index.html">AMRrules</a> to interpret the output of AMRFinderPlus using their expert-derived species-specific interpretation rules. This is different from the AMRFinderPlus <code>--organism</code> option, see the <a href="https://docs.amrrules.org/en/latest/rules.html">AMRrules supported organism documentation</a> for more information.
+<p>Sets the <code>--organism</code> option for  <a href="https://docs.amrrules.org/en/latest/index.html">AMRrules</a> to interpret the output of AMRFinderPlus using their expert-derived species-specific interpretation rules. This is different from the AMRFinderPlus <code>--organism</code> option. This site has an automatic mapping for some of the commonly used organisms that is used by default, but that automatic mapping may not be correct for your sequences. See the <a href="https://docs.amrrules.org/en/latest/rules.html">AMRrules supported organism documentation</a> for more information.
 
     
 
@@ -99,6 +106,10 @@
   </section>
 
   Report issues or make suggestions for improvements on <a href="https://github.com/evolarjun/webamr/issues">GitHub</a>
+
+  <section id="output">
+      <h2>Output</h2>
+      <p>Output formats are described in the <a href="https://github.com/ncbi/amr/wiki/Running-AMRFinderPlus#output-format">AMRFinderPlus documentation</a> and <a href="https://docs.amrrules.org/en/latest/interpretation.html#genome-summary-report">AMRrules documentation</a>.
 
   <p><a href="/">← Back to Home</a></p>
 </body>

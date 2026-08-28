@@ -431,6 +431,29 @@ class TestHandlePubsubPush:
         upload_destinations = [c[0][1] for c in mock_ul.call_args_list]
         assert "results/job-amr-success/amrrules_genome_summary.tsv" in upload_destinations
 
+    @patch("worker.upload_blob")
+    @patch("worker.run_amrrules", return_value="amrrules success")
+    @patch("worker.run_amrfinder", return_value="success")
+    @patch("worker.download_blob")
+    @patch("worker.os.path.exists", return_value=False)
+    def test_amrrules_called_with_job_name_as_sample_id(self, mock_exists, mock_dl, mock_run_af, mock_rules, mock_ul):
+        mock_doc = MagicMock()
+        worker.get_firestore_client().collection.return_value.document.return_value = mock_doc
+
+        params = {"amrrules_organism": "s__Escherichia coli"}
+        payload = {
+            "job_id": "job-amr-name-test",
+            "job_name": "Sample Job 100",
+            "gcs_uri": "gs://b/f.fa",
+            "parameters": params,
+        }
+        body = _make_raw_push_body(json.dumps(payload).encode("utf-8"))
+
+        resp = flask_client.post("/", json=body)
+        assert resp.status_code == 200
+        mock_rules.assert_called_once()
+        assert mock_rules.call_args[1]["sample_id"] == "Sample Job 100"
+
 
 
 class TestRunAmrrules:
@@ -473,6 +496,19 @@ class TestRunAmrrules:
         assert "=== AMRrules Log ===" in content
         assert "amrrules stderr log" in content
         assert "amrrules stdout log" in content
+
+    @patch("worker.subprocess.run")
+    def test_amrrules_uses_sample_id_when_provided(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=0, stdout="success", stderr="")
+        worker.run_amrrules(
+            amrfp_output_tsv="/tmp/out.tsv",
+            amrrules_organism="s__Escherichia coli",
+            output_prefix="/tmp/prefix",
+            sample_id="My-Sample_Name-01",
+        )
+        cmd = mock_run.call_args[0][0]
+        assert "--sample-id" in cmd
+        assert "My-Sample_Name-01" in cmd
 
 
 class TestUploadVersions:
