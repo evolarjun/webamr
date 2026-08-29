@@ -3,9 +3,9 @@
 This guide assumes you have the Google Cloud CLI (`gcloud`) installed and authenticated, and a GCP project ready.
 
 > **Command Frequency Legend:**
-> - 🟢 **[One-Time Setup]**: Commands only needed the very first time you set up the environment.
-> - 🔄 **[Run Every Update]**: Commands to re-run whenever you update the codebase and deploy a new version.
-> - 🛠️ **[Session Setup]**: Commands to set variables whenever you open a new terminal session for deployment.
+> - **[One-Time Setup]**: Commands only needed the very first time you set up the environment.
+> - **[Run Every Update]**: Commands to re-run whenever you update the codebase and deploy a new version.
+> - **[Session Setup]**: Commands to set variables whenever you open a new terminal session for deployment.
 
 ## 1. Version Control (GitHub)
 
@@ -14,13 +14,13 @@ The local code has been initialized as a Git repository. To push it to GitHub:
 1. Create a new repository on GitHub.
 2. Link your local repository to GitHub and push:
 
-🟢 **[One-Time Setup]**
+**[One-Time Setup]**
 ```bash
 git remote add origin https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git
 git branch -M main
 ```
 
-🔄 **[Run Every Update]**
+**[Run Every Update]**
 ```bash
 git add .
 git commit -m "Your commit message"
@@ -31,7 +31,7 @@ git push -u origin main
 
 Set your project variables and application environment variables:
 
-🛠️ **[Session Setup]**
+**[Session Setup]**
 ```bash
 # General GCP Variables
 PROJECT_ID="your-project-id"
@@ -48,7 +48,7 @@ gcloud config set project $PROJECT_ID
 ### Enable APIs
 Enable the necessary GCP APIs:
 
-🟢 **[One-Time Setup]**
+**[One-Time Setup]**
 ```bash
 gcloud services enable \
   run.googleapis.com \
@@ -86,7 +86,7 @@ This tells Cloud Storage to delete files older than 10 days from both buckets.
 ```
 Apply the lifecycle policy to both buckets:
 
-🟢 **[One-Time Setup]**
+**[One-Time Setup]**
 ```bash
 gsutil lifecycle set lifecycle.json gs://amr-input-bucket-${PROJECT_ID}
 gsutil lifecycle set lifecycle.json gs://amr-output-bucket-${PROJECT_ID}
@@ -95,7 +95,7 @@ gsutil lifecycle set lifecycle.json gs://amr-output-bucket-${PROJECT_ID}
 ### Storage Buckets
 Create the input and output Cloud Storage buckets:
 
-🟢 **[One-Time Setup]**
+**[One-Time Setup]**
 ```bash
 gsutil mb -l $REGION gs://amr-input-bucket-${PROJECT_ID}
 gsutil mb -l $REGION gs://amr-output-bucket-${PROJECT_ID}
@@ -114,7 +114,7 @@ Configure CORS on the input bucket to allow direct uploads from the browser. Cre
 ```
 Apply the CORS policy:
 
-🟢 **[One-Time Setup]**
+**[One-Time Setup]**
 ```bash
 gsutil cors set cors.json gs://amr-input-bucket-${PROJECT_ID}
 ```
@@ -122,7 +122,7 @@ gsutil cors set cors.json gs://amr-input-bucket-${PROJECT_ID}
 ### Pub/Sub
 Create the Pub/Sub topic for the job queue:
 
-🟢 **[One-Time Setup]**
+**[One-Time Setup]**
 ```bash
 gcloud pubsub topics create amr-jobs-topic
 ```
@@ -131,7 +131,7 @@ gcloud pubsub topics create amr-jobs-topic
 ### Firestore
 Initialize Firestore in Native mode. You can do this through the GCP Console (Firestore section) or via CLI:
 
-🟢 **[One-Time Setup]**
+**[One-Time Setup]**
 ```bash
 gcloud firestore databases create --location=$REGION
 ```
@@ -141,16 +141,16 @@ gcloud firestore databases create --location=$REGION
 The worker is a Flask HTTP service. Rather than pulling from Pub/Sub itself, it
 receives job messages as **HTTP POST requests pushed by Pub/Sub** directly to
 its Cloud Run URL. Cloud Run scales up an instance per job and back to zero
-when idle — no VM needed.
+when idle -- no VM needed.
 
 ### 3a. Build and push the Docker image
 
-🟢 **[One-Time Setup]**
+**[One-Time Setup]**
 ```bash
 gcloud artifacts repositories create amr-repo --repository-format=docker --location=$REGION
 ```
 
-🔄 **[Run Every Update]** *(whenever worker code changes)*
+**[Run Every Update]** *(whenever worker code changes)*
 ```bash
 # Cloud Build submits the worker/ directory and pushes to Artifact Registry
 # First, copy the root VERSION.txt into the context
@@ -162,7 +162,7 @@ gcloud builds submit \
 
 ### 3b. Deploy as a Cloud Run service
 
-🔄 **[Run Every Update]**
+**[Run Every Update]**
 ```bash
 gcloud run deploy amr-worker \
   --image ${REGION}-docker.pkg.dev/${PROJECT_ID}/amr-repo/amr-worker \
@@ -181,11 +181,11 @@ WORKER_URL=$(gcloud run services describe amr-worker \
 ```
 
 `--no-allow-unauthenticated` restricts the endpoint so only Pub/Sub (via its
-service account) can invoke it — not arbitrary HTTP clients.
+service account) can invoke it -- not arbitrary HTTP clients.
 
 ### 3c. Create a Pub/Sub push subscription pointing at the worker
 
-🟢 **[One-Time Setup]**
+**[One-Time Setup]**
 ```bash
 # Create a dedicated service account for Pub/Sub to authenticate with Cloud Run
 gcloud iam service-accounts create amr-pubsub-invoker \
@@ -197,7 +197,7 @@ gcloud run services add-iam-policy-binding amr-worker \
   --member="serviceAccount:amr-pubsub-invoker@${PROJECT_ID}.iam.gserviceaccount.com" \
   --role="roles/run.invoker"
 
-# Create the push subscription — Pub/Sub will POST each job message to /
+# Create the push subscription -- Pub/Sub will POST each job message to /
 gcloud pubsub subscriptions create amr-jobs-sub \
   --topic amr-jobs-topic \
   --push-endpoint=${WORKER_URL}/ \
@@ -217,7 +217,7 @@ The frontend is a Flask application located in `frontend/`. It serves the HTML U
 
 From the `frontend` directory, download the required AMRFinderPlus resource files and submit the build:
 
-🔄 **[Run Every Update]** *(whenever frontend code changes)*
+**[Run Every Update]** *(whenever frontend code changes)*
 ```bash
 cd frontend
 
@@ -236,7 +236,7 @@ gcloud builds submit \
 
 ### 4b. Deploy Frontend as a Cloud Run service
 
-🔄 **[Run Every Update]**
+**[Run Every Update]**
 ```bash
 gcloud run deploy amr-frontend \
   --image ${REGION}-docker.pkg.dev/${PROJECT_ID}/amr-repo/amr-frontend \

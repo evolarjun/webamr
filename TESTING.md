@@ -49,9 +49,9 @@ pytest tests/test_frontend.py::TestAnalyze::test_pubsub_publish_called -v
 
 ## Integration Tests
 
-Integration tests wire the **frontend and worker Flask apps together** in a single pytest process. Pub/Sub is intercepted (not real), but **GCS and Firestore are real** — tests create temporary files/documents and clean them up afterward.
+Integration tests wire the **frontend and worker Flask apps together** in a single pytest process. Pub/Sub is intercepted (not real), but **GCS and Firestore are real** -- tests create temporary files/documents and clean them up afterward.
 
-`amrfinder` is **not required locally** — it is mocked with fake TSV output so these tests work on any machine with valid GCP credentials.
+`amrfinder` is **not required locally** -- it is mocked with fake TSV output so these tests work on any machine with valid GCP credentials.
 
 ### Prerequisites
 
@@ -76,9 +76,9 @@ pytest tests/test_integration.py -v
 
 | Test | Description |
 |---|---|
-| `test_submit_and_process_job` | Full flow: upload file via frontend → intercept Pub/Sub message → forward to worker → verify results retrievable from frontend |
+| `test_submit_and_process_job` | Full flow: upload file via frontend -> intercept Pub/Sub message -> forward to worker -> verify results retrievable from frontend |
 | `test_submit_with_organism` | Same flow with an organism parameter, verifies it flows through to the worker payload |
-| `test_failed_job_reports_error` | Worker fails → verify frontend reports the error via Firestore |
+| `test_failed_job_reports_error` | Worker fails -> verify frontend reports the error via Firestore |
 | `test_download_output_file` | After processing, verify the TSV output is downloadable via `GET /output/<id>` |
 
 ---
