@@ -3,20 +3,16 @@
 > [!WARNING]
 > This is an experimental side project. No warranty express or implied. Not endorsed or supported by my employer or anyone else.
 
-This application provides a web-based UI and scalable cloud-native backend for running [AMRFinderPlus](https://github.com/ncbi/amr/wiki), a tool by the NCBI for identifying antimicrobial resistance (AMR) genes and point mutations (plus some virulence and biocide/stress resistance genes) in assembled nucleotide and/or protein sequences. Currently running at https://amr.arjunp.net.
+This application provides a web-based UI and serverless backend for running [AMRFinderPlus](https://github.com/ncbi/amr/wiki), a tool identifying antimicrobial resistance (AMR) genes and point mutations plus some virulence and biocide/stress resistance genes in assembled nucleotide and/or protein sequences. Currently running at https://amr.arjunp.net.
 
 User documentation at https://amr.arjunp.net/docs
 
 ## Project Structure
 
-WebAMR is built using a decoupled Cloud-Native architecture on Google Cloud Platform:
+WebAMR is built using a decoupled serverless architecture on Google Cloud Platform:
 
-*   **`frontend/`**: A Flask-based web interface that allows users to upload nucleotide/protein/GFF files, select target organisms, and view real-time analysis results. It handles interactions directly with Google Cloud services: generating GCS uploads, managing job submissions, recording status in Cloud Firestore, and publishing jobs to Pub/Sub.
-*   **`worker/`**: A containerized Cloud Run service that receives job messages from Pub/Sub via push subscriptions. It downloads files from GCS, executes the AMRFinderPlus binary, and uploads the results back to GCS.
-
-## Architecture & Data Flow
-
-Uses all google serverless technologies (for fun). Code runs on Google Cloud Run with two images, one for the front-end and one "worker" that runs AMRFinderPlus. Parameters and status for the runs are stored in Firestore, Input and output files are stored in Google Cloud Storage buckets, and the "worker" job is triggered by a Pub/Sub message.
+*   **`frontend/`**: A Flask-based web interface that allows users to upload nucleotide/protein/GFF files, select target organisms, and view analysis results. It handles interactions directly with Google Cloud services: generating GCS uploads, managing job submissions, recording status in Cloud Firestore, and publishing jobs to Pub/Sub.
+*   **`worker/`**: A containerized Cloud Run service that receives job messages from Pub/Sub via push subscriptions. It downloads files from GCS, executes the AMRFinderPlus and optional AMRrules pipelines, and uploads the results back to GCS.
 
 For a detailed view of the infrastructure and data flow (including Google Cloud Storage, Pub/Sub, Firestore, and Cloud Run), please refer to the **[ARCHITECTURE.md](ARCHITECTURE.md)** file.
 
@@ -24,15 +20,16 @@ For a detailed view of the infrastructure and data flow (including Google Cloud 
 
 The application is containerized and designed for deployment on Google Cloud Platform. 
 
-For complete instructions on setting up the GCP infrastructure, local testing with emulators, and deploying the frontend and workers to Cloud Run, please see the **[DEPLOYMENT.md](DEPLOYMENT.md)** guide.
+For instructions on setting up the GCP infrastructure, local testing with emulators, and deploying the frontend and workers to Cloud Run, please see the **[DEPLOYMENT.md](DEPLOYMENT.md)** guide and **[TESTING.md](TESTING.md)**.
 
 ## Development Status
 
-This project is actively developed. Current features include:
-*   File uploads (nucleotide FASTA, protein FASTA, and GFF) via the web UI.
+This project is actively developed and is now mostly vibe-coded. Current features include:
+*   File uploads (nucleotide FASTA, protein FASTA, and GFF).
+*   Optional AMRrules analysis.
 *   Asynchronous job processing with Pub/Sub.
-*   Scalable zero-to-N worker instances on Cloud Run.
+*   Scalable zero-to-N frontend and worker instances on Cloud Run.
 *   Job status tracking via Cloud Firestore.
-*   Shareable result pages (`/results/<job_id>`) and TSV download.
+*   Shareable result pages and TSV download.
 
-Report issues on [GitHub](https://github.com/evolarjun/webamr/issues)
+Bugs and feature requests to [GitHub](https://github.com/evolarjun/webamr/issues)
