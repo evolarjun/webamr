@@ -242,7 +242,14 @@ AMRrules <span id="amrrules-version-text">{{ amrrules_version }}</span></pre>
               clearInterval(pollInterval);
               if (timerInterval) clearInterval(timerInterval);
               if (statusMsg) statusMsg.innerHTML = '';
-              resultsDiv.innerHTML = '<p class="error"><strong>Job failed:</strong> ' + data.error + '</p>';
+              resultsDiv.innerHTML = '';
+              const errP = document.createElement('p');
+              errP.className = 'error';
+              const strong = document.createElement('strong');
+              strong.textContent = 'Job failed: ';
+              errP.appendChild(strong);
+              errP.appendChild(document.createTextNode(data.error));
+              resultsDiv.appendChild(errP);
               return;
             }
 
@@ -294,7 +301,10 @@ AMRrules <span id="amrrules-version-text">{{ amrrules_version }}</span></pre>
               if (data.amrrules_error) {
                 const amrError = document.createElement('p');
                 amrError.className = 'error';
-                amrError.innerHTML = '<strong>AMRrules notice:</strong> ' + data.amrrules_error;
+                const strongAmr = document.createElement('strong');
+                strongAmr.textContent = 'AMRrules notice: ';
+                amrError.appendChild(strongAmr);
+                amrError.appendChild(document.createTextNode(data.amrrules_error));
                 resultsDiv.appendChild(amrError);
               }
 
