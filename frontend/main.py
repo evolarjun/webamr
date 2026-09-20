@@ -529,14 +529,19 @@ def results_page(job_id):
             except NotFound:
                 # Job completed but result files have been cleaned up
                 status = "Expired"
-            stderr_available = bucket.blob(f'results/{job_id}/stderr.txt').exists()
-            nucleotide_available = bucket.blob(f'results/{job_id}/nucleotide.fna').exists()
-            protein_available = bucket.blob(f'results/{job_id}/protein.faa').exists()
+
+            prefix = f'results/{job_id}/'
+            blobs = bucket.list_blobs(prefix=prefix)
+            blob_names = {b.name for b in blobs}
+
+            stderr_available = f'{prefix}stderr.txt' in blob_names
+            nucleotide_available = f'{prefix}nucleotide.fna' in blob_names
+            protein_available = f'{prefix}protein.faa' in blob_names
             amrrules_summary_available = (
-                bucket.blob(f'results/{job_id}/amrrules_genome_summary.tsv').exists() or
-                bucket.blob(f'results/{job_id}/amrrules_summary.tsv').exists()
+                f'{prefix}amrrules_genome_summary.tsv' in blob_names or
+                f'{prefix}amrrules_summary.tsv' in blob_names
             )
-            amrrules_interpreted_available = bucket.blob(f'results/{job_id}/amrrules_interpreted.tsv').exists()
+            amrrules_interpreted_available = f'{prefix}amrrules_interpreted.tsv' in blob_names
         except Exception as e:
             print(f"Error fetching results from GCS for completed job {job_id}: {e}")
 
@@ -613,14 +618,19 @@ def return_results(user_id):
     storage_client = get_storage_client()
     bucket = storage_client.bucket(OUTPUT_BUCKET)
     blob = bucket.blob(f'results/{user_id}/results.tsv')
-    stderr_available = bool(bucket.blob(f'results/{user_id}/stderr.txt').exists())
-    nucleotide_available = bool(bucket.blob(f'results/{user_id}/nucleotide.fna').exists())
-    protein_available = bool(bucket.blob(f'results/{user_id}/protein.faa').exists())
-    amrrules_summary_available = bool(
-        bucket.blob(f'results/{user_id}/amrrules_genome_summary.tsv').exists() or
-        bucket.blob(f'results/{user_id}/amrrules_summary.tsv').exists()
+
+    prefix = f'results/{user_id}/'
+    blobs = bucket.list_blobs(prefix=prefix)
+    blob_names = {b.name for b in blobs}
+
+    stderr_available = f'{prefix}stderr.txt' in blob_names
+    nucleotide_available = f'{prefix}nucleotide.fna' in blob_names
+    protein_available = f'{prefix}protein.faa' in blob_names
+    amrrules_summary_available = (
+        f'{prefix}amrrules_genome_summary.tsv' in blob_names or
+        f'{prefix}amrrules_summary.tsv' in blob_names
     )
-    amrrules_interpreted_available = bool(bucket.blob(f'results/{user_id}/amrrules_interpreted.tsv').exists())
+    amrrules_interpreted_available = f'{prefix}amrrules_interpreted.tsv' in blob_names
     try:
         results = tabulize(blob.download_as_bytes())
         

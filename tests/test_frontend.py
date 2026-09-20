@@ -75,9 +75,10 @@ def teardown_module(module):
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_blob(exists=True, content=b"", size=1024):
+def _make_blob(exists=True, content=b"", size=1024, name="mock_blob"):
     """Return a mock GCS blob."""
     b = MagicMock()
+    b.name = name
     b.exists.return_value = exists
     if exists:
         b.download_as_string.return_value = content
@@ -1141,6 +1142,12 @@ class TestAMRrulesIntegration:
         MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = doc
         mock_blob = _make_blob(exists=True, content=b"Gene\tDrug\n")
         MOCK_STORAGE.bucket.return_value.blob.return_value = mock_blob
+        mock_blob_stderr = _make_blob(name="results/amr-job-123/stderr.txt")
+        mock_blob_nuc = _make_blob(name="results/amr-job-123/nucleotide.fna")
+        mock_blob_prot = _make_blob(name="results/amr-job-123/protein.faa")
+        mock_blob_sum = _make_blob(name="results/amr-job-123/amrrules_genome_summary.tsv")
+        mock_blob_int = _make_blob(name="results/amr-job-123/amrrules_interpreted.tsv")
+        MOCK_STORAGE.bucket.return_value.list_blobs.return_value = [mock_blob_stderr, mock_blob_nuc, mock_blob_prot, mock_blob_sum, mock_blob_int]
 
         resp = client.get("/results/amr-job-123")
         assert resp.status_code == 200
