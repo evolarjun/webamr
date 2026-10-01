@@ -103,6 +103,8 @@ AMRrules {{ amrrules_version }}</pre>
     document.addEventListener('DOMContentLoaded', updateAmrrulesHelper);
 
     const JOB_NAME_RE = /^[A-Za-z0-9 _-]*$/;
+    const jobNameHelper = document.getElementById('job-name-helper');
+    const jobNameHelperDefault = jobNameHelper.textContent;
 
     function validateForm(showError = true) {
       const nucFile = form.elements['nuc_file'].files[0];
@@ -113,9 +115,15 @@ AMRrules {{ amrrules_version }}</pre>
       // Validate job name first -- independent of file selection.
       const jobName = form.elements['job_name'].value.trim();
       if (jobName && !JOB_NAME_RE.test(jobName)) {
-        if (showError) statusMsg.innerHTML = '<p class="error">Job name can only contain letters, numbers, spaces, underscores, and hyphens.</p>';
+        if (showError) {
+          jobNameHelper.textContent = 'Job name can only contain letters, numbers, spaces, underscores, and hyphens.';
+          jobNameHelper.style.color = 'var(--error-fg)';
+        }
         submitButton.disabled = true;
         return false;
+      } else {
+        jobNameHelper.textContent = jobNameHelperDefault;
+        jobNameHelper.style.color = 'var(--fg-muted)';
       }
 
       if (!nucFile && !protFile && !gffFile) {
