@@ -610,6 +610,26 @@ class TestRunAmrrules:
         assert "--sample-id" in cmd
         assert "My-Sample_Name-01" in cmd
 
+    @patch("worker.subprocess.run")
+    def test_amrrules_logs_command_before_execution_even_if_it_fails(self, mock_run, tmp_path):
+        mock_run.side_effect = RuntimeError("Process execution failed")
+        stderr_file = tmp_path / "test_stderr.txt"
+        stderr_file.write_text("=== AMRFinderPlus Log ===\nAMRFinder output\n")
+
+        import pytest
+        with pytest.raises(RuntimeError):
+            worker.run_amrrules(
+                amrfp_output_tsv="/tmp/out.tsv",
+                amrrules_organism="s__Escherichia coli",
+                output_prefix="/tmp/prefix",
+                job_id="job-123",
+                stderr_path=str(stderr_file),
+            )
+
+        content = stderr_file.read_text()
+        assert "=== AMRrules Log ===" in content
+        assert "Command: amrrules --input /tmp/out.tsv --output-prefix /tmp/prefix --organism 's__Escherichia coli' --sample-id job-123" in content
+
 
 class TestUploadVersions:
     @patch("importlib.metadata.version", return_value="1.2.3")

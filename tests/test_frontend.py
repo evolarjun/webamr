@@ -260,6 +260,12 @@ class TestDocsPage:
         resp = client.get("/docs")
         assert b"https://github.com/evolarjun/webamr/issues" in resp.data
 
+    def test_docs_header_renders_site_header_and_home_link(self):
+        resp = client.get("/docs")
+        assert b'<header class="site-header">' in resp.data
+        assert b'Back to Home' in resp.data
+        assert b'Documentation' in resp.data
+
 
 # ---------------------------------------------------------------------------
 # Tests: POST /analyze
@@ -894,6 +900,28 @@ class TestResultsPage:
         resp = client.get("/results/test-job-id")
         data_lower = resp.data.lower()
         assert b"queued" in data_lower or b"running" in data_lower or b"polling" in data_lower
+
+    def test_results_page_shows_queued_status_badge(self):
+        """When job status is Queued, status badge renders Queued."""
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = (
+            self._pending_firestore()
+        )
+        resp = client.get("/results/test-job-id")
+        assert b'<span id="job-status-badge">Queued</span>' in resp.data
+
+    def test_results_page_shows_running_when_status_is_processing(self):
+        """When job status is Processing in Firestore, status badge and message render Running."""
+        doc = MagicMock()
+        doc.exists = True
+        doc.to_dict.return_value = {
+            "job_id": "proc-job-id",
+            "status": "Processing",
+            "created_at": datetime(2026, 5, 29, 9, 0, 0, tzinfo=timezone.utc)
+        }
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = doc
+        resp = client.get("/results/proc-job-id")
+        assert b'<span id="job-status-badge">Running</span>' in resp.data
+        assert b"Status: <strong>Running</strong>" in resp.data
 
     def test_results_page_shows_error_for_failed_job(self):
         """When the job status is Failed, the page contains an error message."""

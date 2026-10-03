@@ -12,57 +12,81 @@
 </head>
 
 <body>
-  <h1>
-    <a href="/">AMRFinderPlus</a> - Job Results{% if job_name %}: {{ job_name }}{% endif %}
-  </h1>
-  <p>
-    <strong>Job ID:</strong>
-    <a id="share-link" href="/results/{{ job_id }}"><code id="job-id">{{ job_id }}</code></a>
-    &nbsp;<button onclick="copyLink()" title="Copy link">Copy link</button> &nbsp;&nbsp; data will be retained on the
-    server until {{ retention_date }} <br />
-    <a href="/docs">[docs]</a>
-  </p>
-  <pre>AMRFinderPlus <a id="software-version-link" href="https://github.com/ncbi/amr/releases/tag/amrfinder_v{{ software_version }}"><span id="software-version-text">{{ software_version }}</span></a> database version <span id="database-version-text">{{ database_version }}</span>
-AMRrules <span id="amrrules-version-text">{{ amrrules_version }}</span></pre>
-  {% if job_name %}
-  <p>
-    <strong>Job name:</strong> <code id="job-name">{{ job_name }}</code><br />
-  </p>
-  {% endif %}
-  <strong>Inputs:</strong>
-  <ul>
-    {% if nuc_filename %}
-    <li>
-      <strong>Nucleotide file:</strong> <a href="/input/{{ job_id }}/{{ nuc_filename }}">{{ nuc_filename }}</a>
-    </li>
+  <!-- Consolidated Header -->
+  <header class="site-header">
+    <div class="header-branding">
+      <h1><a href="/">WebAMR</a></h1>
+      <span class="header-tagline">Job Results{% if job_name %}: {{ job_name }}{% endif %}</span>
+    </div>
+    <div class="header-nav-links">
+      <a href="/">+ New Analysis</a>
+      <a href="/docs">Documentation</a>
+    </div>
+    <div class="header-version-bar">
+      AMRFinderPlus <a id="software-version-link" href="https://github.com/ncbi/amr/releases/tag/amrfinder_v{{ software_version }}" target="_blank" rel="noopener"><code>v<span id="software-version-text">{{ software_version }}</span></code></a> database version <code><span id="database-version-text">{{ database_version }}</span></code> | AMRrules <code>v<span id="amrrules-version-text">{{ amrrules_version }}</span></code>
+    </div>
+  </header>
+
+  <!-- Job Metadata Summary Box -->
+  <div class="meta-summary-box">
+    <div class="meta-summary-row" style="margin-bottom: 8px;">
+      <div class="meta-summary-item">
+        <strong>Job ID:</strong>
+        <a id="share-link" href="/results/{{ job_id }}"><code id="job-id">{{ job_id }}</code></a>
+        &nbsp;<button onclick="copyLink()" title="Copy link">Copy link</button>
+      </div>
+      <div class="meta-summary-item" style="color: var(--fg-muted);">
+        data will be retained on the server until {{ retention_date }}
+      </div>
+      {% if status %}
+      <div class="meta-summary-item">
+        <strong>Status:</strong> <span id="job-status-badge">{% if status == 'Processing' %}Running{% else %}{{ status }}{% endif %}</span>
+      </div>
+      {% endif %}
+    </div>
+    {% if job_name %}
+    <div class="meta-summary-row" style="margin-bottom: 8px;">
+      <div class="meta-summary-item">
+        <strong>Job name:</strong> <code id="job-name">{{ job_name }}</code>
+      </div>
+    </div>
     {% endif %}
-    {% if prot_filename %}
-    <li>
-      <strong>Protein file:</strong> <a href="/input/{{ job_id }}/{{ prot_filename }}">{{ prot_filename }}</a>
-    </li>
+    {% if nuc_filename or prot_filename or gff_filename %}
+    <div class="meta-summary-row" style="color: var(--fg-muted); font-size: 0.88rem;">
+      <div class="meta-summary-item">
+        <strong>Inputs:</strong>
+        {% if nuc_filename %}
+        <span>Nucleotide: <a href="/input/{{ job_id }}/{{ nuc_filename }}">{{ nuc_filename }}</a></span>
+        {% endif %}
+        {% if prot_filename %}
+        {% if nuc_filename %} | {% endif %}
+        <span>Protein: <a href="/input/{{ job_id }}/{{ prot_filename }}">{{ prot_filename }}</a></span>
+        {% endif %}
+        {% if gff_filename %}
+        {% if nuc_filename or prot_filename %} | {% endif %}
+        <span>GFF: <a href="/input/{{ job_id }}/{{ gff_filename }}">{{ gff_filename }}</a></span>
+        {% endif %}
+      </div>
+    </div>
     {% endif %}
-    {% if gff_filename %}
-    <li>
-      <strong>GFF file:</strong> <a href="/input/{{ job_id }}/{{ gff_filename }}">{{ gff_filename }}</a>
-    </li>
-    {% endif %}
-  </ul>
-  <strong>Results:</strong>
+  </div>
+
   {% if status == "Failed" %}
   <p class="error"><strong>Job failed:</strong> {{ error_message }}</p>
   {% elif status == "Completed" and result_html %}
   <div id="results">
-    <button onclick="downloadResults('{{ job_id }}')" style="margin-bottom: 10px;">Download AMRFinderPlus
-      results</button>
-    {% if amrrules_summary_available %}
-    &nbsp;<a href="/amrrules-summary/{{ job_id }}">amrrules_genome_summary.tsv</a> &nbsp;&nbsp;&nbsp;
-    {% endif %}
-    {% if amrrules_interpreted_available %}
-    &nbsp;<a href="/amrrules-interpreted/{{ job_id }}">amrrules_interpreted.tsv</a> &nbsp;&nbsp;&nbsp;
-    {% endif %}
-    {% if stderr_available %}
-    &nbsp;<a href="/stderr/{{ job_id }}" target="_blank">Run log</a>
-    {% endif %}
+    <div class="results-actions-bar">
+      <button class="action-btn-primary" onclick="downloadResults('{{ job_id }}')">Download AMRFinderPlus results</button>
+      {% if amrrules_summary_available %}
+      <a href="/amrrules-summary/{{ job_id }}">amrrules_genome_summary.tsv</a>
+      {% endif %}
+      {% if amrrules_interpreted_available %}
+      <a href="/amrrules-interpreted/{{ job_id }}">amrrules_interpreted.tsv</a>
+      {% endif %}
+      {% if stderr_available %}
+      <a href="/stderr/{{ job_id }}" target="_blank">Run log</a>
+      {% endif %}
+    </div>
     {{ result_html | safe }}
     {% if nucleotide_available %}
     <p><a href="/nucleotide/{{ job_id }}" target="_blank">Download Nucleotide FASTA</a></p>
@@ -87,7 +111,7 @@ AMRrules <span id="amrrules-version-text">{{ amrrules_version }}</span></pre>
   </div>
   {% else %}
   <div id="status-msg">
-    <p>Status: <strong>{{ status }}</strong> — polling… <span id="timer"></span></p>
+    <p>Status: <strong>{% if status == 'Processing' %}Running{% else %}{{ status }}{% endif %}</strong> -- polling... <span id="timer"></span></p>
   </div>
   <div id="results"></div>
   <div id="poll-results"></div>
@@ -99,6 +123,7 @@ AMRrules <span id="amrrules-version-text">{{ amrrules_version }}</span></pre>
     const retentionDate = {{ retention_date | tojson }};
     const resultsDiv = document.getElementById('results');
     const statusMsg = document.getElementById('status-msg');
+    const jobStatusBadge = document.getElementById('job-status-badge');
     const startTime = createdAtStr ? new Date(createdAtStr) : new Date();
     let timerInterval;
 
@@ -122,7 +147,7 @@ AMRrules <span id="amrrules-version-text">{{ amrrules_version }}</span></pre>
       const url = window.location.origin + '/results/' + jobId;
       navigator.clipboard.writeText(url)
         .then(() => alert('Link copied to clipboard!'))
-        .catch(() => alert('Could not copy — please copy manually:\n' + url));
+        .catch(() => alert('Could not copy -- please copy manually:\n' + url));
     }
 
     function downloadResults(userId) {
@@ -141,7 +166,7 @@ AMRrules <span id="amrrules-version-text">{{ amrrules_version }}</span></pre>
         .catch(error => console.error('Error downloading results:', error));
     }
 
-    /* ── Column sorting ─────────────────────────────────────────── */
+    /* -- Column sorting ------------------------------------------- */
     function sortTable(table, columnIndex, ascending) {
       const tbody = table.querySelector('tbody');
       const rows = Array.from(tbody.querySelectorAll('tr'));
@@ -176,7 +201,7 @@ AMRrules <span id="amrrules-version-text">{{ amrrules_version }}</span></pre>
 
         th.addEventListener('click', () => {
           const currentDir = th.dataset.sortDir;
-          const ascending = currentDir !== 'asc';   // toggle: none→asc, asc→desc, desc→asc
+          const ascending = currentDir !== 'asc';   // toggle: none->asc, asc->desc, desc->asc
 
           // Clear all other headers
           headers.forEach(h => { h.dataset.sortDir = ''; h.classList.remove('sort-asc', 'sort-desc'); });
@@ -208,13 +233,15 @@ AMRrules <span id="amrrules-version-text">{{ amrrules_version }}</span></pre>
             if (data.status && data.status === 'Expired') {
               clearInterval(pollInterval);
               if (timerInterval) clearInterval(timerInterval);
+              if (jobStatusBadge) jobStatusBadge.textContent = 'Expired';
               if (statusMsg) statusMsg.innerHTML = '<p class="error"><strong>Job expired:</strong> This job completed successfully, but the result files are no longer available. Output files were retained on the server until ' + retentionDate + '.</p>';
               return;
             }
 
             if (data.status && data.status !== 'Completed') {
               const displayStatus = (data.status === 'Processing') ? 'Running' : data.status;
-              if (statusMsg) statusMsg.innerHTML = '<p>Status: <strong>' + displayStatus + '</strong> — polling… <span id="timer"></span></p>';
+              if (jobStatusBadge) jobStatusBadge.textContent = displayStatus;
+              if (statusMsg) statusMsg.innerHTML = '<p>Status: <strong>' + displayStatus + '</strong> -- polling... <span id="timer"></span></p>';
               return;
             }
 
@@ -241,6 +268,7 @@ AMRrules <span id="amrrules-version-text">{{ amrrules_version }}</span></pre>
             if (data.error) {
               clearInterval(pollInterval);
               if (timerInterval) clearInterval(timerInterval);
+              if (jobStatusBadge) jobStatusBadge.textContent = 'Failed';
               if (statusMsg) statusMsg.innerHTML = '';
               resultsDiv.innerHTML = '';
               const errP = document.createElement('p');
@@ -256,6 +284,7 @@ AMRrules <span id="amrrules-version-text">{{ amrrules_version }}</span></pre>
             if (data.result) {
               clearInterval(pollInterval);
               if (timerInterval) clearInterval(timerInterval);
+              if (jobStatusBadge) jobStatusBadge.textContent = 'Completed';
               if (statusMsg) statusMsg.innerHTML = '';
 
               const downloadButton = document.createElement('button');

@@ -242,12 +242,19 @@ def run_amrrules(*, amrfp_output_tsv, amrrules_organism, output_prefix, sample_i
 
     cmd_str = shlex.join(cmd)
     print(f"Executing AMRrules: {cmd_str}")
-    result = subprocess.run(cmd, capture_output=True, text=True)
 
     if stderr_path and os.path.exists(stderr_path):
         try:
             with open(stderr_path, "a") as f:
                 f.write(f"\n\n=== AMRrules Log ===\nCommand: {cmd_str}\n\n")
+        except Exception as log_err:
+            print(f"Failed to append AMRrules command to stderr_path: {log_err}")
+
+    result = subprocess.run(cmd, capture_output=True, text=True)
+
+    if stderr_path and os.path.exists(stderr_path):
+        try:
+            with open(stderr_path, "a") as f:
                 if result.stderr:
                     f.write(result.stderr)
                 if result.stdout:

@@ -12,61 +12,97 @@
 </head>
 
 <body>
-  <h1>Upload your files to run <a href="https://github.com/ncbi/amr/wiki">AMRFinderPlus</a></h1>
-  <h2>Now includes <a href="https://docs.amrrules.org/en/latest/">AMRrules</a></h2>
-  <a href="/docs">[docs]</a>
-  <p></p>
-  <pre>AMRFinderPlus <a href="https://github.com/ncbi/amr/releases/tag/amrfinder_v{{ software_version }}">{{ software_version }}</a> database version {{ database_version }}
-AMRrules {{ amrrules_version }}</pre>
+  <!-- Consolidated Header -->
+  <header class="site-header">
+    <div class="header-branding">
+      <h1>WebAMR</h1>
+      <span class="header-tagline">Web interface for <a href="https://github.com/ncbi/amr/wiki" target="_blank" rel="noopener"><strong>AMRFinderPlus</strong></a> and <a href="https://docs.amrrules.org/en/latest/" target="_blank" rel="noopener"><strong>AMRrules</strong></a></span>
+    </div>
+    <div class="header-nav-links">
+      <a href="/docs">Documentation</a>
+    </div>
+    <div class="header-version-bar">
+      AMRFinderPlus <a href="https://github.com/ncbi/amr/releases/tag/amrfinder_v{{ software_version }}" target="_blank" rel="noopener"><code>v{{ software_version }}</code></a> database <code>{{ database_version }}</code> | AMRrules <code>v{{ amrrules_version }}</code>
+    </div>
+  </header>
+
   <form id="upload-form" action="/analyze" method="POST" enctype="multipart/form-data">
-    <label for="job_name"><a href="/docs#job-name">Job name</a> (optional):</label>
-    <input type="text" name="job_name" id="job_name" maxlength="100"><br>
-    <span id="job-name-helper" style="font-size: 0.85em; color: var(--fg-muted); margin-left: 10px;">Optional. Max 100 characters. Letters, numbers, spaces, underscores, and hyphens only.</span><br>
-    <label for="file">Assembled <a href="/docs#nucleotide-file">nucleotide FASTA</a>:</label>
-    <input type="file" name="nuc_file"> <br>
-    <label for="gff_file"><a href="/docs#gff-file">GFF file</a>:</label>
-    <input type="file" name="gff_file" id="gff_file">
-    <label for="annotation_format" style="margin-left: 15px;"><a href="/docs#annotation-format">Annotation
-        format</a>:</label>
-    <select id="annotation_format" name="annotation_format">
-      <option value="bakta">bakta</option>
-      <option value="genbank">genbank</option>
-      <option value="microscope">microscope</option>
-      <option value="patric">patric</option>
-      <option value="pgap">pgap</option>
-      <option value="prodigal">prodigal</option>
-      <option value="prokka">prokka</option>
-      <option value="pseudomonasdb">pseudomonasdb</option>
-      <option value="rast">rast</option>
-      <option value="standard" selected>standard</option>
-    </select> <br>
-    <label for="file"><a href="/docs#protein-file">Protein FASTA</a>:</label>
-    <input type="file" name="prot_file"> <br>
-    <label for="organism"><a href="/docs#organism-group">Organism group</a> (optional):</label>
+    <div class="opt1-grid">
 
-    <select id="organism" name="organism">
-      <option value="">None</option>
-      {{ organism_select | safe }}
-    </select> <br />
-    
-    <br />
+      <!-- Job Name -->
+      <label for="job_name"><a href="/docs#job-name">Job name</a> (optional):</label>
+      <div class="opt1-field-content">
+        <input type="text" name="job_name" id="job_name" style="width: 340px;" maxlength="100">
+        <span id="job-name-helper" class="field-helper">Optional. Max 100 characters. Letters, numbers, spaces, underscores, and hyphens only.</span>
+      </div>
 
-    <label for="amrrules_organism"><a href="/docs#amrrules-organism">AMRrules organism</a> (optional):</label>
-    <select id="amrrules_organism" name="amrrules_organism">
-      <option value="auto" selected>Auto-mapped from AMRFinderPlus organism</option>
-      <option value="none">None / Do not run AMRrules</option>
-      {% if amrrules_species %}
-      {% for sp in amrrules_species %}
-      <option value="{{ sp }}">{{ sp }}</option>
-      {% endfor %}
-      {% endif %}
-    </select><br />
-    <span id="amrrules-helper" style="font-size: 0.85em; color: var(--fg-muted); margin-left: 10px;"></span> <br />
+      <!-- Nucleotide FASTA (Centered) -->
+      <label for="nuc_file" class="opt1-valign-center">Assembled <a href="/docs#nucleotide-file">nucleotide FASTA</a>:</label>
+      <div class="opt1-field-content opt1-valign-center">
+        <input type="file" name="nuc_file" id="nuc_file">
+      </div>
 
-    <!-- label for="parameters">Parameters (optional):</label> <br> 
-      <input type="text" name="parameters" id="parameters"> <br><br>-->
-    <button type="submit">Run AMRFinderPlus</button>
-    <button type="reset">Reset</button>
+      <!-- GFF File & Annotation Format (Inline) -->
+      <label for="gff_file"><a href="/docs#gff-file">GFF file</a> &amp; format:</label>
+      <div class="opt1-field-content">
+        <div class="opt1-gff-row">
+          <input type="file" name="gff_file" id="gff_file">
+          <span>
+            <label for="annotation_format" style="font-weight: normal; margin-right: 4px;"><a href="/docs#annotation-format">Annotation format</a>:</label>
+            <select id="annotation_format" name="annotation_format">
+              <option value="bakta">bakta</option>
+              <option value="genbank">genbank</option>
+              <option value="microscope">microscope</option>
+              <option value="patric">patric</option>
+              <option value="pgap">pgap</option>
+              <option value="prodigal">prodigal</option>
+              <option value="prokka">prokka</option>
+              <option value="pseudomonasdb">pseudomonasdb</option>
+              <option value="rast">rast</option>
+              <option value="standard" selected>standard</option>
+            </select>
+          </span>
+        </div>
+        <span class="field-helper">Annotation format only applies when uploading a GFF file.</span>
+      </div>
+
+      <!-- Protein FASTA (Centered) -->
+      <label for="prot_file" class="opt1-valign-center"><a href="/docs#protein-file">Protein FASTA</a>:</label>
+      <div class="opt1-field-content opt1-valign-center">
+        <input type="file" name="prot_file" id="prot_file">
+      </div>
+
+      <!-- Organism Group (Centered) -->
+      <label for="organism" class="opt1-valign-center"><a href="/docs#organism-group">Organism group</a> (optional):</label>
+      <div class="opt1-field-content opt1-valign-center">
+        <select id="organism" name="organism" style="min-width: 240px; max-width: 340px;">
+          <option value="">None</option>
+          {{ organism_select | safe }}
+        </select>
+      </div>
+
+      <!-- AMRrules Organism (Centered) -->
+      <label for="amrrules_organism" class="opt1-valign-center"><a href="/docs#amrrules-organism">AMRrules organism</a> (optional):</label>
+      <div class="opt1-field-content opt1-valign-center">
+        <select id="amrrules_organism" name="amrrules_organism" style="min-width: 320px; max-width: 440px;">
+          <option value="auto" selected>Auto-mapped from AMRFinderPlus organism</option>
+          <option value="none">None / Do not run AMRrules</option>
+          {% if amrrules_species %}
+          {% for sp in amrrules_species %}
+          <option value="{{ sp }}">{{ sp }}</option>
+          {% endfor %}
+          {% endif %}
+        </select>
+        <span id="amrrules-helper" class="field-helper"></span>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="opt1-actions">
+        <button type="submit" class="action-btn-primary">Run AMRFinderPlus</button>
+        <button type="reset">Reset</button>
+      </div>
+
+    </div>
   </form>
   <div id="status-msg"></div>
 
@@ -189,7 +225,7 @@ AMRrules {{ amrrules_version }}</pre>
       // Disable the submit button and show two-stage upload status with animated spinner
       const submitButton = form.querySelector('button[type="submit"]');
       submitButton.disabled = true;
-      statusMsg.innerHTML = '<p><span class="spinner"></span><span id="upload-status-text">Uploading files to server…</span></p>';
+      statusMsg.innerHTML = '<p><span class="spinner"></span><span id="upload-status-text">Uploading files to server...</span></p>';
 
       const xhr = new XMLHttpRequest();
       xhr.open('POST', '/analyze', true);
@@ -199,9 +235,9 @@ AMRrules {{ amrrules_version }}</pre>
         if (!statusText) return;
 
         if (e.lengthComputable && e.loaded >= e.total) {
-          statusText.textContent = `Storing files in cloud storage & queuing job…`;
+          statusText.textContent = `Storing files in cloud storage & queuing job...`;
         } else {
-          statusText.textContent = `Uploading files to server…`;
+          statusText.textContent = `Uploading files to server...`;
         }
       };
 
@@ -232,8 +268,10 @@ AMRrules {{ amrrules_version }}</pre>
       xhr.send(formData);
     });
   </script>
-  <br />
-  <span>Disclaimer: This is a personal side-project. This site and software do not reflect the priorities or opinions of my employer. Use of the results is at your own risk. See <a href="https://github.com/ncbi/amr/wiki">AMRFinderPlus</a> and <a href="https://docs.amrrules.org/en/latest/">AMRrules</a> for details.</span><br />
+
+  <div class="page-disclaimer">
+    Disclaimer: This is a personal side-project. This site and software do not reflect the priorities or opinions of my employer. Use of the results is at your own risk. See <a href="https://github.com/ncbi/amr/wiki" target="_blank" rel="noopener">AMRFinderPlus</a> and <a href="https://docs.amrrules.org/en/latest/" target="_blank" rel="noopener">AMRrules</a> for details.
+  </div>
 
   <div class="page-footer">
     Report issues on <a href="https://github.com/evolarjun/webamr/issues">GitHub</a><br />

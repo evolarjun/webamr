@@ -12,22 +12,40 @@
 </head>
 
 <body>
-  <h1>
-    <a href="/">AMRFinderPlus</a> - {{ page_title }}{% if job_name %}: {{ job_name }}{% endif %}
-  </h1>
-  <p>
-    <strong>Job ID:</strong>
-    <a href="/results/{{ job_id }}"><code>{{ job_id }}</code></a> &nbsp;&nbsp;
-    <a href="/results/{{ job_id }}">&larr; Back to Results</a>
-  </p>
-  {% if job_name %}
-  <p>
-    <strong>Job name:</strong> <code>{{ job_name }}</code>
-  </p>
-  {% endif %}
+  <!-- Consolidated Header -->
+  <header class="site-header">
+    <div class="header-branding">
+      <h1><a href="/">WebAMR</a></h1>
+      <span class="header-tagline">{{ page_title }}{% if job_name %}: {{ job_name }}{% endif %}</span>
+    </div>
+    <div class="header-nav-links">
+      <a href="/results/{{ job_id }}">&larr; Back to Results</a>
+      <a href="/docs">Documentation</a>
+    </div>
+  </header>
+
+  <!-- Job Metadata Summary Box -->
+  <div class="meta-summary-box">
+    <div class="meta-summary-row">
+      <div class="meta-summary-item">
+        <strong>Job ID:</strong>
+        <a href="/results/{{ job_id }}"><code>{{ job_id }}</code></a>
+      </div>
+      {% if job_name %}
+      <div class="meta-summary-item">
+        <strong>Job name:</strong> <code>{{ job_name }}</code>
+      </div>
+      {% endif %}
+      <div class="meta-summary-item" style="margin-left: auto;">
+        <a href="/results/{{ job_id }}">&larr; Back to Results</a>
+      </div>
+    </div>
+  </div>
 
   <div id="results">
-    <button onclick="downloadTsv()" style="margin-bottom: 10px;">Download {{ filename }}</button>
+    <div class="results-actions-bar">
+      <button class="action-btn-primary" onclick="downloadTsv()">Download {{ filename }}</button>
+    </div>
     {{ table_html | safe }}
   </div>
 

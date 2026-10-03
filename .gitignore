@@ -32,3 +32,6 @@ uploads/
 frontend/uploads/
 !frontend/uploads/.gitkeep
 
+# Build artifacts
+frontend/VERSION.txt
+worker/VERSION.txt
