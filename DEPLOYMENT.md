@@ -158,6 +158,7 @@ cp VERSION.txt worker/
 gcloud builds submit \
   --tag ${REGION}-docker.pkg.dev/${PROJECT_ID}/amr-repo/amr-worker \
   ./worker
+rm -f worker/VERSION.txt
 ```
 
 ### 3b. Deploy as a Cloud Run service
@@ -232,6 +233,7 @@ cp ../VERSION.txt .
 gcloud builds submit \
   --tag ${REGION}-docker.pkg.dev/${PROJECT_ID}/amr-repo/amr-frontend \
   .
+rm -f VERSION.txt
 ```
 
 ### 4b. Deploy Frontend as a Cloud Run service

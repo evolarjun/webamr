@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 from google.cloud import storage, pubsub_v1, firestore
 from google.cloud.exceptions import NotFound
 from werkzeug.utils import secure_filename
+from werkzeug.datastructures import FileStorage
 from datetime import timezone
 
 # set values to environment variables else listed here
@@ -293,24 +294,61 @@ def page_not_found(error):
     return render_template('404.html', url=request.url), 404
 
 def _validate_job_submission(request):
-    """Validates the uploaded files and form data."""
-    if 'nuc_file' not in request.files and 'prot_file' not in request.files:
-        return ({'error': 'No nucleotide or protein file provided.'}, 400), None
+    """Validates the uploaded files, pasted sequences, and form data."""
+    raw_nuc_paste = request.form.get('nuc_paste', '').strip()
+    raw_prot_paste = request.form.get('prot_paste', '').strip()
+
     nuc_file = request.files.get('nuc_file')
     prot_file = request.files.get('prot_file')
     gff_file = request.files.get('gff_file')
+
+    # Mutual exclusivity checks: cannot provide both file and pasted text for the same type
+    if nuc_file and nuc_file.filename != '' and raw_nuc_paste:
+        return ({'error': 'Provide either a nucleotide file or pasted sequence, not both.'}, 400), None
+    if prot_file and prot_file.filename != '' and raw_prot_paste:
+        return ({'error': 'Provide either a protein file or pasted sequence, not both.'}, 400), None
+
+    # Handle pasted nucleotide sequence
+    if (not nuc_file or nuc_file.filename == '') and raw_nuc_paste:
+        if not raw_nuc_paste.startswith('>'):
+            nuc_content = '>pasted_nucleotide\n' + raw_nuc_paste + '\n'
+        else:
+            nuc_content = raw_nuc_paste if raw_nuc_paste.endswith('\n') else raw_nuc_paste + '\n'
+        nuc_file = FileStorage(
+            stream=io.BytesIO(nuc_content.encode('utf-8')),
+            filename='pasted_nucleotide.fasta',
+            content_type='text/plain'
+        )
+
+    # Handle pasted protein sequence
+    if (not prot_file or prot_file.filename == '') and raw_prot_paste:
+        if not raw_prot_paste.startswith('>'):
+            prot_content = '>pasted_protein\n' + raw_prot_paste + '\n'
+        else:
+            prot_content = raw_prot_paste if raw_prot_paste.endswith('\n') else raw_prot_paste + '\n'
+        prot_file = FileStorage(
+            stream=io.BytesIO(prot_content.encode('utf-8')),
+            filename='pasted_protein.fasta',
+            content_type='text/plain'
+        )
+
+    has_nuc = nuc_file and nuc_file.filename != ''
+    has_prot = prot_file and prot_file.filename != ''
+
+    if not has_nuc and not has_prot:
+        return ({'error': 'No nucleotide or protein file provided.'}, 400), None
 
     if nuc_file and nuc_file.filename == '':
         return ({'error': 'No nucleotide file selected'}, 400), None
     if prot_file and prot_file.filename == '':
         return ({'error': 'No protein file selected'}, 400), None
 
-    if nuc_file and nuc_file.filename != '' and prot_file and prot_file.filename != '':
+    if has_nuc and has_prot:
         if not gff_file or gff_file.filename == '':
             return ({'error': 'A GFF file is required when providing both nucleotide and protein files.'}, 400), None
 
     if gff_file and gff_file.filename != '':
-        if not prot_file or prot_file.filename == '':
+        if not has_prot:
             return ({'error': 'A protein file is required when providing a GFF file.'}, 400), None
 
     raw_job_name = request.form.get("job_name", "")
@@ -322,9 +360,9 @@ def _validate_job_submission(request):
             return ({'error': 'Job name can only contain letters, numbers, spaces, underscores, and hyphens.'}, 400), None
 
     return None, {
-        'nuc_file': nuc_file,
-        'prot_file': prot_file,
-        'gff_file': gff_file,
+        'nuc_file': nuc_file if has_nuc else None,
+        'prot_file': prot_file if has_prot else None,
+        'gff_file': gff_file if (gff_file and gff_file.filename != '') else None,
         'job_name': job_name if job_name else None
     }
 

@@ -51,7 +51,7 @@ pytest tests/test_integration.py -v
 *   **To view exact configurations**: Check `DEPLOYMENT.md` for the exact `gcloud` and `gsutil` commands used to construct this environment.
 
 ## Output
-- No em dashes, smart quotes, or Unicode. ASCII only.
+- Avoid em dashes, smart quotes, or Unicode. Try to use ASCII only.
 - Be concise. If unsure, say so. Never guess. Ask questions.
 - Interview me relentlessly about every aspect of this until we reach a shared understanding. 
 If a fact can be found by exploring the environment (filesystem, tools, etc.), look it up rather than asking me. The decisions, though, are mine--ask for clarification before making the decisions. Don't act on the decisions until we reach a shared understanding.

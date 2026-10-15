@@ -22,7 +22,7 @@
       <a href="/docs">Documentation</a>
     </div>
     <div class="header-version-bar">
-      AMRFinderPlus <a href="https://github.com/ncbi/amr/releases/tag/amrfinder_v{{ software_version }}" target="_blank" rel="noopener"><code>v{{ software_version }}</code></a> database <code>{{ database_version }}</code> | AMRrules <code>v{{ amrrules_version }}</code>
+      AMRFinderPlus <a href="https://github.com/ncbi/amr/releases/tag/amrfinder_v{{ software_version }}" target="_blank" rel="noopener"><code>v{{ software_version }}</code></a> database {% if database_version and database_version not in ['unknown', 'pending', 'Run job to refresh', 'Error retrieving version'] %}<a id="database-version-link" href="https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/changelogs/{{ database_version }}.txt" target="_blank" rel="noopener"><code>{{ database_version }}</code></a>{% else %}<code>{{ database_version }}</code>{% endif %} | AMRrules <code>v{{ amrrules_version }}</code>
     </div>
   </header>
 
@@ -36,10 +36,23 @@
         <span id="job-name-helper" class="field-helper">Optional. Max 100 characters. Letters, numbers, spaces, underscores, and hyphens only.</span>
       </div>
 
-      <!-- Nucleotide FASTA (Centered) -->
-      <label for="nuc_file" class="opt1-valign-center">Assembled <a href="/docs#nucleotide-file">nucleotide FASTA</a>:</label>
-      <div class="opt1-field-content opt1-valign-center">
-        <input type="file" name="nuc_file" id="nuc_file">
+      <!-- Nucleotide FASTA -->
+      <label for="nuc_file">Assembled <a href="/docs#nucleotide-file">nucleotide FASTA</a>:</label>
+      <div class="opt1-field-content">
+        <div class="field-header-row">
+          <input type="file" name="nuc_file" id="nuc_file">
+          <button type="button" id="nuc-field-reset" class="field-reset-btn" style="display: none;">Reset field</button>
+        </div>
+        <span id="nuc-file-warning" class="field-helper warning-text"></span>
+        <details id="nuc-paste-details" class="paste-details">
+          <summary id="nuc-paste-summary" class="paste-summary">Or paste FASTA sequence</summary>
+          <div class="paste-drawer">
+            <textarea id="nuc_paste" name="nuc_paste" class="paste-textarea" rows="4" placeholder="Paste FASTA nucleotide sequence or raw contigs here..."></textarea>
+            <div class="paste-footer">
+              <span id="nuc-paste-status" class="field-helper"></span>
+            </div>
+          </div>
+        </details>
       </div>
 
       <!-- GFF File & Annotation Format (Inline) -->
@@ -63,13 +76,27 @@
             </select>
           </span>
         </div>
+        <span id="gff-file-warning" class="field-helper warning-text"></span>
         <span class="field-helper">Annotation format only applies when uploading a GFF file.</span>
       </div>
 
-      <!-- Protein FASTA (Centered) -->
-      <label for="prot_file" class="opt1-valign-center"><a href="/docs#protein-file">Protein FASTA</a>:</label>
-      <div class="opt1-field-content opt1-valign-center">
-        <input type="file" name="prot_file" id="prot_file">
+      <!-- Protein FASTA -->
+      <label for="prot_file"><a href="/docs#protein-file">Protein FASTA</a>:</label>
+      <div class="opt1-field-content">
+        <div class="field-header-row">
+          <input type="file" name="prot_file" id="prot_file">
+          <button type="button" id="prot-field-reset" class="field-reset-btn" style="display: none;">Reset field</button>
+        </div>
+        <span id="prot-file-warning" class="field-helper warning-text"></span>
+        <details id="prot-paste-details" class="paste-details">
+          <summary id="prot-paste-summary" class="paste-summary">Or paste FASTA sequence</summary>
+          <div class="paste-drawer">
+            <textarea id="prot_paste" name="prot_paste" class="paste-textarea" rows="4" placeholder="Paste FASTA protein sequence or raw amino acids here..."></textarea>
+            <div class="paste-footer">
+              <span id="prot-paste-status" class="field-helper"></span>
+            </div>
+          </div>
+        </details>
       </div>
 
       <!-- Organism Group (Centered) -->
@@ -142,10 +169,48 @@
     const jobNameHelper = document.getElementById('job-name-helper');
     const jobNameHelperDefault = jobNameHelper.textContent;
 
+    function prepareFastaContent(text, defaultDefline) {
+      let content = text.trim();
+      if (!content) return '';
+      if (!content.startsWith('>')) {
+        content = '>' + defaultDefline + '\n' + content + '\n';
+      } else if (!content.endsWith('\n')) {
+        content += '\n';
+      }
+      return content;
+    }
+
+    function updatePasteStatus(type) {
+      const textarea = document.getElementById(type + '_paste');
+      const statusEl = document.getElementById(type + '-paste-status');
+      if (!textarea || !statusEl) return;
+
+      const text = textarea.value.trim();
+      if (!text) {
+        statusEl.textContent = '';
+        return;
+      }
+
+      const count = text.length;
+      const countStr = count.toLocaleString() + ' characters';
+
+      if (text.startsWith('>')) {
+        const headerCount = (text.match(/^>/gm) || []).length;
+        statusEl.textContent = countStr + ' (' + headerCount + ' FASTA record' + (headerCount > 1 ? 's' : '') + ' detected)';
+      } else {
+        const defaultHeader = '>pasted_' + (type === 'nuc' ? 'nucleotide' : 'protein');
+        statusEl.textContent = countStr + ' (No defline; "' + defaultHeader + '" will be added automatically)';
+      }
+    }
+
     function validateForm(showError = true) {
       const nucFile = form.elements['nuc_file'].files[0];
       const protFile = form.elements['prot_file'].files[0];
       const gffFile = form.elements['gff_file'].files[0];
+      const nucPasteEl = document.getElementById('nuc_paste');
+      const protPasteEl = document.getElementById('prot_paste');
+      const nucText = nucPasteEl ? nucPasteEl.value.trim() : '';
+      const protText = protPasteEl ? protPasteEl.value.trim() : '';
       const submitButton = form.querySelector('button[type="submit"]');
 
       // Validate job name first -- independent of file selection.
@@ -162,28 +227,47 @@
         jobNameHelper.style.color = 'var(--fg-muted)';
       }
 
-      if (!nucFile && !protFile && !gffFile) {
+      // Check mutual exclusivity: only one of file or pasted text per type
+      if (nucFile && nucText) {
+        if (showError) statusMsg.innerHTML = '<p class="error">Both a nucleotide file and pasted sequence are provided. Please clear one before submitting.</p>';
+        submitButton.disabled = true;
+        return false;
+      }
+      if (protFile && protText) {
+        if (showError) statusMsg.innerHTML = '<p class="error">Both a protein file and pasted sequence are provided. Please clear one before submitting.</p>';
+        submitButton.disabled = true;
+        return false;
+      }
+
+      const hasNuc = !!(nucFile || nucText);
+      const hasProt = !!(protFile || protText);
+      const hasGff = !!gffFile;
+
+      if (!hasNuc && !hasProt && !hasGff) {
         if (showError) statusMsg.innerHTML = '';
         submitButton.disabled = false;
         return true;
       }
 
       const MAX_SIZE = 10 * 1024 * 1024; // 10 MB
-      if ((nucFile && nucFile.size > MAX_SIZE) ||
-        (protFile && protFile.size > MAX_SIZE) ||
-        (gffFile && gffFile.size > MAX_SIZE)) {
-        if (showError) statusMsg.innerHTML = '<p class="error">File size exceeds the 10MB limit. Please upload smaller files.</p>';
+      const nucSize = nucFile ? nucFile.size : (nucText ? new Blob([nucText]).size : 0);
+      const protSize = protFile ? protFile.size : (protText ? new Blob([protText]).size : 0);
+      const gffSize = gffFile ? gffFile.size : 0;
+      if ((nucSize > MAX_SIZE) ||
+        (protSize > MAX_SIZE) ||
+        (gffSize > MAX_SIZE)) {
+        if (showError) statusMsg.innerHTML = '<p class="error">Input size exceeds the 10MB limit. Please provide smaller files or sequences.</p>';
         submitButton.disabled = true;
         return false;
       }
 
-      if (nucFile && protFile && !gffFile) {
+      if (hasNuc && hasProt && !hasGff) {
         if (showError) statusMsg.innerHTML = '<p class="error">A GFF file is required when providing both nucleotide and protein files.</p>';
         submitButton.disabled = true;
         return false;
       }
 
-      if (gffFile && !protFile) {
+      if (hasGff && !hasProt) {
         if (showError) statusMsg.innerHTML = '<p class="error">A protein file is required when providing a GFF file.</p>';
         submitButton.disabled = true;
         return false;
@@ -194,10 +278,261 @@
       return true;
     }
 
-    form.elements['nuc_file'].addEventListener('change', () => validateForm(true));
-    form.elements['prot_file'].addEventListener('change', () => validateForm(true));
-    form.elements['gff_file'].addEventListener('change', () => validateForm(true));
+    async function checkFileFormat(file, expectedType) {
+      if (!file) return null;
+      if (file.size === 0) return 'Notice: File appears to be empty.';
+
+      try {
+        const headerSlice = file.slice(0, 2);
+        const headerBuf = await headerSlice.arrayBuffer();
+        const headerBytes = new Uint8Array(headerBuf);
+        const isGzip = (headerBytes.length >= 2 && headerBytes[0] === 0x1f && headerBytes[1] === 0x8b);
+
+        let text = '';
+        if (isGzip) {
+          if (typeof DecompressionStream === 'undefined' || typeof file.stream !== 'function') {
+            return null;
+          }
+          try {
+            const ds = new DecompressionStream('gzip');
+            const decompressedStream = file.stream().pipeThrough(ds);
+            const reader = decompressedStream.getReader();
+            const { value } = await reader.read();
+            try {
+              await reader.cancel();
+            } catch (_) {}
+            if (value && value.length > 0) {
+              text = new TextDecoder().decode(value);
+            }
+          } catch (_) {
+            return null;
+          }
+        } else {
+          const slice = file.slice(0, 4096);
+          text = await slice.text();
+        }
+
+        const lines = text.split(/\r?\n/);
+        let firstLine = '';
+        for (let i = 0; i < lines.length; i++) {
+          const trimmed = lines[i].trim();
+          if (trimmed.length > 0) {
+            firstLine = trimmed;
+            break;
+          }
+        }
+
+        if (!firstLine) {
+          return 'Notice: File appears to be empty.';
+        }
+
+        if (expectedType === 'fasta') {
+          if (firstLine.startsWith('>')) {
+            return null;
+          }
+          if (firstLine.startsWith('@')) {
+            return 'Notice: This file appears to be FASTQ format (raw reads). AMRFinderPlus requires assembled contigs or protein sequences in FASTA format.';
+          }
+          if (firstLine.startsWith('LOCUS')) {
+            return 'Notice: This file appears to be GenBank format. AMRFinderPlus requires FASTA format.';
+          }
+          if (firstLine.startsWith('<')) {
+            return 'Notice: This file appears to be an HTML document. AMRFinderPlus requires FASTA format.';
+          }
+          if (firstLine.startsWith('##gff')) {
+            return 'Notice: This appears to be a GFF annotation file. AMRFinderPlus requires FASTA format here.';
+          }
+          return "Notice: File does not begin with '>' (FASTA header). Make sure you are uploading a FASTA file.";
+        }
+
+        if (expectedType === 'gff') {
+          if (firstLine.startsWith('##gff')) {
+            return null;
+          }
+          if (firstLine.startsWith('>')) {
+            return 'Notice: This appears to be a FASTA file. AMRFinderPlus expects a GFF annotation file here.';
+          }
+          if (firstLine.startsWith('@')) {
+            return 'Notice: This appears to be a FASTQ file. AMRFinderPlus expects a GFF annotation file here.';
+          }
+          if (firstLine.startsWith('LOCUS')) {
+            return 'Notice: This appears to be a GenBank file. AMRFinderPlus expects a GFF annotation file here.';
+          }
+          if (firstLine.startsWith('<')) {
+            return 'Notice: This appears to be an HTML document. AMRFinderPlus expects a GFF annotation file here.';
+          }
+          return "Notice: File does not begin with '##gff' header. AMRFinderPlus expects a GFF3 annotation file.";
+        }
+
+        return null;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    async function validateFileInput(inputName, warningElementId, expectedType) {
+      const warningEl = document.getElementById(warningElementId);
+      if (!warningEl) return;
+      const file = form.elements[inputName].files[0];
+      if (!file) {
+        warningEl.textContent = '';
+        return;
+      }
+      const warningMsg = await checkFileFormat(file, expectedType);
+      if (form.elements[inputName].files[0] === file) {
+        warningEl.textContent = warningMsg || '';
+      }
+    }
+
+    function resetField(type) {
+      const fileInput = form.elements[type + '_file'];
+      const pasteInput = document.getElementById(type + '_paste');
+      const detailsEl = document.getElementById(type + '-paste-details');
+      const summaryEl = document.getElementById(type + '-paste-summary');
+      const resetBtn = document.getElementById(type + '-field-reset');
+      const fileWarning = document.getElementById(type + '-file-warning');
+      const statusEl = document.getElementById(type + '-paste-status');
+
+      if (fileInput) {
+        fileInput.value = '';
+        fileInput.disabled = false;
+      }
+      if (pasteInput) {
+        pasteInput.value = '';
+        pasteInput.disabled = false;
+      }
+      if (detailsEl) {
+        detailsEl.open = false;
+      }
+      if (summaryEl) {
+        summaryEl.textContent = 'Or paste FASTA sequence';
+        summaryEl.classList.remove('paste-summary-disabled');
+      }
+      if (resetBtn) {
+        resetBtn.style.display = 'none';
+      }
+      if (fileWarning) {
+        fileWarning.textContent = '';
+      }
+      if (statusEl) {
+        statusEl.textContent = '';
+      }
+      validateForm(true);
+    }
+
+    function handleFileSelection(type, expectedType) {
+      const fileInput = form.elements[type + '_file'];
+      const pasteInput = document.getElementById(type + '_paste');
+      const detailsEl = document.getElementById(type + '-paste-details');
+      const summaryEl = document.getElementById(type + '-paste-summary');
+      const resetBtn = document.getElementById(type + '-field-reset');
+
+      if (fileInput && fileInput.files.length > 0) {
+        if (pasteInput) {
+          pasteInput.value = '';
+          pasteInput.disabled = true;
+        }
+        if (detailsEl) {
+          detailsEl.open = false;
+        }
+        if (summaryEl) {
+          summaryEl.textContent = 'Paste sequence (disabled while file is selected)';
+          summaryEl.classList.add('paste-summary-disabled');
+        }
+        if (resetBtn) {
+          resetBtn.style.display = 'inline-flex';
+        }
+        validateFileInput(type + '_file', type + '-file-warning', expectedType);
+      } else {
+        resetField(type);
+      }
+      validateForm(true);
+    }
+
+    function handlePasteInput(type) {
+      const fileInput = form.elements[type + '_file'];
+      const pasteInput = document.getElementById(type + '_paste');
+      const resetBtn = document.getElementById(type + '-field-reset');
+      const fileWarning = document.getElementById(type + '-file-warning');
+
+      if (!pasteInput) return;
+      const text = pasteInput.value.trim();
+
+      if (text.length > 0) {
+        if (fileInput) {
+          fileInput.value = '';
+          fileInput.disabled = true;
+        }
+        if (fileWarning) {
+          fileWarning.textContent = 'File upload disabled while sequence text is present.';
+          fileWarning.style.color = 'var(--fg-muted)';
+        }
+        if (resetBtn) {
+          resetBtn.style.display = 'inline-flex';
+        }
+        updatePasteStatus(type);
+      } else {
+        resetField(type);
+      }
+      validateForm(true);
+    }
+
+    form.elements['nuc_file'].addEventListener('change', () => {
+      handleFileSelection('nuc', 'fasta');
+    });
+
+    form.elements['prot_file'].addEventListener('change', () => {
+      handleFileSelection('prot', 'fasta');
+    });
+
+    form.elements['gff_file'].addEventListener('change', () => {
+      validateFileInput('gff_file', 'gff-file-warning', 'gff');
+      validateForm(true);
+    });
+
+    const nucPasteEl = document.getElementById('nuc_paste');
+    if (nucPasteEl) {
+      nucPasteEl.addEventListener('input', () => handlePasteInput('nuc'));
+    }
+
+    const protPasteEl = document.getElementById('prot_paste');
+    if (protPasteEl) {
+      protPasteEl.addEventListener('input', () => handlePasteInput('prot'));
+    }
+
+    const nucResetBtn = document.getElementById('nuc-field-reset');
+    if (nucResetBtn) {
+      nucResetBtn.addEventListener('click', () => resetField('nuc'));
+    }
+
+    const protResetBtn = document.getElementById('prot-field-reset');
+    if (protResetBtn) {
+      protResetBtn.addEventListener('click', () => resetField('prot'));
+    }
+
+    ['nuc', 'prot'].forEach((type) => {
+      const summaryEl = document.getElementById(type + '-paste-summary');
+      const pasteInput = document.getElementById(type + '_paste');
+      if (summaryEl) {
+        summaryEl.addEventListener('click', (e) => {
+          if (pasteInput && pasteInput.disabled) {
+            e.preventDefault();
+          }
+        });
+      }
+    });
+
     form.elements['job_name'].addEventListener('input', () => validateForm(true));
+
+    form.addEventListener('reset', () => {
+      setTimeout(() => {
+        resetField('nuc');
+        resetField('prot');
+        const gffWarn = document.getElementById('gff-file-warning');
+        if (gffWarn) gffWarn.textContent = '';
+        validateForm(false);
+      }, 0);
+    });
 
     form.addEventListener('submit', (event) => {
       event.preventDefault();
@@ -210,10 +545,35 @@
       const nucFile = form.elements['nuc_file'].files[0];
       const protFile = form.elements['prot_file'].files[0];
       const gffFile = form.elements['gff_file'].files[0];
+      const nucText = nucPasteEl ? nucPasteEl.value.trim() : '';
+      const protText = protPasteEl ? protPasteEl.value.trim() : '';
+
+      // Client-side handling: only ONE of file or pasted text is passed per input type
+      let effectiveNucFile = null;
+      if (nucFile && !nucText) {
+        effectiveNucFile = nucFile;
+      } else if (nucText && !nucFile) {
+        const content = prepareFastaContent(nucText, 'pasted_nucleotide');
+        effectiveNucFile = new File([content], 'pasted_nucleotide.fasta', { type: 'text/plain' });
+      } else if (nucFile && nucText) {
+        // Fallback safeguard: if both are somehow present, only pass the uploaded file
+        effectiveNucFile = nucFile;
+      }
+
+      let effectiveProtFile = null;
+      if (protFile && !protText) {
+        effectiveProtFile = protFile;
+      } else if (protText && !protFile) {
+        const content = prepareFastaContent(protText, 'pasted_protein');
+        effectiveProtFile = new File([content], 'pasted_protein.fasta', { type: 'text/plain' });
+      } else if (protFile && protText) {
+        // Fallback safeguard: if both are somehow present, only pass the uploaded file
+        effectiveProtFile = protFile;
+      }
 
       const formData = new FormData();
-      if (nucFile) formData.append('nuc_file', nucFile);
-      if (protFile) formData.append('prot_file', protFile);
+      if (effectiveNucFile) formData.append('nuc_file', effectiveNucFile);
+      if (effectiveProtFile) formData.append('prot_file', effectiveProtFile);
       if (gffFile) formData.append('gff_file', gffFile);
       formData.append('job_name', form.elements['job_name'].value || '');
       formData.append('annotation_format', form.elements['annotation_format'].value || 'standard');

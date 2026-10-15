@@ -20,11 +20,15 @@ echo "Usually takes about 8 minutes"
 echo "---------------------------------------------------------"
 
 cp ../VERSION.txt .
+trap 'rm -f VERSION.txt' EXIT
 
 # Cloud Build submits the current directory and pushes to Artifact Registry
 gcloud builds submit \
   --tag ${REGION}-docker.pkg.dev/${PROJECT_ID}/amr-repo/amr-worker \
   .
+
+rm -f VERSION.txt
+trap - EXIT
 
 echo "---------------------------------------------------------"
 echo "Deploying amr-worker to Cloud Run..."

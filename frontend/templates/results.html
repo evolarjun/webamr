@@ -23,7 +23,7 @@
       <a href="/docs">Documentation</a>
     </div>
     <div class="header-version-bar">
-      AMRFinderPlus <a id="software-version-link" href="https://github.com/ncbi/amr/releases/tag/amrfinder_v{{ software_version }}" target="_blank" rel="noopener"><code>v<span id="software-version-text">{{ software_version }}</span></code></a> database version <code><span id="database-version-text">{{ database_version }}</span></code> | AMRrules <code>v<span id="amrrules-version-text">{{ amrrules_version }}</span></code>
+      AMRFinderPlus <a id="software-version-link" href="https://github.com/ncbi/amr/releases/tag/amrfinder_v{{ software_version }}" target="_blank" rel="noopener"><code>v<span id="software-version-text">{{ software_version }}</span></code></a> database version <span id="database-version-container">{% if database_version and database_version not in ['unknown', 'pending', 'Run job to refresh', 'Error retrieving version'] %}<a id="database-version-link" href="https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/changelogs/{{ database_version }}.txt" target="_blank" rel="noopener"><code><span id="database-version-text">{{ database_version }}</span></code></a>{% else %}<code><span id="database-version-text">{{ database_version }}</span></code>{% endif %}</span> | AMRrules <code>v<span id="amrrules-version-text">{{ amrrules_version }}</span></code>
     </div>
   </header>
 
@@ -257,9 +257,29 @@
               if (softText) softText.textContent = data.software_version;
               if (softLink) softLink.href = 'https://github.com/ncbi/amr/releases/tag/amrfinder_v' + data.software_version;
             }
-            if (data.database_version && data.database_version !== 'unknown') {
+            if (data.database_version && !['unknown', 'pending', 'Run job to refresh', 'Error retrieving version'].includes(data.database_version)) {
+              const dbText = document.getElementById('database-version-text');
+              const dbLink = document.getElementById('database-version-link');
+              const dbUrl = 'https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/changelogs/' + data.database_version + '.txt';
+              if (dbText) dbText.textContent = data.database_version;
+              if (dbLink) {
+                dbLink.href = dbUrl;
+              } else {
+                const container = document.getElementById('database-version-container');
+                if (container) {
+                  container.innerHTML = '<a id="database-version-link" href="' + dbUrl + '" target="_blank" rel="noopener"><code><span id="database-version-text">' + data.database_version + '</span></code></a>';
+                }
+              }
+            } else if (data.database_version) {
               const dbText = document.getElementById('database-version-text');
               if (dbText) dbText.textContent = data.database_version;
+              const dbLink = document.getElementById('database-version-link');
+              if (dbLink) {
+                const container = document.getElementById('database-version-container');
+                if (container) {
+                  container.innerHTML = '<code><span id="database-version-text">' + data.database_version + '</span></code>';
+                }
+              }
             }
             if (data.amrrules_version && data.amrrules_version !== 'unknown') {
               const amrText = document.getElementById('amrrules-version-text');

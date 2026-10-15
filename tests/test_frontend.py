@@ -147,6 +147,15 @@ class TestIndex:
         resp = client.get("/")
         assert b"2024-01-01.2" in resp.data
 
+    def test_shows_database_version_link(self):
+        resp = client.get("/")
+        expected = (
+            b'<a id="database-version-link" '
+            b'href="https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/changelogs/2024-01-01.2.txt" '
+            b'target="_blank" rel="noopener"><code>2024-01-01.2</code></a>'
+        )
+        assert expected in resp.data
+
     def test_shows_software_version(self):
         resp = client.get("/")
         assert b"4.2.7" in resp.data
@@ -164,6 +173,7 @@ class TestIndex:
         resp = client.get("/")
         assert resp.status_code == 200
         assert b"Run job to refresh" in resp.data
+        assert b"database-version-link" not in resp.data
 
     def test_pending_when_software_blob_missing(self):
         main.cached_db_version = None
@@ -234,6 +244,25 @@ class TestIndex:
         resp = client.get("/")
         assert b"Report issues on" in resp.data
         assert b"https://github.com/evolarjun/webamr/issues" in resp.data
+
+    def test_index_contains_file_warning_spans(self):
+        """Index page should include warning spans for nucleotide, protein, and GFF inputs."""
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert b'id="nuc-file-warning"' in resp.data
+        assert b'id="prot-file-warning"' in resp.data
+        assert b'id="gff-file-warning"' in resp.data
+
+    def test_index_contains_client_side_format_checking_script(self):
+        """Index page should include the client-side format sniffing and decompression script."""
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert b"checkFileFormat" in resp.data
+        assert b"validateFileInput" in resp.data
+        assert b"DecompressionStream" in resp.data
+        assert b"FASTQ" in resp.data
+        assert b"GenBank" in resp.data
+        assert b"##gff" in resp.data
 
 
 # ---------------------------------------------------------------------------
@@ -1208,7 +1237,33 @@ class TestAMRrulesIntegration:
         assert resp.status_code == 200
         assert b"3.10.5" in resp.data
         assert b"2023-08-08.1" in resp.data
+        expected_db_link = (
+            b'<a id="database-version-link" '
+            b'href="https://ftp.ncbi.nlm.nih.gov/pathogen/Antimicrobial_resistance/AMRFinderPlus/database/latest/changelogs/2023-08-08.1.txt" '
+            b'target="_blank" rel="noopener">'
+        )
+        assert expected_db_link in resp.data
         assert b"0.1.2" in resp.data
+
+    def test_results_page_omits_database_version_link_when_unknown(self):
+        doc = MagicMock()
+        doc.exists = True
+        doc.to_dict.return_value = {
+            "job_id": "amr-job-unknown-db",
+            "status": "Completed",
+            "result_uri": "gs://bucket/results.tsv",
+            "software_version": "3.10.5",
+            "database_version": "unknown",
+            "amrrules_version": "0.1.2",
+            "created_at": datetime(2026, 5, 29, 9, 0, 0, tzinfo=timezone.utc)
+        }
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = doc
+        mock_blob = _make_blob(exists=True, content=b"Gene\tDrug\n")
+        MOCK_STORAGE.bucket.return_value.blob.return_value = mock_blob
+
+        resp = client.get("/results/amr-job-unknown-db")
+        assert resp.status_code == 200
+        assert b"database-version-link" not in resp.data
 
     def test_get_results_returns_recorded_versions(self):
         """GET /get-results/<id> returns recorded software, db, and amrrules versions."""
@@ -1233,5 +1288,94 @@ class TestAMRrulesIntegration:
         assert data["database_version"] == "2024-05-02.1"
         assert data["amrrules_version"] == "0.3.1"
         assert data["worker_version"] == "0.2.16"
+
+
+# ---------------------------------------------------------------------------
+# Tests: FASTA Paste Drawer and Client/Backend Handling
+# ---------------------------------------------------------------------------
+
+class TestFastaPasteSupport:
+    def test_index_page_contains_paste_drawers(self):
+        """Index page should include details drawers and reset controls for pasting FASTA sequences."""
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert b'id="nuc-paste-details"' in resp.data
+        assert b'id="nuc_paste"' in resp.data
+        assert b'id="nuc-paste-status"' in resp.data
+        assert b'id="nuc-field-reset"' in resp.data
+        assert b'id="prot-paste-details"' in resp.data
+        assert b'id="prot_paste"' in resp.data
+        assert b'id="prot-paste-status"' in resp.data
+        assert b'id="prot-field-reset"' in resp.data
+        assert b"prepareFastaContent" in resp.data
+        assert b"updatePasteStatus" in resp.data
+        assert b"resetField" in resp.data
+        assert b"handleFileSelection" in resp.data
+        assert b"handlePasteInput" in resp.data
+
+    def test_analyze_pasted_nucleotide_without_defline_adds_defline(self):
+        """Pasting nucleotide sequence without defline adds >pasted_nucleotide and succeeds."""
+        resp = client.post("/analyze", data={
+            "nuc_paste": "ATGAAACAAAGCACTATT",
+            "organism": ""
+        })
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "user_id" in data
+        assert "results_url" in data
+
+    def test_analyze_pasted_nucleotide_with_existing_defline(self):
+        """Pasting nucleotide sequence with existing defline preserves it and succeeds."""
+        resp = client.post("/analyze", data={
+            "nuc_paste": ">my_contig_1\nATGAAACAAAGCACTATT\n",
+            "organism": ""
+        })
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "user_id" in data
+
+    def test_analyze_pasted_protein_without_defline_adds_defline(self):
+        """Pasting protein sequence without defline adds >pasted_protein and succeeds."""
+        resp = client.post("/analyze", data={
+            "prot_paste": "MKQSTIALALLPLLFTPVTKA",
+            "organism": ""
+        })
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "user_id" in data
+
+    def test_analyze_rejects_both_nuc_file_and_nuc_paste(self):
+        """Submitting both a nucleotide file and pasted nucleotide text returns 400 error."""
+        resp = client.post("/analyze", data={
+            "nuc_file": _fasta_file("test.fasta", b">seq\nATCG\n"),
+            "nuc_paste": "ATGAAACAAAGCACTATT",
+            "organism": ""
+        })
+        assert resp.status_code == 400
+        data = resp.get_json()
+        assert "Provide either a nucleotide file or pasted sequence, not both." in data["error"]
+
+    def test_analyze_rejects_both_prot_file_and_prot_paste(self):
+        """Submitting both a protein file and pasted protein text returns 400 error."""
+        resp = client.post("/analyze", data={
+            "prot_file": _fasta_file("test.faa", b">prot\nMKQS\n"),
+            "prot_paste": "MKQSTIALALLPLLFTPVTKA",
+            "organism": ""
+        })
+        assert resp.status_code == 400
+        data = resp.get_json()
+        assert "Provide either a protein file or pasted sequence, not both." in data["error"]
+
+    def test_analyze_pasted_nuc_and_prot_requires_gff(self):
+        """Providing both pasted nucleotide and pasted protein requires a GFF file."""
+        resp = client.post("/analyze", data={
+            "nuc_paste": "ATGAAACAAAGCACTATT",
+            "prot_paste": "MKQSTIALALLPLLFTPVTKA",
+            "organism": ""
+        })
+        assert resp.status_code == 400
+        data = resp.get_json()
+        assert "A GFF file is required when providing both nucleotide and protein files." in data["error"]
+
 
 
