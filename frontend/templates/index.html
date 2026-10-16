@@ -26,13 +26,19 @@
     </div>
   </header>
 
+  {% if error_message %}
+  <div class="error-banner" style="margin-bottom: 16px;">
+    <p class="error"><strong>Error:</strong> {{ error_message }}</p>
+  </div>
+  {% endif %}
+
   <form id="upload-form" action="/analyze" method="POST" enctype="multipart/form-data">
     <div class="opt1-grid">
 
       <!-- Job Name -->
       <label for="job_name"><a href="/docs#job-name">Job name</a> (optional):</label>
       <div class="opt1-field-content">
-        <input type="text" name="job_name" id="job_name" style="width: 340px;" maxlength="100">
+        <input type="text" name="job_name" id="job_name" value="{{ form_data.job_name | default('', true) }}" style="width: 340px;" maxlength="100">
         <span id="job-name-helper" class="field-helper">Optional. Max 100 characters. Letters, numbers, spaces, underscores, and hyphens only.</span>
       </div>
 
@@ -44,10 +50,10 @@
           <button type="button" id="nuc-field-reset" class="field-reset-btn" style="display: none;">Reset field</button>
         </div>
         <span id="nuc-file-warning" class="field-helper warning-text"></span>
-        <details id="nuc-paste-details" class="paste-details">
+        <details id="nuc-paste-details" class="paste-details" {% if form_data and form_data.nuc_paste %}open{% endif %}>
           <summary id="nuc-paste-summary" class="paste-summary">Or paste FASTA sequence</summary>
           <div class="paste-drawer">
-            <textarea id="nuc_paste" name="nuc_paste" class="paste-textarea" rows="4" placeholder="Paste FASTA nucleotide sequence or raw contigs here..."></textarea>
+            <textarea id="nuc_paste" name="nuc_paste" class="paste-textarea" rows="4" placeholder="Paste FASTA nucleotide sequence or raw contigs here...">{{ form_data.nuc_paste | default('', true) }}</textarea>
             <div class="paste-footer">
               <span id="nuc-paste-status" class="field-helper"></span>
             </div>
@@ -63,16 +69,9 @@
           <span>
             <label for="annotation_format" style="font-weight: normal; margin-right: 4px;"><a href="/docs#annotation-format">Annotation format</a>:</label>
             <select id="annotation_format" name="annotation_format">
-              <option value="bakta">bakta</option>
-              <option value="genbank">genbank</option>
-              <option value="microscope">microscope</option>
-              <option value="patric">patric</option>
-              <option value="pgap">pgap</option>
-              <option value="prodigal">prodigal</option>
-              <option value="prokka">prokka</option>
-              <option value="pseudomonasdb">pseudomonasdb</option>
-              <option value="rast">rast</option>
-              <option value="standard" selected>standard</option>
+              {% for fmt in ['bakta', 'genbank', 'microscope', 'patric', 'pgap', 'prodigal', 'prokka', 'pseudomonasdb', 'rast', 'standard'] %}
+              <option value="{{ fmt }}" {% if (form_data and form_data.annotation_format == fmt) or (not form_data and fmt == 'standard') or (form_data and not form_data.annotation_format and fmt == 'standard') %}selected{% endif %}>{{ fmt }}</option>
+              {% endfor %}
             </select>
           </span>
         </div>
@@ -88,10 +87,10 @@
           <button type="button" id="prot-field-reset" class="field-reset-btn" style="display: none;">Reset field</button>
         </div>
         <span id="prot-file-warning" class="field-helper warning-text"></span>
-        <details id="prot-paste-details" class="paste-details">
+        <details id="prot-paste-details" class="paste-details" {% if form_data and form_data.prot_paste %}open{% endif %}>
           <summary id="prot-paste-summary" class="paste-summary">Or paste FASTA sequence</summary>
           <div class="paste-drawer">
-            <textarea id="prot_paste" name="prot_paste" class="paste-textarea" rows="4" placeholder="Paste FASTA protein sequence or raw amino acids here..."></textarea>
+            <textarea id="prot_paste" name="prot_paste" class="paste-textarea" rows="4" placeholder="Paste FASTA protein sequence or raw amino acids here...">{{ form_data.prot_paste | default('', true) }}</textarea>
             <div class="paste-footer">
               <span id="prot-paste-status" class="field-helper"></span>
             </div>
@@ -112,11 +111,11 @@
       <label for="amrrules_organism" class="opt1-valign-center"><a href="/docs#amrrules-organism">AMRrules organism</a> (optional):</label>
       <div class="opt1-field-content opt1-valign-center">
         <select id="amrrules_organism" name="amrrules_organism" style="min-width: 320px; max-width: 440px;">
-          <option value="auto" selected>Auto-mapped from AMRFinderPlus organism</option>
-          <option value="none">None / Do not run AMRrules</option>
+          <option value="auto" {% if not form_data or not form_data.amrrules_organism or form_data.amrrules_organism == 'auto' %}selected{% endif %}>Auto-mapped from AMRFinderPlus organism</option>
+          <option value="none" {% if form_data and form_data.amrrules_organism == 'none' %}selected{% endif %}>None / Do not run AMRrules</option>
           {% if amrrules_species %}
           {% for sp in amrrules_species %}
-          <option value="{{ sp }}">{{ sp }}</option>
+          <option value="{{ sp }}" {% if form_data and form_data.amrrules_organism == sp %}selected{% endif %}>{{ sp }}</option>
           {% endfor %}
           {% endif %}
         </select>
@@ -589,6 +588,8 @@
 
       const xhr = new XMLHttpRequest();
       xhr.open('POST', '/analyze', true);
+      xhr.setRequestHeader('Accept', 'application/json');
+      xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
 
       xhr.upload.onprogress = (e) => {
         const statusText = document.getElementById('upload-status-text');

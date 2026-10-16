@@ -403,6 +403,8 @@ label.opt1-valign-center {
   padding: 6px 14px;
   border-radius: 4px;
   cursor: pointer;
+  text-decoration: none;
+  display: inline-block;
 }
 
 .action-btn-primary:hover {

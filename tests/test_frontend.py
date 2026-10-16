@@ -1378,4 +1378,182 @@ class TestFastaPasteSupport:
         assert "A GFF file is required when providing both nucleotide and protein files." in data["error"]
 
 
+# ---------------------------------------------------------------------------
+# Tests: Non-JS / Text Browser (Lynx) Progressive Enhancement Support
+# ---------------------------------------------------------------------------
+
+class TestNonJsSupport:
+    """Tests verifying WebAMR works without JavaScript or in text-based browsers."""
+
+    def test_analyze_non_js_validation_error_renders_html_400(self):
+        """When Accept prefers HTML, validation failure returns 400 with re-rendered HTML."""
+        headers = {"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"}
+        resp = client.post("/analyze", data={}, headers=headers)
+        assert resp.status_code == 400
+        assert resp.mimetype == "text/html"
+        html = resp.data.decode("utf-8")
+        assert "Error:" in html
+        assert "No nucleotide or protein file provided." in html
+
+    def test_analyze_non_js_validation_error_preserves_form_fields(self):
+        """Non-JS re-render on error retains user-entered inputs across fields."""
+        headers = {"Accept": "text/html"}
+        data = {
+            "job_name": "TestNonJsJob",
+            "nuc_paste": "ATGAAACAAAGCACTATT",
+            "annotation_format": "bakta",
+            "organism": "Campylobacter",
+            "amrrules_organism": "s__Campylobacter jejuni",
+            # Invalid job name characters to trigger validation error
+            "job_name": "Invalid@Name!",
+        }
+        resp = client.post("/analyze", data=data, headers=headers)
+        assert resp.status_code == 400
+        html = resp.data.decode("utf-8")
+        assert "Job name can only contain letters, numbers, spaces, underscores, and hyphens." in html
+        assert 'value="Invalid@Name!"' in html
+        assert "ATGAAACAAAGCACTATT" in html
+        assert 'id="nuc-paste-details" class="paste-details" open' in html
+        assert '<option value="bakta" selected>bakta</option>' in html
+        assert '<option value="s__Campylobacter jejuni" selected>' in html
+
+    def test_analyze_non_js_success_redirects_303(self):
+        """When Accept prefers HTML, successful submission returns 303 redirect to /results/<id>."""
+        headers = {"Accept": "text/html"}
+        data = {
+            "nuc_file": _fasta_file("test.fasta", b">seq1\nATCG\n"),
+            "job_name": "ValidJob",
+        }
+        resp = client.post("/analyze", data=data, headers=headers)
+        assert resp.status_code == 303
+        location = resp.headers.get("Location", "")
+        assert location.startswith("/results/")
+
+    def test_analyze_ajax_returns_json_on_success(self):
+        """When X-Requested-With or Accept: application/json is present, return JSON 200."""
+        headers = {
+            "Accept": "application/json",
+            "X-Requested-With": "XMLHttpRequest"
+        }
+        data = {
+            "nuc_file": _fasta_file("test.fasta", b">seq1\nATCG\n"),
+            "job_name": "AjaxJob",
+        }
+        resp = client.post("/analyze", data=data, headers=headers)
+        assert resp.status_code == 200
+        assert resp.mimetype == "application/json"
+        body = resp.get_json()
+        assert "results_url" in body
+        assert "user_id" in body
+
+    def test_analyze_ajax_returns_json_on_error(self):
+        """When Accept is JSON or AJAX, validation error returns JSON 400."""
+        headers = {"Accept": "application/json"}
+        resp = client.post("/analyze", data={}, headers=headers)
+        assert resp.status_code == 400
+        assert resp.mimetype == "application/json"
+        body = resp.get_json()
+        assert "error" in body
+
+    def test_results_page_includes_noscript_refresh_when_queued(self):
+        """When a job is Queued, results page includes noscript 5-second meta refresh."""
+        mock_doc = MagicMock(exists=True)
+        mock_doc.to_dict.return_value = {
+            "job_id": "test-refresh-job",
+            "status": "Queued",
+            "created_at": datetime.now(timezone.utc),
+        }
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = mock_doc
+
+        resp = client.get("/results/test-refresh-job")
+        assert resp.status_code == 200
+        html = resp.data.decode("utf-8")
+        assert '<noscript>' in html
+        assert '<meta http-equiv="refresh" content="5">' in html
+        assert 'Refreshing every 5 seconds until analysis completes' in html
+
+    def test_results_page_includes_noscript_refresh_when_processing(self):
+        """When a job is Processing, results page includes noscript 5-second meta refresh."""
+        mock_doc = MagicMock(exists=True)
+        mock_doc.to_dict.return_value = {
+            "job_id": "test-refresh-job",
+            "status": "Processing",
+            "created_at": datetime.now(timezone.utc),
+        }
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = mock_doc
+
+        resp = client.get("/results/test-refresh-job")
+        assert resp.status_code == 200
+        html = resp.data.decode("utf-8")
+        assert '<meta http-equiv="refresh" content="5">' in html
+
+    def test_results_page_omits_noscript_refresh_when_completed(self):
+        """When a job is Completed, results page omits meta refresh."""
+        mock_doc = MagicMock(exists=True)
+        mock_doc.to_dict.return_value = {
+            "job_id": "completed-job",
+            "status": "Completed",
+            "created_at": datetime.now(timezone.utc),
+        }
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = mock_doc
+        tsv = b"col1\tcol2\nval1\tval2\n"
+        MOCK_STORAGE.bucket.return_value.blob.return_value = _make_blob(exists=True, content=tsv)
+        MOCK_STORAGE.bucket.return_value.list_blobs.return_value = []
+
+        resp = client.get("/results/completed-job")
+        assert resp.status_code == 200
+        html = resp.data.decode("utf-8")
+        assert '<meta http-equiv="refresh" content="5">' not in html
+
+    def test_results_page_omits_noscript_refresh_when_failed(self):
+        """When a job is Failed, results page omits meta refresh."""
+        mock_doc = MagicMock(exists=True)
+        mock_doc.to_dict.return_value = {
+            "job_id": "failed-job",
+            "status": "Failed",
+            "error_message": "Some worker error",
+            "created_at": datetime.now(timezone.utc),
+        }
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = mock_doc
+
+        resp = client.get("/results/failed-job")
+        assert resp.status_code == 200
+        html = resp.data.decode("utf-8")
+        assert '<meta http-equiv="refresh" content="5">' not in html
+
+    def test_results_page_renders_native_download_link(self):
+        """Results page renders a native <a> link for downloading results without JS."""
+        mock_doc = MagicMock(exists=True)
+        mock_doc.to_dict.return_value = {
+            "job_id": "dl-job-id",
+            "status": "Completed",
+            "created_at": datetime.now(timezone.utc),
+        }
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = mock_doc
+        tsv = b"col1\tcol2\nval1\tval2\n"
+        MOCK_STORAGE.bucket.return_value.blob.return_value = _make_blob(exists=True, content=tsv)
+        MOCK_STORAGE.bucket.return_value.list_blobs.return_value = []
+
+        resp = client.get("/results/dl-job-id")
+        assert resp.status_code == 200
+        html = resp.data.decode("utf-8")
+        expected_link = '<a href="/output/dl-job-id" class="action-btn-primary" download="amr_results.tsv">Download AMRFinderPlus results</a>'
+        assert expected_link in html
+
+    def test_table_view_renders_native_download_link(self):
+        """Table view renders a native <a> download link instead of JS-only button."""
+        MOCK_STORAGE.bucket.return_value.blob.return_value = _make_blob(
+            exists=True, content=b"Gene\tClass\ngeneA\tBeta-lactam\n"
+        )
+        mock_doc = MagicMock(exists=True)
+        mock_doc.to_dict.return_value = {"job_name": "Demo"}
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = mock_doc
+
+        resp = client.get("/amrrules-summary/test-user-id")
+        assert resp.status_code == 200
+        html = resp.data.decode("utf-8")
+        assert '<a href="?download=true" class="action-btn-primary" download=' in html
+
+
+
 

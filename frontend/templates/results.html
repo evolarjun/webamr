@@ -5,6 +5,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AMRFinderPlus Results</title>
+  {% if status != "Failed" and status != "Completed" and status != "Expired" %}
+  <noscript>
+    <meta http-equiv="refresh" content="5">
+  </noscript>
+  {% endif %}
   <link rel="stylesheet" href="/static/css/style.css" />
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
   <link rel="alternate icon" href="/static/favicon.ico" type="image/x-icon" />
@@ -76,7 +81,7 @@
   {% elif status == "Completed" and result_html %}
   <div id="results">
     <div class="results-actions-bar">
-      <button class="action-btn-primary" onclick="downloadResults('{{ job_id }}')">Download AMRFinderPlus results</button>
+      <a href="/output/{{ job_id }}" class="action-btn-primary" download="amr_results.tsv">Download AMRFinderPlus results</a>
       {% if amrrules_summary_available %}
       <a href="/amrrules-summary/{{ job_id }}">amrrules_genome_summary.tsv</a>
       {% endif %}
@@ -112,6 +117,9 @@
   {% else %}
   <div id="status-msg">
     <p>Status: <strong>{% if status == 'Processing' %}Running{% else %}{{ status }}{% endif %}</strong> -- polling... <span id="timer"></span></p>
+    <noscript>
+      <p class="field-helper" style="margin-top: 4px;">Refreshing every 5 seconds until analysis completes (or reload manually).</p>
+    </noscript>
   </div>
   <div id="results"></div>
   <div id="poll-results"></div>
@@ -307,10 +315,14 @@
               if (jobStatusBadge) jobStatusBadge.textContent = 'Completed';
               if (statusMsg) statusMsg.innerHTML = '';
 
-              const downloadButton = document.createElement('button');
+              const downloadButton = document.createElement('a');
+              downloadButton.href = '/output/' + jobId;
+              downloadButton.className = 'action-btn-primary';
+              downloadButton.setAttribute('download', 'amr_results.tsv');
               downloadButton.textContent = 'Download AMRFinderPlus results';
               downloadButton.style.marginBottom = '10px';
-              downloadButton.addEventListener('click', () => downloadResults(jobId));
+              downloadButton.style.display = 'inline-block';
+              downloadButton.style.textDecoration = 'none';
 
               resultsDiv.innerHTML = '';
               resultsDiv.appendChild(downloadButton);

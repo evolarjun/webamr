@@ -2,7 +2,7 @@ import os
 import io
 import time
 import traceback
-from flask import Flask, send_file, request, jsonify, render_template, send_from_directory
+from flask import Flask, send_file, request, jsonify, render_template, send_from_directory, redirect
 from markupsafe import escape
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -101,7 +101,10 @@ limiter = Limiter(
 
 @app.errorhandler(429)
 def ratelimit_error(e):
-    return jsonify(error="Rate limit exceeded. Please wait a minute before submitting another job."), 429
+    msg = "Rate limit exceeded. Please wait a minute before submitting another job."
+    if _wants_html(request):
+        return _render_index_page(error_message=msg, status_code=429)
+    return jsonify(error=msg), 429
 
 def generate_user_id():
     return str(uuid.uuid4())
@@ -189,16 +192,23 @@ def tabulize(tab_delimited):
     html += '</tbody></table></div>'
     return html
    
-def organism_select():
+def organism_select(selected=None):
     """Reads the file taxgroup.tsv and returns select element text of the first column from this file
 
+    Args:
+        selected: The currently selected organism option value, if any.
+
     Returns:
-        A string containing the HTML select element.
+        A string containing the HTML select element options.
     """
     taxgroup_file = read_file("taxgroup.tsv")
     lines = taxgroup_file.strip().split('\n')
     #print(lines)
-    options = [f'<option value="{line.split()[0]}">{line.split()[0]}</option>' for line in lines[1:]]
+    options = []
+    for line in lines[1:]:
+        val = line.split()[0]
+        sel = ' selected' if selected and val == selected else ''
+        options.append(f'<option value="{val}"{sel}>{val}</option>')
     return '\n'.join(options)
 
 def _get_memory_usage_mb():
@@ -276,14 +286,34 @@ def _get_versions():
         cached_amrrules_version or "unknown"
     )
 
+def _wants_html(req):
+    """Determines whether the client expects an HTML response (standard browser form) vs JSON (AJAX/API)."""
+    if req.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return False
+    if req.headers.get('Accept') == 'application/json':
+        return False
+    return req.accept_mimetypes.quality('text/html') > req.accept_mimetypes.quality('application/json')
+
+def _render_index_page(error_message=None, form_data=None, status_code=200):
+    """Renders index.html with version data, optionally showing an error message and prefilled form fields."""
+    selected_org = form_data.get('organism') if form_data else None
+    organism_select_options = organism_select(selected=selected_org)
+    db_v, soft_v, amrrules_v = _get_versions()
+    return render_template(
+        'index.html',
+        organism_select=organism_select_options,
+        database_version=db_v,
+        software_version=soft_v,
+        amrrules_version=amrrules_v,
+        organism_mapping=json.dumps(ORGANISM_MAPPING),
+        amrrules_species=AMRRULES_SPECIES,
+        error_message=error_message,
+        form_data=form_data or {}
+    ), status_code
+
 @app.route("/")
 def index():
-    organism_select_options = organism_select()
-    db_v, soft_v, amrrules_v = _get_versions()
-    return render_template('index.html', organism_select=organism_select_options, 
-        database_version=db_v, software_version=soft_v, amrrules_version=amrrules_v,
-        organism_mapping=json.dumps(ORGANISM_MAPPING),
-        amrrules_species=AMRRULES_SPECIES)
+    return _render_index_page()
 
 @app.route("/docs")
 def documentation():
@@ -434,6 +464,16 @@ def analyze_file():
     """Endpoint to handle new AMRFinderPlus job submissions."""
     error_response, validated_data = _validate_job_submission(request)
     if error_response:
+        if _wants_html(request):
+            form_data = {
+                'job_name': request.form.get('job_name', ''),
+                'organism': request.form.get('organism', ''),
+                'amrrules_organism': request.form.get('amrrules_organism', 'auto'),
+                'annotation_format': request.form.get('annotation_format', 'standard'),
+                'nuc_paste': request.form.get('nuc_paste', ''),
+                'prot_paste': request.form.get('prot_paste', ''),
+            }
+            return _render_index_page(error_message=error_response[0].get('error'), form_data=form_data, status_code=error_response[1])
         return jsonify(error_response[0]), error_response[1]
 
     nuc_file = validated_data['nuc_file']
@@ -514,14 +554,28 @@ def analyze_file():
         }
         send_pubsub_message(json.dumps(message_data))
 
+        if _wants_html(request):
+            return redirect(f"/results/{user_id}", code=303)
+
         return jsonify({
             'result': "Files uploaded successfully. Analysis will begin shortly.",
             'user_id': user_id,
             'results_url': f"/results/{user_id}",
+            'job_name': job_name
         }), 200
         
     except Exception as e:
         logging.error(f"Server Error in analyze_file: {str(e)}", exc_info=True)
+        if _wants_html(request):
+            form_data = {
+                'job_name': request.form.get('job_name', ''),
+                'organism': request.form.get('organism', ''),
+                'amrrules_organism': request.form.get('amrrules_organism', 'auto'),
+                'annotation_format': request.form.get('annotation_format', 'standard'),
+                'nuc_paste': request.form.get('nuc_paste', ''),
+                'prot_paste': request.form.get('prot_paste', ''),
+            }
+            return _render_index_page(error_message=f"Failed to submit job: {str(e)}", form_data=form_data, status_code=500)
         return jsonify({'error': f"Failed to submit job: {str(e)}"}), 500
         
     finally:

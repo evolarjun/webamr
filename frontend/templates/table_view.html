@@ -44,7 +44,7 @@
 
   <div id="results">
     <div class="results-actions-bar">
-      <button class="action-btn-primary" onclick="downloadTsv()">Download {{ filename }}</button>
+      <a href="?download=true" class="action-btn-primary" download="{{ filename }}">Download {{ filename }}</a>
     </div>
     {{ table_html | safe }}
   </div>
