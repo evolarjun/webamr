@@ -36,14 +36,18 @@
     <div class="opt1-grid">
 
       <!-- Job Name -->
-      <label for="job_name"><a href="/docs#job-name">Job name</a> (optional):</label>
+      <div class="opt1-label-col">
+        <label for="job_name">Job name (optional)</label> <a href="/docs#job-name" class="label-doc-link" title="Job name documentation" aria-label="Job name documentation">[docs]</a>:
+      </div>
       <div class="opt1-field-content">
         <input type="text" name="job_name" id="job_name" value="{{ form_data.job_name | default('', true) }}" style="width: 340px;" maxlength="100">
         <span id="job-name-helper" class="field-helper">Optional. Max 100 characters. Letters, numbers, spaces, underscores, and hyphens only.</span>
       </div>
 
       <!-- Nucleotide FASTA -->
-      <label for="nuc_file">Assembled <a href="/docs#nucleotide-file">nucleotide FASTA</a>:</label>
+      <div class="opt1-label-col">
+        <label for="nuc_file">Assembled nucleotide FASTA</label> <a href="/docs#nucleotide-file" class="label-doc-link" title="Nucleotide FASTA documentation" aria-label="Nucleotide FASTA documentation">[docs]</a>:
+      </div>
       <div class="opt1-field-content">
         <div class="field-header-row">
           <input type="file" name="nuc_file" id="nuc_file">
@@ -62,12 +66,14 @@
       </div>
 
       <!-- GFF File & Annotation Format (Inline) -->
-      <label for="gff_file"><a href="/docs#gff-file">GFF file</a> &amp; format:</label>
+      <div class="opt1-label-col">
+        <label for="gff_file">GFF file &amp; format</label> <a href="/docs#gff-file" class="label-doc-link" title="GFF file documentation" aria-label="GFF file documentation">[docs]</a>:
+      </div>
       <div class="opt1-field-content">
         <div class="opt1-gff-row">
           <input type="file" name="gff_file" id="gff_file">
           <span>
-            <label for="annotation_format" style="font-weight: normal; margin-right: 4px;"><a href="/docs#annotation-format">Annotation format</a>:</label>
+            <label for="annotation_format" style="font-weight: normal; margin-right: 4px;">Annotation format <a href="/docs#annotation-format" class="label-doc-link" title="Annotation format documentation" aria-label="Annotation format documentation">[docs]</a>:</label>
             <select id="annotation_format" name="annotation_format">
               {% for fmt in ['bakta', 'genbank', 'microscope', 'patric', 'pgap', 'prodigal', 'prokka', 'pseudomonasdb', 'rast', 'standard'] %}
               <option value="{{ fmt }}" {% if (form_data and form_data.annotation_format == fmt) or (not form_data and fmt == 'standard') or (form_data and not form_data.annotation_format and fmt == 'standard') %}selected{% endif %}>{{ fmt }}</option>
@@ -80,7 +86,9 @@
       </div>
 
       <!-- Protein FASTA -->
-      <label for="prot_file"><a href="/docs#protein-file">Protein FASTA</a>:</label>
+      <div class="opt1-label-col">
+        <label for="prot_file">Protein FASTA</label> <a href="/docs#protein-file" class="label-doc-link" title="Protein FASTA documentation" aria-label="Protein FASTA documentation">[docs]</a>:
+      </div>
       <div class="opt1-field-content">
         <div class="field-header-row">
           <input type="file" name="prot_file" id="prot_file">
@@ -99,7 +107,9 @@
       </div>
 
       <!-- Organism Group (Centered) -->
-      <label for="organism" class="opt1-valign-center"><a href="/docs#organism-group">Organism group</a> (optional):</label>
+      <div class="opt1-label-col opt1-valign-center">
+        <label for="organism">Organism group (optional)</label> <a href="/docs#organism-group" class="label-doc-link" title="Organism group documentation" aria-label="Organism group documentation">[docs]</a>:
+      </div>
       <div class="opt1-field-content opt1-valign-center">
         <select id="organism" name="organism" style="min-width: 240px; max-width: 340px;">
           <option value="">None</option>
@@ -108,7 +118,9 @@
       </div>
 
       <!-- AMRrules Organism (Centered) -->
-      <label for="amrrules_organism" class="opt1-valign-center"><a href="/docs#amrrules-organism">AMRrules organism</a> (optional):</label>
+      <div class="opt1-label-col opt1-valign-center">
+        <label for="amrrules_organism">AMRrules organism (optional)</label> <a href="/docs#amrrules-organism" class="label-doc-link" title="AMRrules organism documentation" aria-label="AMRrules organism documentation">[docs]</a>:
+      </div>
       <div class="opt1-field-content opt1-valign-center">
         <select id="amrrules_organism" name="amrrules_organism" style="min-width: 320px; max-width: 440px;">
           <option value="auto" {% if not form_data or not form_data.amrrules_organism or form_data.amrrules_organism == 'auto' %}selected{% endif %}>Auto-mapped from AMRFinderPlus organism</option>

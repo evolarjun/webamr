@@ -320,7 +320,8 @@ button:hover {
   margin-top: 8px;
 }
 
-.opt1-grid label {
+.opt1-grid label,
+.opt1-label-col {
   font-weight: 500;
   text-align: right;
   padding-top: 4px;
@@ -331,9 +332,22 @@ button:hover {
   align-self: center;
 }
 
-label.opt1-valign-center {
+label.opt1-valign-center,
+.opt1-label-col.opt1-valign-center {
   align-self: center;
   padding-top: 0;
+}
+
+.label-doc-link {
+  font-size: 0.82rem;
+  font-weight: normal;
+  color: var(--link);
+  margin-left: 2px;
+  text-decoration: none;
+}
+
+.label-doc-link:hover {
+  text-decoration: underline;
 }
 
 .opt1-field-content {
