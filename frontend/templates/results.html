@@ -45,7 +45,7 @@
       </div>
       {% if status %}
       <div class="meta-summary-item">
-        <strong>Status:</strong> <span id="job-status-badge">{% if status == 'Processing' %}Running{% else %}{{ status }}{% endif %}</span>
+        <strong>Status:</strong> <span id="job-status-badge">{% if status == 'Processing' %}Running{% elif status == 'Completed' and amrrules_error %}Completed (AMRrules failed){% else %}{{ status }}{% endif %}</span>
       </div>
       {% endif %}
     </div>
@@ -77,7 +77,13 @@
   </div>
 
   {% if status == "Failed" %}
-  <p class="error"><strong>Job failed:</strong> {{ error_message }}</p>
+  <p class="error"><strong>Job failed:</strong></p>
+  {% if error_message %}
+  <pre class="error-output">{{ error_message }}</pre>
+  {% endif %}
+  {% if stderr_available %}
+  <p><a href="/stderr/{{ job_id }}" target="_blank">Run log</a></p>
+  {% endif %}
   {% elif status == "Completed" and result_html %}
   <div id="results">
     <div class="results-actions-bar">
@@ -106,7 +112,8 @@
     <p><a href="/amrrules-interpreted/{{ job_id }}">amrrules_interpreted.tsv</a></p>
     {% endif %}
     {% if amrrules_error %}
-    <p class="error"><strong>AMRrules notice:</strong> {{ amrrules_error }}</p>
+    <p class="error"><strong>AMRrules notice:</strong></p>
+    <pre class="error-output">{{ amrrules_error }}</pre>
     {% endif %}
   </div>
   {% elif status == "Expired" %}
@@ -302,17 +309,27 @@
               const errP = document.createElement('p');
               errP.className = 'error';
               const strong = document.createElement('strong');
-              strong.textContent = 'Job failed: ';
+              strong.textContent = 'Job failed:';
               errP.appendChild(strong);
-              errP.appendChild(document.createTextNode(data.error));
               resultsDiv.appendChild(errP);
+
+              const pre = document.createElement('pre');
+              pre.className = 'error-output';
+              pre.textContent = data.error;
+              resultsDiv.appendChild(pre);
+
+              if (data.stderr_available) {
+                const logP = document.createElement('p');
+                logP.innerHTML = '<a href="/stderr/' + jobId + '" target="_blank">Run log</a>';
+                resultsDiv.appendChild(logP);
+              }
               return;
             }
 
             if (data.result) {
               clearInterval(pollInterval);
               if (timerInterval) clearInterval(timerInterval);
-              if (jobStatusBadge) jobStatusBadge.textContent = 'Completed';
+              if (jobStatusBadge) jobStatusBadge.textContent = data.amrrules_error ? 'Completed (AMRrules failed)' : 'Completed';
               if (statusMsg) statusMsg.innerHTML = '';
 
               const downloadButton = document.createElement('a');
@@ -363,10 +380,14 @@
                 const amrError = document.createElement('p');
                 amrError.className = 'error';
                 const strongAmr = document.createElement('strong');
-                strongAmr.textContent = 'AMRrules notice: ';
+                strongAmr.textContent = 'AMRrules notice:';
                 amrError.appendChild(strongAmr);
-                amrError.appendChild(document.createTextNode(data.amrrules_error));
                 resultsDiv.appendChild(amrError);
+
+                const amrPre = document.createElement('pre');
+                amrPre.className = 'error-output';
+                amrPre.textContent = data.amrrules_error;
+                resultsDiv.appendChild(amrPre);
               }
 
               // Attach sort handlers to the newly injected table

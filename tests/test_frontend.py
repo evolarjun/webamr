@@ -242,8 +242,16 @@ class TestIndex:
 
     def test_index_contains_github_issues_link(self):
         resp = client.get("/")
-        assert b"Report issues on" in resp.data
+        assert b"Report issues" in resp.data
         assert b"https://github.com/evolarjun/webamr/issues" in resp.data
+
+    def test_index_contains_meta_and_open_graph_tags(self):
+        resp = client.get("/")
+        assert b'<meta name="description" content="Web interface for NCBI AMRFinderPlus and AMRrules.' in resp.data
+        assert b'<meta property="og:title" content="AMRFinderPlus Web Interface"' in resp.data
+        assert b'<meta property="og:description" content="Web interface for NCBI AMRFinderPlus and AMRrules.' in resp.data
+        assert b'<meta property="og:url" content="https://webamr.net/"' in resp.data
+        assert b'<meta property="og:type" content="website"' in resp.data
 
     def test_index_contains_file_warning_spans(self):
         """Index page should include warning spans for nucleotide, protein, and GFF inputs."""
@@ -252,6 +260,13 @@ class TestIndex:
         assert b'id="nuc-file-warning"' in resp.data
         assert b'id="prot-file-warning"' in resp.data
         assert b'id="gff-file-warning"' in resp.data
+
+    def test_style_css_warning_empty_and_compact_grid(self):
+        """style.css should hide empty warning helpers and use compact grid row-gap."""
+        resp = client.get("/static/css/style.css")
+        assert resp.status_code == 200
+        assert b".warning-text:empty" in resp.data
+        assert b"row-gap: 13px;" in resp.data
 
     def test_index_contains_client_side_format_checking_script(self):
         """Index page should include the client-side format sniffing and decompression script."""
@@ -294,6 +309,14 @@ class TestDocsPage:
         assert b'<header class="site-header">' in resp.data
         assert b'Back to Home' in resp.data
         assert b'Documentation' in resp.data
+
+    def test_docs_contains_meta_and_open_graph_tags(self):
+        resp = client.get("/docs")
+        assert b'<meta name="description" content="Documentation, input file specifications, parameters, and interpretation guide for WebAMR, AMRFinderPlus, and AMRrules.">' in resp.data
+        assert b'<meta property="og:title" content="Documentation -- Web interface for AMRFinderPlus">' in resp.data
+        assert b'<meta property="og:description" content="Documentation, input file specifications, parameters, and interpretation guide for WebAMR, AMRFinderPlus, and AMRrules.">' in resp.data
+        assert b'<meta property="og:url" content="https://webamr.net/docs">' in resp.data
+        assert b'<meta property="og:type" content="website">' in resp.data
 
 
 # ---------------------------------------------------------------------------
@@ -952,6 +975,36 @@ class TestResultsPage:
         assert b'<span id="job-status-badge">Running</span>' in resp.data
         assert b"Status: <strong>Running</strong>" in resp.data
 
+    def test_results_page_shows_completed_status_badge(self):
+        """When job status is Completed and no amrrules_error, status badge renders Completed."""
+        doc = MagicMock(exists=True)
+        doc.to_dict.return_value = {
+            "job_id": "completed-job-id",
+            "status": "Completed",
+            "created_at": datetime(2026, 5, 29, 9, 0, 0, tzinfo=timezone.utc),
+            "amrrules_error": None,
+        }
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = doc
+        mock_blob = _make_blob(exists=True, content=b"Gene\tDrug\n")
+        MOCK_STORAGE.bucket.return_value.blob.return_value = mock_blob
+        resp = client.get("/results/completed-job-id")
+        assert b'<span id="job-status-badge">Completed</span>' in resp.data
+
+    def test_results_page_shows_completed_amrrules_failed_status_badge(self):
+        """When job status is Completed but amrrules_error exists, status badge renders Completed (AMRrules failed)."""
+        doc = MagicMock(exists=True)
+        doc.to_dict.return_value = {
+            "job_id": "amrrules-fail-id",
+            "status": "Completed",
+            "amrrules_error": "AMRrules exited with non-zero status",
+            "created_at": datetime(2026, 5, 29, 9, 0, 0, tzinfo=timezone.utc),
+        }
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = doc
+        mock_blob = _make_blob(exists=True, content=b"Gene\tDrug\n")
+        MOCK_STORAGE.bucket.return_value.blob.return_value = mock_blob
+        resp = client.get("/results/amrrules-fail-id")
+        assert b'<span id="job-status-badge">Completed (AMRrules failed)</span>' in resp.data
+
     def test_results_page_shows_error_for_failed_job(self):
         """When the job status is Failed, the page contains an error message."""
         MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = (
@@ -960,6 +1013,48 @@ class TestResultsPage:
         resp = client.get("/results/fail-job-id")
         assert resp.status_code == 200
         assert b"amrfinder crashed" in resp.data or b"error" in resp.data.lower()
+
+    def test_results_page_failed_job_renders_pre_and_run_log(self):
+        """When job failed and stderr.txt exists, show <pre> and Run log link."""
+        doc = MagicMock(exists=True)
+        doc.to_dict.return_value = {
+            "status": "Failed",
+            "error_message": "AMRFinderPlus failed:\n--- Standard Output ---\n--- Standard Error ---\nblast error",
+            "created_at": datetime(2026, 5, 29, 9, 0, 0, tzinfo=timezone.utc),
+        }
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = doc
+        mock_blob = MagicMock()
+        mock_blob.exists.return_value = True
+        MOCK_STORAGE.bucket.return_value.blob.return_value = mock_blob
+
+        resp = client.get("/results/fail-job-id")
+        assert resp.status_code == 200
+        html = resp.data.decode("utf-8")
+        assert '<pre class="error-output">' in html
+        assert "blast error" in html
+        assert '<a href="/stderr/fail-job-id"' in html
+        assert "Run log" in html
+
+    def test_results_page_completed_job_renders_amrrules_error_in_pre(self):
+        """When completed job has amrrules_error, show <pre class="error-output">."""
+        doc = MagicMock(exists=True)
+        doc.to_dict.return_value = {
+            "status": "Completed",
+            "amrrules_error": "=== AMRFinderPlus Output ===\n=== AMRrules Output ===\nCommand: amrrules ...",
+            "created_at": datetime(2026, 5, 29, 9, 0, 0, tzinfo=timezone.utc),
+        }
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = doc
+        mock_blob = MagicMock()
+        mock_blob.download_as_bytes.return_value = b"Header1\tHeader2\nval1\tval2\n"
+        MOCK_STORAGE.bucket.return_value.blob.return_value = mock_blob
+        MOCK_STORAGE.bucket.return_value.list_blobs.return_value = []
+
+        resp = client.get("/results/completed-amrrules-error")
+        assert resp.status_code == 200
+        html = resp.data.decode("utf-8")
+        assert "AMRrules notice:" in html
+        assert '<pre class="error-output">' in html
+        assert "=== AMRFinderPlus Output ===" in html
 
     def test_results_page_404_unknown_job(self):
         """GET /results/<id> returns 404 when the job ID is not in Firestore."""

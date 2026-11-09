@@ -236,8 +236,43 @@ class TestRunAmrfinder:
     @patch("worker.subprocess.run")
     def test_nonzero_returncode_raises(self, mock_run):
         mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="Database error")
-        with pytest.raises(Exception, match="AMRFinderPlus failed"):
+        with pytest.raises(Exception) as exc_info:
             worker.run_amrfinder(nuc_input="/tmp/in.fasta", prot_input=None, gff_input=None, output_tsv="/tmp/out.tsv", stderr_path="/tmp/stderr.txt", nucleotide_path="/tmp/nuc.fna", protein_path="/tmp/prot.faa", params={})
+        err_msg = str(exc_info.value)
+        assert "AMRFinderPlus failed:" in err_msg
+        assert "--- Standard Output ---" in err_msg
+        assert "--- Standard Error ---" in err_msg
+        assert "Database error" in err_msg
+
+    @patch("builtins.open", mock_open())
+    @patch("worker.subprocess.run")
+    def test_nonzero_returncode_includes_both_stdout_and_stderr(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=1, stdout="Read 100 contigs\n", stderr="BLAST failure\n")
+        with pytest.raises(Exception) as exc_info:
+            worker.run_amrfinder(nuc_input="/tmp/in.fasta", prot_input=None, gff_input=None, output_tsv="/tmp/out.tsv", stderr_path="/tmp/stderr.txt", nucleotide_path="/tmp/nuc.fna", protein_path="/tmp/prot.faa", params={})
+        err_msg = str(exc_info.value)
+        assert "AMRFinderPlus failed:" in err_msg
+        assert "--- Standard Output ---\nRead 100 contigs" in err_msg
+        assert "--- Standard Error ---\nBLAST failure" in err_msg
+
+    @patch("worker.subprocess.run")
+    def test_run_amrfinder_writes_stdout_and_stderr_sections_to_file(self, mock_run, tmp_path):
+        mock_run.return_value = MagicMock(returncode=0, stdout="amrfinder stdout text\n", stderr="amrfinder stderr text\n")
+        stderr_file = tmp_path / "test_amrfinder_log.txt"
+        worker.run_amrfinder(
+            nuc_input="/tmp/in.fasta",
+            prot_input=None,
+            gff_input=None,
+            output_tsv="/tmp/out.tsv",
+            stderr_path=str(stderr_file),
+            nucleotide_path="/tmp/nuc.fna",
+            protein_path="/tmp/prot.faa",
+            params={},
+        )
+        content = stderr_file.read_text()
+        assert "=== AMRFinderPlus Log ===" in content
+        assert "--- Standard Output ---\namrfinder stdout text" in content
+        assert "--- Standard Error ---\namrfinder stderr text" in content
 
     @patch("builtins.open", mock_open())
     @patch("worker.subprocess.run")
@@ -390,7 +425,7 @@ class TestHandlePubsubPush:
         # Check what was passed to download_blob for the local_path
         # Should be sanitized to just 'etc_passwd' preventing writing outside /tmp
         # werkzeug secure_filename turns '../../../etc/passwd' into 'etc_passwd'
-        expected_local_path = "/tmp/job-sec_etc_passwd"
+        expected_local_path = "/tmp/job-sec/inputs/etc_passwd"
 
         # Look through the calls to download_blob to find the one matching our nuc_filename
         download_calls = mock_dl.call_args_list
@@ -455,14 +490,49 @@ class TestHandlePubsubPush:
     @patch("worker.upload_blob", return_value="gs://output/results/job-abc/results.tsv")
     @patch("worker.run_amrfinder")
     @patch("worker.download_blob")
-    @patch("worker.os.path.exists", return_value=True)
-    @patch("worker.os.remove")
-    def test_tmp_files_cleaned_up(self, mock_remove, mock_exists, mock_dl, mock_run, mock_ul):
+    @patch("worker.shutil.rmtree")
+    def test_tmp_files_cleaned_up(self, mock_rmtree, mock_dl, mock_run, mock_ul):
         mock_run.return_value = ""
         flask_client.post("/", json=_make_push_body(job_id="job-cleanup"))
 
-        removed_paths = [c[0][0] for c in mock_remove.call_args_list]
-        assert any("job-cleanup" in p for p in removed_paths)
+        mock_rmtree.assert_called_once_with("/tmp/job-cleanup")
+
+    @patch("worker.upload_blob", return_value="gs://output/results/job-collision/results.tsv")
+    @patch("worker.run_amrfinder")
+    @patch("worker.download_blob")
+    def test_input_and_output_filename_collision_avoidance(self, mock_dl, mock_run, mock_ul):
+        """
+        Regression test: When a user uploads input files named protein.faa or
+        nucleotide.fna, the input paths and the amrfinder output paths (--protein_output,
+        --nucleotide_output) must not collide.
+        """
+        mock_run.return_value = ""
+        payload = {
+            "job_id": "job-collision",
+            "gcs_uri": "gs://bucket/uploads/in.fasta",
+            "nuc_filename": "nucleotide.fna",
+            "prot_filename": "protein.faa",
+            "gff_filename": "genomic.gff",
+            "parameters": {
+                "has_protein": True,
+                "has_nucleotide": True,
+            },
+        }
+        body = _make_raw_push_body(json.dumps(payload).encode("utf-8"))
+        resp = flask_client.post("/", json=body)
+        assert resp.status_code == 200
+
+        kwargs = mock_run.call_args.kwargs
+        assert kwargs["prot_input"] == "/tmp/job-collision/inputs/protein.faa"
+        assert kwargs["protein_path"] == "/tmp/job-collision/outputs/protein.faa"
+        assert kwargs["prot_input"] != kwargs["protein_path"]
+
+        assert kwargs["nuc_input"] == "/tmp/job-collision/inputs/nucleotide.fna"
+        assert kwargs["nucleotide_path"] == "/tmp/job-collision/outputs/nucleotide.fna"
+        assert kwargs["nuc_input"] != kwargs["nucleotide_path"]
+
+        assert kwargs["gff_input"] == "/tmp/job-collision/inputs/genomic.gff"
+        assert kwargs["output_tsv"] == "/tmp/job-collision/outputs/amrfinder.tsv"
 
     @patch("builtins.open", mock_open())
     @patch("worker.upload_blob", return_value="gs://output/results/job-abc/results.tsv")
@@ -495,7 +565,7 @@ class TestHandlePubsubPush:
     @patch("worker.os.path.exists")
     def test_amrrules_genome_summary_uploaded(self, mock_exists, mock_dl, mock_run_af, mock_rules, mock_ul):
         """Worker uploads amrrules_genome_summary.tsv to GCS when produced by amrrules."""
-        mock_exists.side_effect = lambda path: "_amrrules_genome_summary.tsv" in path or "results.tsv" in path
+        mock_exists.side_effect = lambda path: "amrrules_genome_summary.tsv" in path or "results.tsv" in path
         mock_run_af.return_value = ""
         mock_doc = MagicMock()
         worker.get_firestore_client().collection.return_value.document.return_value = mock_doc
@@ -630,8 +700,33 @@ class TestRunAmrrules:
         assert "=== AMRrules Log ===" in content
         assert "Command: amrrules --input /tmp/out.tsv --output-prefix /tmp/prefix --organism 's__Escherichia coli' --sample-id job-123" in content
 
+    @patch("worker.subprocess.run")
+    def test_amrrules_nonzero_returncode_raises_with_amrfinder_output_and_cmd(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=1, stdout="amrrules stdout log\n", stderr="amrrules stderr log\n")
+        with pytest.raises(Exception) as exc_info:
+            worker.run_amrrules(
+                amrfp_output_tsv="/tmp/out.tsv",
+                amrrules_organism="s__Escherichia coli",
+                output_prefix="/tmp/prefix",
+                sample_id="job-123",
+                amrfp_stdout="amrfp stdout info\n",
+                amrfp_stderr="amrfp stderr warning\n",
+            )
+        msg = str(exc_info.value)
+        assert "=== AMRFinderPlus Output ===" in msg
+        assert "--- Standard Output ---\namrfp stdout info" in msg
+        assert "--- Standard Error ---\namrfp stderr warning" in msg
+        assert "=== AMRrules Output ===" in msg
+        assert "Command: amrrules" in msg
+        assert "--- Standard Output ---\namrrules stdout log" in msg
+        assert "--- Standard Error ---\namrrules stderr log" in msg
+
 
 class TestUploadVersions:
+    def setup_method(self):
+        if hasattr(worker.get_installed_versions, "cache_clear"):
+            worker.get_installed_versions.cache_clear()
+
     @patch("importlib.metadata.version", return_value="1.2.3")
     @patch("worker.subprocess.run")
     @patch("worker.os.path.exists", return_value=True)
@@ -661,6 +756,10 @@ class TestUploadVersions:
 
 
 class TestGetInstalledVersions:
+    def setup_method(self):
+        if hasattr(worker.get_installed_versions, "cache_clear"):
+            worker.get_installed_versions.cache_clear()
+
     @patch("importlib.metadata.version", return_value="0.3.1")
     @patch("worker.subprocess.run")
     def test_get_installed_versions_success_from_amrfinder_V(self, mock_run, mock_pkg_ver):
@@ -700,5 +799,20 @@ class TestGetInstalledVersions:
         assert versions["database_version"] == "2024-05-02.1"
         assert versions["software_version"] == "3.12.8"
         assert versions["amrrules_version"] == "0.3.1"
+
+    @patch("importlib.metadata.version", return_value="0.3.1")
+    @patch("worker.subprocess.run")
+    def test_get_installed_versions_caches_result(self, mock_run, mock_pkg_ver):
+        mock_output = (
+            "Software version: 4.2.7\n"
+            "Database version: 2026-03-24.1\n"
+        )
+        mock_run.return_value = MagicMock(stdout=mock_output)
+
+        first = worker.get_installed_versions()
+        second = worker.get_installed_versions()
+        assert first == second
+        assert mock_run.call_count == 1
+        assert mock_pkg_ver.call_count == 1
 
 

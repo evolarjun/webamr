@@ -7,5 +7,5 @@ if [ -z "${PROJECT_ID}" ] || [ -z "${BUCKET_NAME}" ] || [ -z "${OUTPUT_BUCKET}" 
 fi
 
 python -m venv .venv && source .venv/bin/activate
-python -m flask --app main run -p 8080
+python -m flask --app main run --reload -p 8080
 

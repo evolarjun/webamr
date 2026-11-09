@@ -157,6 +157,19 @@ tr:hover {
   margin: 15px 0;
 }
 
+.error-output {
+  background-color: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 12px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.9rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-x: auto;
+  margin: 10px 0 15px 0;
+}
+
 /* -- Dark-mode toggle ---------------------------------------- */
 .theme-toggle {
   position: fixed;
@@ -212,6 +225,11 @@ tr:hover {
 .warning-text {
   color: var(--warning-fg);
   font-weight: 500;
+}
+
+.field-helper:empty,
+.warning-text:empty {
+  display: none;
 }
 
 input,
@@ -314,7 +332,7 @@ button:hover {
   display: grid;
   grid-template-columns: 240px 1fr;
   column-gap: 20px;
-  row-gap: 16px;
+  row-gap: 13px;
   align-items: start;
   max-width: 1000px;
   margin-top: 8px;
@@ -540,7 +558,3 @@ input[type="file"]:disabled {
   cursor: not-allowed;
   opacity: 0.5;
 }
-
-
-
-

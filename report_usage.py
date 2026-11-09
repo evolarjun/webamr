@@ -57,6 +57,8 @@ def main():
                 
             # 2. Status
             status = data.get("status", "Unknown")
+            if status == "Completed" and data.get("amrrules_error"):
+                status = "Partial_AMRrules_failed"
             
             # 3. IP Address
             ip_address = data.get("ip_address") or "N/A"

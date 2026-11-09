@@ -5,6 +5,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Documentation -- Web interface for AMRFinderPlus</title>
+  <meta name="description" content="Documentation, input file specifications, parameters, and interpretation guide for WebAMR, AMRFinderPlus, and AMRrules.">
+  <meta property="og:title" content="Documentation -- Web interface for AMRFinderPlus">
+  <meta property="og:description" content="Documentation, input file specifications, parameters, and interpretation guide for WebAMR, AMRFinderPlus, and AMRrules.">
+  <meta property="og:url" content="https://webamr.net/docs">
+  <meta property="og:type" content="website">
   <link rel="stylesheet" href="/static/css/style.css">
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="alternate icon" href="/static/favicon.ico" type="image/x-icon">
@@ -23,20 +28,26 @@
     </div>
   </header>
   <p>
-  This is a (mostly vibe-coded) web interface for <a href="https://github.com/ncbi/amr/wiki">AMRFinderPlus</a> and <a href="https://docs.amrrules.org/en/latest/">AMRrules</a> created as a side-project by Arjun Prasad. 
+    This is a (mostly vibe-coded) web interface for <a href="https://github.com/ncbi/amr/wiki">AMRFinderPlus</a> and <a
+      href="https://docs.amrrules.org/en/latest/">AMRrules</a> created as a side-project by Arjun Prasad.
   </p>
   <p>
-    AMRFinderPlus identifies acquired antimicrobial resistance genes and point mutations in bacterial 
-    protein and/or assembled nucleotide sequences <em>Plus</em> virulence factors, biocide, heat, acid, and metal 
+    AMRFinderPlus identifies acquired antimicrobial resistance genes and point mutations in bacterial
+    protein and/or assembled nucleotide sequences <em>Plus</em> virulence factors, biocide, heat, acid, and metal
     resistance genes for select taxa.
-    See the <a href="https://github.com/ncbi/amr/wiki">AMRFinderPlus documentation</a> for details on AMRFinderPlus. 
+    See the <a href="https://github.com/ncbi/amr/wiki">AMRFinderPlus documentation</a> for details on AMRFinderPlus.
 
-    AMRrules is a project to use expert curated knowledge of AMR to interpret the identified genes and point mutations and predict their phenotypic effect on antibiotic susceptibility. See the <a href="https://docs.amrrules.org/en/latest/">AMRrules documentation</a> for details.
-  </p><p> 
-    A brief description of the options for this site is below, and AMRFinderPlus (and AMRrules) output can be viewed on the web or downloaded. 
+    AMRrules is a project to use expert curated knowledge of AMR to interpret the identified genes and point mutations
+    and predict their phenotypic effect on antibiotic susceptibility. See the <a
+      href="https://docs.amrrules.org/en/latest/">AMRrules documentation</a> for details.
+  </p>
+  <p>
+    A brief description of the options for this site is below, and AMRFinderPlus (and AMRrules) output can be viewed on
+    the web or downloaded.
 
 
-    As of right now queues are usually empty and runs generally take 1-5 minutes. Bug reports or suggestions for improvements made as <a href="https://github.com/evolarjun/webamr/issues">GitHub issues</a> are much appreciated.  
+    As of right now queues are usually empty and runs generally take 1-5 minutes. Bug reports or suggestions for
+    improvements made as <a href="https://github.com/evolarjun/webamr/issues">GitHub issues</a> are much appreciated.
   </p>
 
   <p>
@@ -62,8 +73,10 @@
 
   <section id="nucleotide-file">
     <h2>Select an assembled nucleotide file (<code>-n</code>, <code>--nucleotide</code>)</h2>
-    <p>An assembled nucleotide FASTA file to search. May be gzipped with a .gz extension. This enables AMRFinderPlus to search with
-      translated BLAST, to identify genes and coding point mutations by translated BLAST, frame shifts, and, with the "Organism" option below, non-coding point
+    <p>An assembled nucleotide FASTA file to search. May be gzipped with a .gz extension. This enables AMRFinderPlus to
+      search with
+      translated BLAST, to identify genes and coding point mutations by translated BLAST, frame shifts, and, with the
+      "Organism" option below, non-coding point
       mutations. Protein HMM searches are not performed if only a nucleotide assembly file is provided.
     </p>
     <p>See the AMRFinderPlus documentation for <a
@@ -73,11 +86,11 @@
 
   <section id="protein-file">
     <h2>Select a protein file (<code>-p</code>, <code>--protein</code>)</h2>
-    <p>A protein FASTA file to search. May be gzipped with a .gz extension. This enables the identification of 
+    <p>A protein FASTA file to search. May be gzipped with a .gz extension. This enables the identification of
       genes and point mutations by BLASTP and genes with
-      HMMs which enables more sensitive and accurate detection of AMR genes without very close homologs in the 
-      <a href="https://www.ncbi.nlm.nih.gov/pathogens/refgene/">Reference database</a>. Without a nucleotide assembly 
-      AMRFinderPlus will not detect non-coding mutations. 
+      HMMs which enables more sensitive and accurate detection of AMR genes without very close homologs in the
+      <a href="https://www.ncbi.nlm.nih.gov/pathogens/refgene/">Reference database</a>. Without a nucleotide assembly
+      AMRFinderPlus will not detect non-coding mutations.
     </p>
     <p>See the AMRFinderPlus documentation for <a
         href="https://github.com/ncbi/amr/wiki/Running-AMRFinderPlus#-p-protein_fasta-and--n-nucleotide_fasta"
@@ -90,7 +103,8 @@
       the proteins in the nucleotide sequence. If you provide a GFF file, you should also provide the corresponding
       nucleotide and protein files to enable full AMRFinderPlus functionality.</p>
     <p>See the AMRFinderPlus documentation for more details about <a
-        href="https://github.com/ncbi/amr/wiki/Running-AMRFinderPlus#-g-gff_file" target="_blank">GFF files</a> and formats.</p>
+        href="https://github.com/ncbi/amr/wiki/Running-AMRFinderPlus#-g-gff_file" target="_blank">GFF files</a> and
+      formats.</p>
   </section>
 
   <section id="annotation-format">
@@ -117,7 +131,8 @@
       <em>Staphylococcus aureus</em>). Providing an organism group allows AMRFinderPlus to use organism-specific curated
       thresholds and search for point mutations that confer resitance.
     </p>
-    <p>If "None" is selected, AMRFinderPlus will perform a general search against its core database of mostly acquired resistance, virulence, and stress genes.</p>
+    <p>If "None" is selected, AMRFinderPlus will perform a general search against its core database of mostly acquired
+      resistance, virulence, and stress genes.</p>
     <p>See the AMRFinderPlus documentation for the <a
         href="https://github.com/ncbi/amr/wiki/Running-AMRFinderPlus#--organism-option"
         target="_blank"><code>--organism</code>
@@ -134,6 +149,14 @@
         documentation</a> for more information.</p>
   </section>
 
+  <section id="output">
+    <h2>Output</h2>
+    <p>Output formats, algorithms, and results are described in the <a
+        href="https://github.com/ncbi/amr/wiki/Running-AMRFinderPlus#output-format">AMRFinderPlus documentation</a> and
+      <a href="https://docs.amrrules.org/en/latest/interpretation.html#genome-summary-report">AMRrules
+        documentation</a>.
+    </p>
+  </section>
   <section id="limits">
     <h2>File Size and Usage Limits</h2>
     <p>Because this tool is designed to analyze
@@ -143,13 +166,6 @@
 
   Report issues or make suggestions for improvements on <a href="https://github.com/evolarjun/webamr/issues">GitHub</a>
 
-  <section id="output">
-    <h2>Output</h2>
-    <p>Output formats, algorithms, and results are described in the <a
-        href="https://github.com/ncbi/amr/wiki/Running-AMRFinderPlus#output-format">AMRFinderPlus documentation</a> and
-      <a href="https://docs.amrrules.org/en/latest/interpretation.html#genome-summary-report">AMRrules
-        documentation</a>.</p>
-  </section>
 
   <p><a href="/">&larr; Back to Home</a></p>
 </body>

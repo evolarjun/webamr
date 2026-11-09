@@ -11,6 +11,9 @@ import os
 import re
 import json
 import base64
+import functools
+import gzip
+import shutil
 import shlex
 import subprocess
 import threading
@@ -65,6 +68,7 @@ def _parse_database_version(output_str):
     return output_str.strip().strip("'\"")
 
 
+@functools.lru_cache(maxsize=1)
 def get_installed_versions():
     """Returns a dict of the currently installed tool and database versions."""
     db_version = None
@@ -157,6 +161,15 @@ def upload_blob(local_path, destination_blob_name):
     return f"gs://{OUTPUT_BUCKET}/{destination_blob_name}"
 
 
+class AMRResult(str):
+    """String subclass representing process stdout that also holds stderr."""
+    def __new__(cls, stdout="", stderr=""):
+        obj = str.__new__(cls, stdout)
+        obj.stdout = stdout
+        obj.stderr = stderr
+        return obj
+
+
 def run_amrfinder(
     *,
     nuc_input,
@@ -215,21 +228,46 @@ def run_amrfinder(
     print(f"Executing: {' '.join(cmd)}")
     result = subprocess.run(cmd, capture_output=True, text=True)
 
-    # Always save stderr to a file so it can be uploaded and reviewed
+    # Always save stdout and stderr to a file so it can be uploaded and reviewed
     with open(stderr_path, "w") as f:
         f.write("=== AMRFinderPlus Log ===\n")
-        if result.stderr:
-            f.write(result.stderr)
+        f.write("--- Standard Output ---\n")
         if result.stdout:
-            f.write("\n" + result.stdout)
+            f.write(result.stdout if result.stdout.endswith("\n") else result.stdout + "\n")
+        f.write("--- Standard Error ---\n")
+        if result.stderr:
+            f.write(result.stderr if result.stderr.endswith("\n") else result.stderr + "\n")
 
     if result.returncode != 0:
-        raise Exception(f"AMRFinderPlus failed: {result.stderr}")
+        stdout_part = result.stdout or ""
+        stderr_part = result.stderr or ""
+        if stdout_part and not stdout_part.endswith("\n"):
+            stdout_part += "\n"
+        if stderr_part and not stderr_part.endswith("\n"):
+            stderr_part += "\n"
+        error_details = (
+            "AMRFinderPlus failed:\n"
+            "--- Standard Output ---\n"
+            f"{stdout_part}"
+            "--- Standard Error ---\n"
+            f"{stderr_part}"
+        ).rstrip("\n")
+        raise Exception(error_details)
 
-    return result.stdout
+    return AMRResult(result.stdout, result.stderr)
 
 
-def run_amrrules(*, amrfp_output_tsv, amrrules_organism, output_prefix, sample_id=None, job_id=None, stderr_path=None):
+def run_amrrules(
+    *,
+    amrfp_output_tsv,
+    amrrules_organism,
+    output_prefix,
+    sample_id=None,
+    job_id=None,
+    stderr_path=None,
+    amrfp_stdout="",
+    amrfp_stderr="",
+):
     """Build and execute the amrrules command on AMRFinderPlus output."""
     sid = sample_id or job_id
     cmd = [
@@ -255,15 +293,44 @@ def run_amrrules(*, amrfp_output_tsv, amrrules_organism, output_prefix, sample_i
     if stderr_path and os.path.exists(stderr_path):
         try:
             with open(stderr_path, "a") as f:
-                if result.stderr:
-                    f.write(result.stderr)
+                f.write("--- Standard Output ---\n")
                 if result.stdout:
-                    f.write("\n" + result.stdout)
+                    f.write(result.stdout if result.stdout.endswith("\n") else result.stdout + "\n")
+                f.write("--- Standard Error ---\n")
+                if result.stderr:
+                    f.write(result.stderr if result.stderr.endswith("\n") else result.stderr + "\n")
         except Exception as log_err:
             print(f"Failed to append AMRrules log to stderr_path: {log_err}")
 
     if result.returncode != 0:
-        raise Exception(f"AMRrules failed: {result.stderr}")
+        af_out = amrfp_stdout or ""
+        af_err = amrfp_stderr or ""
+        if af_out and not af_out.endswith("\n"):
+            af_out += "\n"
+        if af_err and not af_err.endswith("\n"):
+            af_err += "\n"
+
+        ar_out = result.stdout or ""
+        ar_err = result.stderr or ""
+        if ar_out and not ar_out.endswith("\n"):
+            ar_out += "\n"
+        if ar_err and not ar_err.endswith("\n"):
+            ar_err += "\n"
+
+        err_msg = (
+            "=== AMRFinderPlus Output ===\n"
+            "--- Standard Output ---\n"
+            f"{af_out}"
+            "--- Standard Error ---\n"
+            f"{af_err}\n"
+            "=== AMRrules Output ===\n"
+            f"Command: {cmd_str}\n"
+            "--- Standard Output ---\n"
+            f"{ar_out}"
+            "--- Standard Error ---\n"
+            f"{ar_err}"
+        ).rstrip("\n")
+        raise Exception(err_msg)
 
     return result.stdout
 
@@ -378,16 +445,20 @@ def handle_pubsub_push():
     db = get_firestore_client()
     doc_ref = db.collection("amr_jobs").document(job_id)
 
+    job_dir = f"/tmp/{job_id}"
+    inputs_dir = os.path.join(job_dir, "inputs")
+    outputs_dir = os.path.join(job_dir, "outputs")
+    os.makedirs(inputs_dir, exist_ok=True)
+    os.makedirs(outputs_dir, exist_ok=True)
+
     local_nuc_input = None
     local_prot_input = None
     local_gff_input = None
 
-    local_output = f"/tmp/{job_id}_amrfinder.tsv"
-    local_stderr = f"/tmp/{job_id}_stderr.txt"
-    local_nuc = f"/tmp/{job_id}_nucleotide.fna"
-    local_prot = f"/tmp/{job_id}_protein.faa"
-
-    cleanup_paths = [local_output, local_stderr, local_nuc, local_prot]
+    local_output = os.path.join(outputs_dir, "amrfinder.tsv")
+    local_stderr = os.path.join(outputs_dir, "stderr.txt")
+    local_nuc = os.path.join(outputs_dir, "nucleotide.fna")
+    local_prot = os.path.join(outputs_dir, "protein.faa")
 
     try:
         _log(job_id, "Updating status to Processing...")
@@ -399,7 +470,6 @@ def handle_pubsub_push():
                 with gzip.open(local_path, "rb") as f_in:
                     with open(uncompressed, "wb") as f_out:
                         shutil.copyfileobj(f_in, f_out)
-                cleanup_paths.append(uncompressed)
                 return uncompressed
             return local_path
 
@@ -408,9 +478,8 @@ def handle_pubsub_push():
             if not filename:
                 continue
             safe_filename = secure_filename(filename)
-            local_path = f"/tmp/{job_id}_{safe_filename}"
+            local_path = os.path.join(inputs_dir, safe_filename)
             download_blob(f"{base_gcs_uri}/{filename}", local_path)
-            cleanup_paths.append(local_path)
             decompressed_path = _decompress_if_gzipped(local_path)
             if attr == "nuc":
                 local_nuc_input = decompressed_path
@@ -424,14 +493,12 @@ def handle_pubsub_push():
         # Determine input type from the has_protein/has_nucleotide params.
         if not local_nuc_input and not local_prot_input:
             if params.get("has_protein") and not params.get("has_nucleotide"):
-                local_prot_input = f"/tmp/{job_id}_input.fasta"
+                local_prot_input = os.path.join(inputs_dir, "input.fasta")
                 download_blob(gcs_uri, local_prot_input)
-                cleanup_paths.append(local_prot_input)
                 local_prot_input = _decompress_if_gzipped(local_prot_input)
             else:
-                local_nuc_input = f"/tmp/{job_id}_input.fasta"
+                local_nuc_input = os.path.join(inputs_dir, "input.fasta")
                 download_blob(gcs_uri, local_nuc_input)
-                cleanup_paths.append(local_nuc_input)
                 local_nuc_input = _decompress_if_gzipped(local_nuc_input)
 
         job_name = payload.get("job_name")
@@ -441,7 +508,7 @@ def handle_pubsub_push():
             if clean and len(clean) <= 100 and re.fullmatch(r"[A-Za-z0-9 _-]+", clean):
                 clean_job_name = clean
 
-        run_amrfinder(
+        amrfp_res = run_amrfinder(
             nuc_input=local_nuc_input,
             prot_input=local_prot_input,
             gff_input=local_gff_input,
@@ -463,21 +530,24 @@ def handle_pubsub_push():
         amrrules_organism = params.get("amrrules_organism")
         amrrules_error_msg = None
         if amrrules_organism:
-            amrrules_prefix = f"/tmp/{job_id}_amrrules"
+            amrrules_prefix = os.path.join(outputs_dir, "amrrules")
             local_genome_summary = f"{amrrules_prefix}_genome_summary.tsv"
             local_summary = f"{amrrules_prefix}_summary.tsv"
             local_interpreted = f"{amrrules_prefix}_interpreted.tsv"
-            cleanup_paths.extend([local_genome_summary, local_summary, local_interpreted])
             try:
                 sample_id = clean_job_name if clean_job_name else job_id
 
                 _log(job_id, f"Running AMRrules for organism '{amrrules_organism}' with sample ID '{sample_id}'...")
+                af_stdout = getattr(amrfp_res, "stdout", "") or (amrfp_res if isinstance(amrfp_res, str) else "")
+                af_stderr = getattr(amrfp_res, "stderr", "")
                 run_amrrules(
                     amrfp_output_tsv=local_output,
                     amrrules_organism=amrrules_organism,
                     output_prefix=amrrules_prefix,
                     sample_id=sample_id,
                     stderr_path=local_stderr,
+                    amrfp_stdout=af_stdout,
+                    amrfp_stderr=af_stderr,
                 )
                 if os.path.exists(local_genome_summary):
                     upload_blob(local_genome_summary, f"results/{job_id}/amrrules_genome_summary.tsv")
@@ -526,12 +596,11 @@ def handle_pubsub_push():
             _log(job_id, f"Failed to update Firestore with error status: {db_err}")
 
     finally:
-        for path in cleanup_paths:
-            if path and os.path.exists(path):
-                try:
-                    os.remove(path)
-                except Exception as cleanup_err:
-                    print(f"Failed to remove {path}: {cleanup_err}")
+        if os.path.exists(job_dir):
+            try:
+                shutil.rmtree(job_dir)
+            except Exception as cleanup_err:
+                print(f"Failed to remove {job_dir}: {cleanup_err}")
 
     # Always return 200 so Pub/Sub acks the message.
     return jsonify({"job_id": job_id}), 200

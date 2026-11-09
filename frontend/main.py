@@ -636,6 +636,14 @@ def results_page(job_id):
             amrrules_interpreted_available = f'{prefix}amrrules_interpreted.tsv' in blob_names
         except Exception as e:
             print(f"Error fetching results from GCS for completed job {job_id}: {e}")
+    elif status == "Failed":
+        try:
+            storage_client = get_storage_client()
+            bucket = storage_client.bucket(OUTPUT_BUCKET)
+            blob = bucket.blob(f'results/{job_id}/stderr.txt')
+            stderr_available = bool(blob.exists())
+        except Exception as e:
+            print(f"Error checking stderr for failed job {job_id}: {e}")
 
     # Calculate retention date (7 days after created_at)
     created_at = job_data.get("created_at")
@@ -703,7 +711,8 @@ def return_results(user_id):
             bucket = storage_client.bucket(OUTPUT_BUCKET)
             stderr_available = bool(bucket.blob(f'results/{user_id}/stderr.txt').exists())
             error_msg = job_data.get("error_message", "Unknown error")
-            return jsonify({'error': f"Analysis failed: {error_msg}", 'stderr_available': stderr_available}), 500
+            resp_err = error_msg if "failed" in error_msg.lower() else f"Analysis failed: {error_msg}"
+            return jsonify({'error': resp_err, 'stderr_available': stderr_available}), 500
         if status in ("Queued", "Processing"):
             return jsonify({'status': status}), 200
 
