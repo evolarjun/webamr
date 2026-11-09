@@ -83,6 +83,40 @@ pytest tests/test_integration.py -v
 
 ---
 
+## Interactive Local Full Stack Testing (Level 4)
+
+To run and verify the full application locally in your browser before deploying:
+
+```bash
+./run_local.sh
+```
+
+Once you see:
+```
+============================================================
+  WebAMR is ready for testing!
+  Open your browser and navigate to: http://localhost:5000
+  Press Ctrl+C to stop both frontend and worker.
+============================================================
+```
+
+Go to the URL and try running something. Runs with production services for Cloud Storage and Firestore, but not Pub/Sub.
+
+This unified runner:
+1. Starts Colima if not already running (`colima start --vm-type vz --mount-type virtiofs --cpu 4 --memory 8`).
+2. Builds the local worker Docker container (`amr-worker-local`).
+3. Starts the worker container on port 8081 with GCP credentials mounted for Firestore and GCS.
+4. Starts the local Flask frontend on port 5000 with `WORKER_URL=http://localhost:8081` so job submissions dispatch directly to the local worker rather than publishing to the GCP Pub/Sub topic.
+5. Prompts you with the local browser URL (`http://localhost:5000`).
+6. Cleans up the Docker container and frontend when you press Ctrl+C or close the terminal.
+
+To stop all local services at any time from another terminal:
+```bash
+./stop_local.sh
+```
+
+---
+
 ## Manual Testing with Docker (Colima)
 
 If you are on macOS and want to test the worker Docker image locally using [Colima](https://github.com/abiosoft/colima), follow these steps:

@@ -1650,5 +1650,84 @@ class TestNonJsSupport:
         assert '<a href="?download=true" class="action-btn-primary" download=' in html
 
 
+class TestLocalWorkerDispatch:
+    """Tests for direct local worker dispatch via WORKER_URL."""
+
+    def test_dispatch_to_local_worker_sends_post_envelope(self):
+        """Verifies dispatch_to_local_worker constructs a valid Pub/Sub envelope and posts to worker URL."""
+        import base64
+        import urllib.request
+        from unittest.mock import patch, MagicMock
+
+        mock_resp = MagicMock()
+        mock_resp.status = 200
+
+        with patch("urllib.request.urlopen", return_value=mock_resp) as mock_urlopen:
+            message_payload = json.dumps({"job_id": "job-local-999", "gcs_uri": "gs://bucket/file.fa"})
+            main.dispatch_to_local_worker("http://localhost:8080", message_payload)
+
+            assert mock_urlopen.call_count == 1
+            req = mock_urlopen.call_args[0][0]
+            assert req.full_url == "http://localhost:8080/"
+            assert req.headers["Content-type"] == "application/json"
+            assert req.get_method() == "POST"
+
+            body = json.loads(req.data.decode("utf-8"))
+            assert "message" in body
+            assert "data" in body["message"]
+
+            decoded_str = base64.b64decode(body["message"]["data"]).decode("utf-8")
+            assert json.loads(decoded_str) == {"job_id": "job-local-999", "gcs_uri": "gs://bucket/file.fa"}
+
+    def test_dispatch_to_local_worker_handles_connection_error(self):
+        """Verifies dispatch_to_local_worker handles exceptions without propagating crashes."""
+        from unittest.mock import patch
+
+        with patch("urllib.request.urlopen", side_effect=Exception("Connection refused")):
+            # Should not raise exception
+            main.dispatch_to_local_worker("http://localhost:8080", '{"test": 1}')
+
+    def test_send_pubsub_message_uses_local_worker_when_set(self, monkeypatch):
+        """When WORKER_URL is set, send_pubsub_message dispatches locally instead of calling GCP Pub/Sub."""
+        from unittest.mock import patch, MagicMock
+        monkeypatch.setenv("WORKER_URL", "http://localhost:8080")
+
+        MOCK_PUBLISHER.publish.reset_mock()
+
+        with patch("main.dispatch_to_local_worker") as mock_dispatch:
+            main.send_pubsub_message('{"job_id": "direct-local-1"}')
+
+            # Wait briefly for daemon thread if needed
+            import time
+            time.sleep(0.1)
+
+            assert MOCK_PUBLISHER.publish.call_count == 0
+            mock_dispatch.assert_called_once_with("http://localhost:8080", '{"job_id": "direct-local-1"}')
+
+    def test_send_pubsub_message_publishes_to_gcp_when_worker_url_unset(self, monkeypatch):
+        """When WORKER_URL is not set, send_pubsub_message uses GCP Pub/Sub."""
+        monkeypatch.delenv("WORKER_URL", raising=False)
+        MOCK_PUBLISHER.publish.reset_mock()
+        mock_future = MagicMock()
+        mock_future.result.return_value = "msg-id-123"
+        MOCK_PUBLISHER.publish.return_value = mock_future
+        MOCK_PUBLISHER.topic_path.return_value = "projects/amrfinder/topics/amr-jobs-topic"
+
+        main.send_pubsub_message('{"job_id": "gcp-job-1"}')
+
+        MOCK_PUBLISHER.publish.assert_called_once()
+
+    def test_read_file_resolves_relative_to_frontend_directory(self, monkeypatch):
+        """read_file resolves files relative to frontend directory even if cwd is elsewhere."""
+        # Change cwd to root or a temp directory
+        root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+        monkeypatch.chdir(root_dir)
+        content = main.read_file("taxgroup.tsv")
+        assert len(content) > 0
+        assert "Escherichia" in content
+
+
+
+
 
 

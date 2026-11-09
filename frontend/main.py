@@ -1,22 +1,24 @@
-import os
+import base64
 import io
+import json
+import logging
+import os
+import re
+import shutil
+import threading
 import time
 import traceback
+import urllib.request
+import uuid
+from datetime import datetime, timedelta, timezone
 from flask import Flask, send_file, request, jsonify, render_template, send_from_directory, redirect
 from markupsafe import escape
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
-import logging
-import re
-import uuid
-import json
-import shutil
-from datetime import datetime, timedelta
 from google.cloud import storage, pubsub_v1, firestore
 from google.cloud.exceptions import NotFound
 from werkzeug.utils import secure_filename
 from werkzeug.datastructures import FileStorage
-from datetime import timezone
 
 # set values to environment variables else listed here
 UPLOAD_FOLDER_BASE = os.environ.get('UPLOAD_FOLDER_BASE', 'uploads')
@@ -52,11 +54,19 @@ def get_publisher():
         _publisher = pubsub_v1.PublisherClient()
     return _publisher
 
-try:
-    with open('VERSION.txt', 'r') as f:
-        APP_VERSION = f.read().strip()
-except FileNotFoundError:
-    APP_VERSION = "unknown"
+APP_VERSION = "unknown"
+for version_candidate in [
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), 'VERSION.txt'),
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'VERSION.txt'),
+    'VERSION.txt'
+]:
+    if os.path.exists(version_candidate):
+        try:
+            with open(version_candidate, 'r') as f:
+                APP_VERSION = f.read().strip()
+                break
+        except Exception:
+            pass
 
 ORGANISM_MAPPING = {}
 try:
@@ -118,7 +128,10 @@ def read_file(filename):
     Returns:
         The contents of the file as a string.
     """
-    with open(filename, 'r') as file:
+    file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), filename)
+    if not os.path.exists(file_path):
+        file_path = filename
+    with open(file_path, 'r') as file:
         contents = file.read()
     return contents
 
@@ -230,8 +243,41 @@ def upload_to_gcs(bucket_name, source_file, destination_blob_name):
         source_file.seek(0)
         blob.upload_from_file(source_file)
 
+def dispatch_to_local_worker(worker_url, message_str):
+    """Sends a Pub/Sub-like push envelope directly to a local worker."""
+    try:
+        b64_data = base64.b64encode(message_str.encode("utf-8")).decode("utf-8")
+        envelope = {
+            "message": {
+                "data": b64_data,
+                "messageId": f"local-{int(time.time())}"
+            }
+        }
+        target_url = worker_url.rstrip("/") + "/"
+        req = urllib.request.Request(
+            target_url,
+            data=json.dumps(envelope).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=300) as response:
+            print(f"Dispatched job to local worker at {target_url}: status {response.status}")
+    except Exception as e:
+        print(f"Error dispatching to local worker ({worker_url}): {e}")
+
+
 def send_pubsub_message(message):
-    """Sends a message to the Pub/Sub topic"""
+    """Sends a message to the Pub/Sub topic, or directly to a local worker if WORKER_URL is set."""
+    worker_url = os.environ.get("WORKER_URL")
+    if worker_url:
+        thread = threading.Thread(
+            target=dispatch_to_local_worker,
+            args=(worker_url, message),
+            daemon=True
+        )
+        thread.start()
+        return
+
     publisher = get_publisher()
     topic_path = publisher.topic_path(PROJECT_ID, TOPIC_ID)
 
