@@ -718,6 +718,18 @@ def results_page(job_id):
         soft_v = soft_v or curr_soft_v
         amrrules_v = amrrules_v or curr_amrrules_v
 
+    parameters = job_data.get("parameters")
+    if not isinstance(parameters, dict):
+        parameters = {}
+
+    raw_organism = parameters.get("organism")
+    organism = raw_organism if raw_organism and raw_organism != "None" else None
+
+    raw_amrrules_org = parameters.get("amrrules_organism")
+    amrrules_organism = raw_amrrules_org if raw_amrrules_org and raw_amrrules_org not in ("none", "None") else None
+
+    annotation_format = parameters.get("annotation_format") or None
+
     return render_template(
         'results.html',
         job_id=job_id,
@@ -727,6 +739,9 @@ def results_page(job_id):
         nuc_filename=job_data.get("nuc_filename"),
         prot_filename=job_data.get("prot_filename"),
         gff_filename=job_data.get("gff_filename"),
+        annotation_format=annotation_format,
+        organism=organism,
+        amrrules_organism=amrrules_organism,
         result_html=result_html,
         stderr_available=stderr_available,
         nucleotide_available=nucleotide_available,

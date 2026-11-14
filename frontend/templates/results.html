@@ -56,7 +56,7 @@
       </div>
     </div>
     {% endif %}
-    {% if nuc_filename or prot_filename or gff_filename %}
+    {% if nuc_filename or prot_filename or gff_filename or organism or amrrules_organism %}
     <div class="meta-summary-row" style="color: var(--fg-muted); font-size: 0.88rem;">
       <div class="meta-summary-item">
         <strong>Inputs:</strong>
@@ -69,7 +69,15 @@
         {% endif %}
         {% if gff_filename %}
         {% if nuc_filename or prot_filename %} | {% endif %}
-        <span>GFF: <a href="/input/{{ job_id }}/{{ gff_filename }}">{{ gff_filename }}</a></span>
+        <span>GFF: <a href="/input/{{ job_id }}/{{ gff_filename }}">{{ gff_filename }}</a>{% if annotation_format and annotation_format != 'standard' %} ({{ annotation_format }}){% endif %}</span>
+        {% endif %}
+        {% if organism %}
+        {% if nuc_filename or prot_filename or gff_filename %} | {% endif %}
+        <span>Organism: {{ organism }}</span>
+        {% endif %}
+        {% if amrrules_organism %}
+        {% if nuc_filename or prot_filename or gff_filename or organism %} | {% endif %}
+        <span>AMRrules organism: {{ amrrules_organism }}</span>
         {% endif %}
       </div>
     </div>

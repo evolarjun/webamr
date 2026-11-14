@@ -1122,6 +1122,135 @@ class TestResultsPage:
         assert b"Report issues on" in resp.data
         assert b"https://github.com/evolarjun/webamr/issues" in resp.data
 
+    def test_results_page_shows_gff_annotation_format_when_non_standard(self):
+        """Non-standard annotation_format is shown inline with GFF filename."""
+        doc = MagicMock(exists=True)
+        doc.to_dict.return_value = {
+            "job_id": "gff-job-id",
+            "status": "Queued",
+            "nuc_filename": "genome.fna",
+            "prot_filename": "proteins.faa",
+            "gff_filename": "genes.gff",
+            "parameters": {"annotation_format": "prokka"},
+            "created_at": datetime(2026, 5, 29, 9, 0, 0, tzinfo=timezone.utc),
+        }
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = doc
+        resp = client.get("/results/gff-job-id")
+        assert resp.status_code == 200
+        html = resp.data.decode("utf-8")
+        assert 'GFF: <a href="/input/gff-job-id/genes.gff">genes.gff</a> (prokka)' in html
+
+    def test_results_page_omits_gff_annotation_format_when_standard(self):
+        """Standard annotation_format is omitted even when a GFF file is provided."""
+        doc = MagicMock(exists=True)
+        doc.to_dict.return_value = {
+            "job_id": "gff-std-id",
+            "status": "Queued",
+            "prot_filename": "proteins.faa",
+            "gff_filename": "genes.gff",
+            "parameters": {"annotation_format": "standard"},
+            "created_at": datetime(2026, 5, 29, 9, 0, 0, tzinfo=timezone.utc),
+        }
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = doc
+        resp = client.get("/results/gff-std-id")
+        assert resp.status_code == 200
+        html = resp.data.decode("utf-8")
+        assert 'GFF: <a href="/input/gff-std-id/genes.gff">genes.gff</a>' in html
+        assert "(standard)" not in html
+
+    def test_results_page_omits_annotation_format_when_no_gff(self):
+        """Annotation format is not shown if no GFF file was uploaded."""
+        doc = MagicMock(exists=True)
+        doc.to_dict.return_value = {
+            "job_id": "no-gff-id",
+            "status": "Queued",
+            "nuc_filename": "genome.fna",
+            "parameters": {"annotation_format": "prokka"},
+            "created_at": datetime(2026, 5, 29, 9, 0, 0, tzinfo=timezone.utc),
+        }
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = doc
+        resp = client.get("/results/no-gff-id")
+        assert resp.status_code == 200
+        html = resp.data.decode("utf-8")
+        assert "prokka" not in html
+
+    def test_results_page_shows_organism_and_amrrules_organism(self):
+        """Organism and AMRrules organism are shown pipe-separated on the Inputs line."""
+        doc = MagicMock(exists=True)
+        doc.to_dict.return_value = {
+            "job_id": "org-job-id",
+            "status": "Queued",
+            "nuc_filename": "genome.fna",
+            "parameters": {
+                "annotation_format": "standard",
+                "organism": "Escherichia",
+                "amrrules_organism": "s__Escherichia coli",
+            },
+            "created_at": datetime(2026, 5, 29, 9, 0, 0, tzinfo=timezone.utc),
+        }
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = doc
+        resp = client.get("/results/org-job-id")
+        assert resp.status_code == 200
+        html = resp.data.decode("utf-8")
+        assert "<strong>Inputs:</strong>" in html
+        assert "<span>Organism: Escherichia</span>" in html
+        assert "<span>AMRrules organism: s__Escherichia coli</span>" in html
+        assert " | " in html
+
+    def test_results_page_omits_unset_organisms(self):
+        """Unset organism options are omitted from the Inputs line."""
+        doc = MagicMock(exists=True)
+        doc.to_dict.return_value = {
+            "job_id": "no-org-id",
+            "status": "Queued",
+            "nuc_filename": "genome.fna",
+            "parameters": {"annotation_format": "standard"},
+            "created_at": datetime(2026, 5, 29, 9, 0, 0, tzinfo=timezone.utc),
+        }
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = doc
+        resp = client.get("/results/no-org-id")
+        assert resp.status_code == 200
+        html = resp.data.decode("utf-8")
+        assert "Organism:" not in html
+        assert "AMRrules organism:" not in html
+
+    def test_results_page_shows_options_when_filenames_absent(self):
+        """Inputs line still renders organism options without leading pipe if filenames are absent."""
+        doc = MagicMock(exists=True)
+        doc.to_dict.return_value = {
+            "job_id": "opts-only-id",
+            "status": "Queued",
+            "parameters": {
+                "organism": "Salmonella",
+                "amrrules_organism": "s__Salmonella enterica",
+            },
+            "created_at": datetime(2026, 5, 29, 9, 0, 0, tzinfo=timezone.utc),
+        }
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = doc
+        resp = client.get("/results/opts-only-id")
+        assert resp.status_code == 200
+        html = resp.data.decode("utf-8")
+        assert "<strong>Inputs:</strong>" in html
+        assert "<span>Organism: Salmonella</span>" in html
+        assert "<span>AMRrules organism: s__Salmonella enterica</span>" in html
+        inputs_section = html.split("<strong>Inputs:</strong>", 1)[1].split("</div>", 1)[0]
+        assert not inputs_section.lstrip().startswith("|")
+
+    def test_results_page_handles_none_parameters(self):
+        """Results page handles parameters=None gracefully."""
+        doc = MagicMock(exists=True)
+        doc.to_dict.return_value = {
+            "job_id": "none-params-id",
+            "status": "Queued",
+            "nuc_filename": "genome.fna",
+            "parameters": None,
+            "created_at": datetime(2026, 5, 29, 9, 0, 0, tzinfo=timezone.utc),
+        }
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = doc
+        resp = client.get("/results/none-params-id")
+        assert resp.status_code == 200
+        assert b"Nucleotide:" in resp.data
+
 
 # ---------------------------------------------------------------------------
 # Tests: /analyze response includes results_url
