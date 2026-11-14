@@ -660,6 +660,29 @@ class TestGetResults:
         assert resp.status_code == 500
         assert "failed" in resp.get_json()["error"].lower()
 
+    def test_returns_500_when_job_failed_includes_error_summary(self):
+        blob = _make_blob(exists=False)
+        MOCK_STORAGE.bucket.return_value.blob.side_effect = None
+        MOCK_STORAGE.bucket.return_value.blob.return_value = blob
+
+        summary = {
+            "title": "Invalid FASTA format (detected FASTQ)",
+            "explanation": "The file starts with '@' instead of '>'.",
+            "suggestion": "Assemble reads into FASTA format before submitting.",
+        }
+        mock_doc = MagicMock(exists=True)
+        mock_doc.to_dict.return_value = {
+            "status": "Failed",
+            "error_message": "AMRFinderPlus failed: Invalid FASTA format (detected FASTQ)\n--- Standard Error ---\nFASTA should start with '>'",
+            "error_summary": summary,
+        }
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = mock_doc
+        resp = client.get("/get-results/failed-job-summary")
+        assert resp.status_code == 500
+        data = resp.get_json()
+        assert data["error_summary"] == summary
+        assert "Invalid FASTA format (detected FASTQ)" in data["error"]
+
     def test_hierarchy_node_is_linked(self):
         content = (
             b"Protein identifier\tHierarchy node\n"
@@ -1034,6 +1057,102 @@ class TestResultsPage:
         assert "blast error" in html
         assert '<a href="/stderr/fail-job-id"' in html
         assert "Run log" in html
+
+    def test_results_page_failed_job_renders_error_summary_and_raw_output(self):
+        """When job failed with error_summary, show summary card and raw output below by default."""
+        doc = MagicMock(exists=True)
+        doc.to_dict.return_value = {
+            "status": "Failed",
+            "error_message": "AMRFinderPlus failed: Invalid FASTA format\n--- Standard Output ---\n--- Standard Error ---\nFASTA should start with '>'",
+            "error_summary": {
+                "title": "Invalid FASTA format (detected FASTQ)",
+                "explanation": "The file starts with '@' instead of '>'.",
+                "suggestion": "Assemble reads into FASTA contigs before submitting.",
+            },
+            "created_at": datetime(2026, 5, 29, 9, 0, 0, tzinfo=timezone.utc),
+        }
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = doc
+        mock_blob = MagicMock()
+        mock_blob.exists.return_value = True
+        MOCK_STORAGE.bucket.return_value.blob.return_value = mock_blob
+
+        resp = client.get("/results/fail-summary-id")
+        assert resp.status_code == 200
+        html = resp.data.decode("utf-8")
+        assert "Job failed: Invalid FASTA format (detected FASTQ)" in html
+        assert 'class="error-summary-box"' in html
+        assert "What went wrong:" in html
+        assert "How to fix it:" in html
+        assert '<pre class="error-output">' in html
+        assert "<details" not in html.split("error-output")[0]
+        assert html.index("error-summary-box") < html.index("error-output")
+
+    def test_results_page_failed_job_without_error_summary_legacy_fallback(self):
+        """Legacy failed jobs without error_summary still render raw output without summary box."""
+        doc = MagicMock(exists=True)
+        doc.to_dict.return_value = {
+            "status": "Failed",
+            "error_message": "Legacy failure message",
+            "created_at": datetime(2026, 5, 29, 9, 0, 0, tzinfo=timezone.utc),
+        }
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = doc
+        mock_blob = MagicMock()
+        mock_blob.exists.return_value = False
+        MOCK_STORAGE.bucket.return_value.blob.return_value = mock_blob
+
+        resp = client.get("/results/legacy-fail-id")
+        assert resp.status_code == 200
+        html = resp.data.decode("utf-8")
+        assert 'div class="error-summary-box"' not in html
+        assert '<pre class="error-output">Legacy failure message</pre>' in html
+
+    def test_results_page_polling_script_handles_error_summary(self):
+        """Queued results page JS polling handles data.error_summary and keeps raw error-output."""
+        doc = MagicMock(exists=True)
+        doc.to_dict.return_value = {
+            "status": "Queued",
+            "created_at": datetime(2026, 5, 29, 9, 0, 0, tzinfo=timezone.utc),
+        }
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = doc
+        resp = client.get("/results/queued-job-id")
+        assert resp.status_code == 200
+        html = resp.data.decode("utf-8")
+        assert "data.error_summary" in html
+        assert "error-summary-box" in html
+        assert "What went wrong: " in html
+        assert "How to fix it: " in html
+        assert "https://github.com/evolarjun/webamr/issues/" in html
+
+    def test_results_page_renders_github_issue_link_in_fallback_suggestion_and_escapes_text(self):
+        """Markdown GitHub issue token renders as clickable link while surrounding text stays escaped."""
+        doc = MagicMock(exists=True)
+        doc.to_dict.return_value = {
+            "status": "Failed",
+            "error_message": "AMRFinderPlus failed",
+            "error_summary": {
+                "title": "AMRFinderPlus execution failed",
+                "explanation": "Unexpected failure <script>alert(1)</script>",
+                "suggestion": (
+                    "Check <input> files. If you think there is a problem with the software, "
+                    "please report in a [GitHub issue](https://github.com/evolarjun/webamr/issues/). "
+                    "Please include the Job ID in your report to make it easier for us to reproduce the bug."
+                ),
+            },
+            "created_at": datetime(2026, 5, 29, 9, 0, 0, tzinfo=timezone.utc),
+        }
+        MOCK_FIRESTORE.collection.return_value.document.return_value.get.return_value = doc
+        mock_blob = MagicMock()
+        mock_blob.exists.return_value = False
+        MOCK_STORAGE.bucket.return_value.blob.return_value = mock_blob
+
+        resp = client.get("/results/fallback-link-id")
+        assert resp.status_code == 200
+        html = resp.data.decode("utf-8")
+        assert '<a href="https://github.com/evolarjun/webamr/issues/">GitHub issue</a>' in html
+        assert "Please include the Job ID in your report to make it easier for us to reproduce the bug." in html
+        assert "<script>alert(1)</script>" not in html
+        assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
+        assert "Check &lt;input&gt; files." in html
 
     def test_results_page_completed_job_renders_amrrules_error_in_pre(self):
         """When completed job has amrrules_error, show <pre class="error-output">."""

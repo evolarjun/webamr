@@ -85,7 +85,18 @@
   </div>
 
   {% if status == "Failed" %}
-  <p class="error"><strong>Job failed:</strong></p>
+  <p class="error"><strong>Job failed{% if error_summary and error_summary.title %}: {{ error_summary.title }}{% else %}:{% endif %}</strong></p>
+  {% if error_summary %}
+  <div class="error-summary-box">
+    {% if error_summary.explanation %}
+    <p><strong>What went wrong:</strong> {{ error_summary.explanation }}</p>
+    {% endif %}
+    {% if error_summary.suggestion %}
+    {% set gh_token = '[GitHub issue](https://github.com/evolarjun/webamr/issues/)' %}
+    <p><strong>How to fix it:</strong> {% for part in error_summary.suggestion.split(gh_token) %}{% if not loop.first %}<a href="https://github.com/evolarjun/webamr/issues/">GitHub issue</a>{% endif %}{{ part }}{% endfor %}</p>
+    {% endif %}
+  </div>
+  {% endif %}
   {% if error_message %}
   <pre class="error-output">{{ error_message }}</pre>
   {% endif %}
@@ -317,9 +328,44 @@
               const errP = document.createElement('p');
               errP.className = 'error';
               const strong = document.createElement('strong');
-              strong.textContent = 'Job failed:';
+              const summary = (data.error_summary && typeof data.error_summary === 'object') ? data.error_summary : null;
+              strong.textContent = (summary && summary.title) ? ('Job failed: ' + summary.title) : 'Job failed:';
               errP.appendChild(strong);
               resultsDiv.appendChild(errP);
+
+              if (summary && (summary.explanation || summary.suggestion)) {
+                const summaryBox = document.createElement('div');
+                summaryBox.className = 'error-summary-box';
+                if (summary.explanation) {
+                  const expP = document.createElement('p');
+                  const expLabel = document.createElement('strong');
+                  expLabel.textContent = 'What went wrong: ';
+                  expP.appendChild(expLabel);
+                  expP.appendChild(document.createTextNode(summary.explanation));
+                  summaryBox.appendChild(expP);
+                }
+                if (summary.suggestion) {
+                  const sugP = document.createElement('p');
+                  const sugLabel = document.createElement('strong');
+                  sugLabel.textContent = 'How to fix it: ';
+                  sugP.appendChild(sugLabel);
+                  const ghToken = '[GitHub issue](https://github.com/evolarjun/webamr/issues/)';
+                  const sugParts = summary.suggestion.split(ghToken);
+                  sugParts.forEach((part, idx) => {
+                    if (idx > 0) {
+                      const ghLink = document.createElement('a');
+                      ghLink.href = 'https://github.com/evolarjun/webamr/issues/';
+                      ghLink.textContent = 'GitHub issue';
+                      sugP.appendChild(ghLink);
+                    }
+                    if (part) {
+                      sugP.appendChild(document.createTextNode(part));
+                    }
+                  });
+                  summaryBox.appendChild(sugP);
+                }
+                resultsDiv.appendChild(summaryBox);
+              }
 
               const pre = document.createElement('pre');
               pre.className = 'error-output';

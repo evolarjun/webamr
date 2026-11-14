@@ -170,6 +170,412 @@ class AMRResult(str):
         return obj
 
 
+_AMRFINDER_BOILERPLATE_PREFIXES = (
+    "Running:",
+    "Software directory:",
+    "Software version:",
+    "Database directory:",
+    "Database version:",
+)
+
+_FALLBACK_BUG_REPORT_SUFFIX = (
+    " If you think there is a problem with the software, please report in a "
+    "[GitHub issue](https://github.com/evolarjun/webamr/issues/). "
+    "Please include the Job ID in your report to make it easier for us to reproduce the bug."
+)
+
+_NUC_VALID_CHARS = set("ACGTUacgtuBDHKMNRSVWYbdhkmnrsvwy-")
+_AA_ONLY_CHARS = set("EFILPQZefilpqz*")
+_ACGTN_CHARS = set("ACGTNacgtn")
+
+
+def _sanitize_error_paths(text, path_map=None):
+    """Replace internal /tmp worker paths with user-facing filenames."""
+    if not text:
+        return ""
+    sanitized = text
+    if path_map:
+        for local_path, display_name in sorted(
+            path_map.items(), key=lambda item: len(item[0]), reverse=True
+        ):
+            if local_path and display_name:
+                sanitized = sanitized.replace(local_path, display_name)
+    sanitized = re.sub(
+        r"/tmp/[A-Za-z0-9_-]+/(?:inputs|outputs)/([^\s'\"`]+)",
+        r"\1",
+        sanitized,
+    )
+    return sanitized
+
+
+def _extract_amrfinder_error_text(stdout="", stderr=""):
+    """Extract the core error message from AMRFinderPlus stdout/stderr."""
+    for stream in (stderr or "", stdout or ""):
+        if "*** ERROR ***" in stream:
+            after = stream.split("*** ERROR ***", 1)[1].strip()
+            if after:
+                return after
+
+    meaningful_lines = []
+    for stream in (stderr or "", stdout or ""):
+        for raw_line in stream.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            if any(line.startswith(prefix) for prefix in _AMRFINDER_BOILERPLATE_PREFIXES):
+                continue
+            meaningful_lines.append(line)
+        if meaningful_lines:
+            break
+    return "\n".join(meaningful_lines)
+
+
+def _format_summary(title, explanation, suggestion):
+    """Build a structured error summary dict."""
+    return {
+        "title": title,
+        "explanation": explanation,
+        "suggestion": suggestion,
+    }
+
+
+def _inspect_input_file(file_path, expected_role, display_name=None):
+    """Inspect an uploaded input file after failure to detect format or content mismatches."""
+    if not file_path:
+        return None
+    try:
+        if not os.path.isfile(file_path):
+            return None
+        with open(file_path, "rb") as f:
+            raw = f.read(65536)
+    except Exception:
+        return None
+
+    if not isinstance(raw, (bytes, bytearray)):
+        return None
+
+    label = display_name or os.path.basename(file_path)
+    slot_label = {
+        "nucleotide": "Assembled nucleotide FASTA",
+        "protein": "Protein FASTA",
+        "gff": "GFF annotation file",
+    }.get(expected_role, expected_role)
+
+    if len(raw) == 0:
+        return _format_summary(
+            "Empty input file",
+            f"The {slot_label} file '{label}' is empty (0 bytes).",
+            "Verify that your uploaded file is not blank and contains valid sequences before resubmitting.",
+        )
+
+    if raw[:2] == b"\x1f\x8b":
+        return _format_summary(
+            "Compressed file in unexpected format",
+            f"The {slot_label} file '{label}' appears to be gzip-compressed, which could not be read directly as plain text (for example, it may be missing a .gz extension or be double-compressed).",
+            "Upload an uncompressed plain-text FASTA/GFF file, or a single-compressed file with a .gz extension.",
+        )
+
+    if b"\x00" in raw or raw[:4] == b"%PDF" or raw[:2] == b"PK":
+        return _format_summary(
+            "Binary file instead of plain-text FASTA/GFF",
+            f"The {slot_label} file '{label}' appears to be a binary file or archive rather than plain-text FASTA/GFF data.",
+            "Export or convert your sequences to plain-text FASTA (or GFF3 for annotations) before uploading.",
+        )
+
+    text = raw.decode("utf-8", errors="replace")
+    lines = text.splitlines()
+    first_non_empty = next((ln.strip() for ln in lines if ln.strip()), "")
+    if not first_non_empty:
+        return _format_summary(
+            "Empty input file",
+            f"The {slot_label} file '{label}' contains only whitespace and no sequence or annotation data.",
+            "Verify that your uploaded file is not blank and contains valid data before resubmitting.",
+        )
+
+    if expected_role in ("nucleotide", "protein"):
+        if first_non_empty.startswith("@"):
+            return _format_summary(
+                "Invalid FASTA format (detected FASTQ)",
+                f"The {slot_label} file '{label}' starts with '@', which indicates FASTQ raw sequencing reads rather than a FASTA file.",
+                "Assemble your raw reads into contigs (FASTA format starting with '>') before submitting to AMRFinderPlus.",
+            )
+        if first_non_empty.startswith("LOCUS"):
+            return _format_summary(
+                "Invalid FASTA format (detected GenBank)",
+                f"The {slot_label} file '{label}' appears to be in GenBank format (starts with 'LOCUS') instead of FASTA format.",
+                "Convert or export the sequences to FASTA format (header lines starting with '>') and resubmit.",
+            )
+        if first_non_empty.startswith("<"):
+            return _format_summary(
+                "Invalid FASTA format (detected HTML/XML)",
+                f"The {slot_label} file '{label}' starts with '<', which indicates an HTML or XML document instead of a FASTA sequence file.",
+                "Check that you downloaded the raw sequence file rather than a web page, then resubmit.",
+            )
+        if first_non_empty.lower().startswith("##gff"):
+            return _format_summary(
+                "Wrong file type in FASTA field (detected GFF)",
+                f"The {slot_label} file '{label}' starts with '##gff', which is a GFF annotation file rather than a FASTA sequence file.",
+                "Upload GFF annotation files in the 'GFF file' field and provide a FASTA file here.",
+            )
+        if not first_non_empty.startswith(">"):
+            return _format_summary(
+                "Invalid FASTA format (missing '>' header)",
+                f"The {slot_label} file '{label}' does not start with a '>' FASTA header line.",
+                "Ensure the file is in valid FASTA format with each sequence preceded by a '>' header line.",
+            )
+
+        seq_chars = []
+        for ln in lines:
+            s = ln.strip()
+            if not s or s.startswith(">"):
+                continue
+            seq_chars.append(s)
+        joined_seq = "".join(seq_chars)
+        if not joined_seq:
+            return _format_summary(
+                "Empty FASTA sequence",
+                f"The {slot_label} file '{label}' has FASTA header line(s) starting with '>', but contains no sequence data.",
+                "Verify that your FASTA file includes nucleotide or amino acid sequences under each '>' header.",
+            )
+
+        residues = [c for c in joined_seq if not c.isspace()]
+        if expected_role == "nucleotide" and len(residues) >= 10:
+            aa_only_count = sum(1 for c in residues if c in _AA_ONLY_CHARS)
+            if aa_only_count / len(residues) >= 0.05:
+                return _format_summary(
+                    "Protein sequence uploaded in nucleotide field",
+                    f"The {slot_label} file '{label}' contains amino acid residues (such as E, F, I, L, P, Q, or *) and appears to be a protein FASTA rather than a nucleotide FASTA.",
+                    "Upload protein sequences under 'Protein FASTA' instead of 'Assembled nucleotide FASTA'.",
+                )
+        elif expected_role == "protein" and len(residues) >= 50:
+            acgtn_count = sum(1 for c in residues if c in _ACGTN_CHARS)
+            if acgtn_count / len(residues) >= 0.95:
+                return _format_summary(
+                    "Nucleotide sequence uploaded in protein field",
+                    f"The {slot_label} file '{label}' consists almost entirely of A, C, G, T, and N characters and appears to be a nucleotide FASTA rather than amino acid sequences.",
+                    "Upload DNA/contig sequences under 'Assembled nucleotide FASTA' instead of 'Protein FASTA'.",
+                )
+
+    elif expected_role == "gff":
+        if first_non_empty.startswith(">"):
+            return _format_summary(
+                "Wrong file type in GFF field (detected FASTA)",
+                f"The {slot_label} '{label}' starts with '>', which indicates a FASTA sequence file rather than a GFF3 annotation file.",
+                "Upload a GFF3 annotation file here and place FASTA files in the nucleotide or protein fields.",
+            )
+        if first_non_empty.startswith("@"):
+            return _format_summary(
+                "Wrong file type in GFF field (detected FASTQ)",
+                f"The {slot_label} '{label}' starts with '@', which indicates FASTQ raw reads rather than a GFF3 annotation file.",
+                "Upload a valid GFF3 annotation file here.",
+            )
+        if first_non_empty.startswith("LOCUS"):
+            return _format_summary(
+                "Wrong file type in GFF field (detected GenBank)",
+                f"The {slot_label} '{label}' starts with 'LOCUS', which indicates a GenBank file rather than a GFF3 annotation file.",
+                "Convert your annotations to GFF3 format before uploading.",
+            )
+        if first_non_empty.startswith("<"):
+            return _format_summary(
+                "Wrong file type in GFF field (detected HTML/XML)",
+                f"The {slot_label} '{label}' starts with '<', which indicates an HTML or XML document rather than a GFF3 annotation file.",
+                "Check that you downloaded the raw GFF3 file rather than a web page, then resubmit.",
+            )
+
+        complete_lines = lines[:-1] if len(raw) == 65536 else lines
+        has_embedded_fasta = any(ln.strip().upper() == "##FASTA" for ln in complete_lines)
+        if has_embedded_fasta:
+            return _format_summary(
+                "GFF file contains embedded FASTA sequences",
+                f"The {slot_label} '{label}' includes an embedded '##FASTA' sequence section, which AMRFinderPlus cannot parse as GFF3 annotation rows.",
+                "Remove the '##FASTA' section and everything after it from your GFF file (for example, Prokka GFF files often append contigs at the end), and verify that 'Annotation format' matches your annotation tool.",
+            )
+
+        for ln in complete_lines:
+            stripped = ln.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            if len(ln.split("\t")) != 9:
+                return _format_summary(
+                    "Invalid GFF3 annotation file format",
+                    f"The {slot_label} '{label}' contains feature lines that do not have 9 tab-separated GFF3 columns.",
+                    "Provide a valid tab-delimited GFF3 annotation file (9 columns per feature line) without trailing '##FASTA' sequences, and ensure 'Annotation format' matches your annotation pipeline.",
+                )
+
+    return None
+
+
+def _gff_contains_embedded_fasta(gff_input):
+    """Check an entire GFF file on disk for an embedded ##FASTA directive."""
+    if not gff_input:
+        return False
+    try:
+        if not os.path.isfile(gff_input):
+            return False
+        with open(gff_input, "rb") as f:
+            for line in f:
+                if line.strip().upper() == b"##FASTA":
+                    return True
+    except Exception:
+        return False
+    return False
+
+
+def diagnose_amrfinder_failure(
+    stdout="",
+    stderr="",
+    returncode=1,
+    nuc_input=None,
+    prot_input=None,
+    gff_input=None,
+    params=None,
+    filenames=None,
+):
+    """Classify an AMRFinderPlus failure into a clear title, explanation, and suggestion."""
+    params = params or {}
+    filenames = filenames or {}
+    path_map = {}
+    for role, local_path in (("nuc", nuc_input), ("prot", prot_input), ("gff", gff_input)):
+        if local_path:
+            path_map[local_path] = filenames.get(role) or os.path.basename(local_path)
+
+    raw_combined = f"{stdout or ''}\n{stderr or ''}"
+    sanitized_error = _sanitize_error_paths(
+        _extract_amrfinder_error_text(stdout, stderr), path_map
+    )
+    lower_combined = raw_combined.lower()
+
+    file_checks = []
+    for role, path, fn_key in (
+        ("nucleotide", nuc_input, "nuc"),
+        ("protein", prot_input, "prot"),
+        ("gff", gff_input, "gff"),
+    ):
+        if path:
+            diag = _inspect_input_file(path, role, display_name=filenames.get(fn_key))
+            if diag is not None:
+                file_checks.append(diag)
+
+    if "empty file" in lower_combined:
+        for diag in file_checks:
+            if "Empty" in diag["title"]:
+                return diag
+        return _format_summary(
+            "Empty input file",
+            "AMRFinderPlus reported that an uploaded input file is empty or contains no sequences.",
+            "Verify that your uploaded file is not blank and contains valid sequences before resubmitting.",
+        )
+
+    if "fasta should start with '>'" in lower_combined or "no sequences found" in lower_combined:
+        if file_checks:
+            return file_checks[0]
+        return _format_summary(
+            "Invalid FASTA format",
+            "AMRFinderPlus could not read the input FASTA file because it does not start with a '>' FASTA header line.",
+            "Ensure your nucleotide or protein input is in uncompressed or gzip-compressed FASTA format (not FASTQ, GenBank, or GFF).",
+        )
+
+    if "protein sequences looks like a nucleotide sequences" in lower_combined:
+        return _format_summary(
+            "Incorrect sequence type for input field",
+            "Nucleotide DNA sequences appear to have been uploaded in the Protein FASTA field.",
+            "Upload DNA/contig sequences under 'Assembled nucleotide FASTA' and amino acid sequences under 'Protein FASTA'.",
+        )
+
+    if (
+        "wrong nucleotide character" in lower_combined
+        or "wrong amino acid character" in lower_combined
+        or "invalid character" in lower_combined
+    ):
+        for diag in file_checks:
+            return diag
+        detail = sanitized_error or "An unexpected sequence character was encountered."
+        return _format_summary(
+            "Invalid character in FASTA sequence",
+            f"AMRFinderPlus rejected a sequence character ({detail}).",
+            "Check that nucleotide files contain only standard IUPAC DNA bases and protein files contain only standard amino acid letters, and verify you did not upload a protein file in the nucleotide field (or vice versa).",
+        )
+
+    if (
+        "is not in the .gff-file" in lower_combined
+        or "gff_check.cpp" in lower_combined
+        or "not found in gff" in lower_combined
+        or "locus tag" in lower_combined
+        or "locus_tag" in lower_combined
+    ):
+        annotation_format = params.get("annotation_format") or "standard"
+        detail = sanitized_error or "Protein or sequence IDs did not match the GFF file."
+        return _format_summary(
+            "Protein or sequence ID mismatch between GFF and FASTA",
+            f"AMRFinderPlus could not match identifiers between your GFF and FASTA files ({detail}). Current annotation format: '{annotation_format}'.",
+            f"Make sure the GFF file and FASTA file(s) came from the same genome annotation run, and verify that the 'Annotation format' setting (currently '{annotation_format}') matches the tool that generated your files (for example: prokka, bakta, pgap, or standard).",
+        )
+
+    if (
+        "9 fields are expected" in lower_combined
+        or "at least 5 fields are expected" in lower_combined
+        or "gff.cpp" in lower_combined
+    ):
+        for diag in file_checks:
+            return diag
+        if _gff_contains_embedded_fasta(gff_input):
+            gff_label = filenames.get("gff") or (os.path.basename(gff_input) if gff_input else "GFF file")
+            return _format_summary(
+                "GFF file contains embedded FASTA sequences",
+                f"The GFF annotation file '{gff_label}' includes an embedded '##FASTA' sequence section, which AMRFinderPlus cannot parse as GFF3 annotation rows.",
+                "Remove the '##FASTA' section and everything after it from your GFF file (for example, Prokka GFF files often append contigs at the end), and verify that 'Annotation format' matches your annotation tool.",
+            )
+        detail = sanitized_error or "Malformed GFF3 line."
+        return _format_summary(
+            "Invalid GFF3 annotation file format",
+            f"AMRFinderPlus could not parse the GFF annotation file ({detail}). GFF3 requires 9 tab-separated columns per feature line.",
+            "Provide a valid tab-delimited GFF3 annotation file (9 columns per feature line) without trailing '##FASTA' sequences, and ensure the 'Annotation format' matches your annotation pipeline.",
+        )
+
+    if (
+        "empty identifier" in lower_combined
+        or "duplicate" in lower_combined
+        or ("identifier" in lower_combined and "fasta_check" in lower_combined)
+    ):
+        detail = sanitized_error or "Invalid or duplicate FASTA header identifier."
+        return _format_summary(
+            "Invalid or duplicate FASTA sequence identifier",
+            f"AMRFinderPlus found a problem with a FASTA header identifier ({detail}).",
+            "Ensure every '>' header line in your FASTA file starts with a unique, non-empty sequence ID without illegal characters.",
+        )
+
+    if returncode is not None and returncode < 0:
+        return _format_summary(
+            "AMRFinderPlus process terminated unexpectedly",
+            f"The analysis process was terminated by the system (exit code {returncode}), which typically happens when an input file exceeds available memory.",
+            "Try splitting very large inputs or removing unneeded files and resubmit." + _FALLBACK_BUG_REPORT_SUFFIX,
+        )
+
+    if file_checks:
+        return file_checks[0]
+
+    if "*** ERROR ***" in raw_combined and sanitized_error:
+        return _format_summary(
+            "AMRFinderPlus reported an error",
+            sanitized_error,
+            "Review the error message and input files, or check the Run log for full details." + _FALLBACK_BUG_REPORT_SUFFIX,
+        )
+
+    fallback_line = ""
+    if sanitized_error:
+        fallback_line = sanitized_error.splitlines()[0].strip()
+    explanation = (
+        fallback_line
+        if fallback_line
+        else f"AMRFinderPlus exited with non-zero status code {returncode}."
+    )
+    return _format_summary(
+        "AMRFinderPlus execution failed",
+        explanation,
+        "Check your input files and parameters, and review the raw output below or the Run log for details." + _FALLBACK_BUG_REPORT_SUFFIX,
+    )
+
+
 def run_amrfinder(
     *,
     nuc_input,
@@ -181,6 +587,7 @@ def run_amrfinder(
     protein_path,
     params,
     job_name=None,
+    filenames=None,
 ):
     """Build and execute the amrfinder command."""
     cmd = ["amrfinder"]
@@ -245,14 +652,28 @@ def run_amrfinder(
             stdout_part += "\n"
         if stderr_part and not stderr_part.endswith("\n"):
             stderr_part += "\n"
+        summary = diagnose_amrfinder_failure(
+            stdout=result.stdout or "",
+            stderr=result.stderr or "",
+            returncode=result.returncode,
+            nuc_input=nuc_input,
+            prot_input=prot_input,
+            gff_input=gff_input,
+            params=params,
+            filenames=filenames,
+        )
         error_details = (
-            "AMRFinderPlus failed:\n"
+            f"AMRFinderPlus failed: {summary['title']}\n"
+            f"Cause: {summary['explanation']}\n"
+            f"Suggestion: {summary['suggestion']}\n\n"
             "--- Standard Output ---\n"
             f"{stdout_part}"
             "--- Standard Error ---\n"
             f"{stderr_part}"
         ).rstrip("\n")
-        raise Exception(error_details)
+        exc = Exception(error_details)
+        exc.error_summary = summary
+        raise exc
 
     return AMRResult(result.stdout, result.stderr)
 
@@ -464,12 +885,34 @@ def handle_pubsub_push():
         _log(job_id, "Updating status to Processing...")
         doc_ref.update({"status": "Processing"})
 
-        def _decompress_if_gzipped(local_path):
+        def _decompress_if_gzipped(local_path, display_name=None):
             if local_path and local_path.endswith(".gz"):
                 uncompressed = local_path[:-3]
-                with gzip.open(local_path, "rb") as f_in:
-                    with open(uncompressed, "wb") as f_out:
-                        shutil.copyfileobj(f_in, f_out)
+                label = display_name or os.path.basename(local_path)
+                try:
+                    with gzip.open(local_path, "rb") as f_in:
+                        with open(uncompressed, "wb") as f_out:
+                            shutil.copyfileobj(f_in, f_out)
+                except (gzip.BadGzipFile, EOFError, OSError) as gz_err:
+                    summary = _format_summary(
+                        "Corrupt or invalid .gz archive",
+                        (
+                            f"The uploaded file '{label}' has a .gz extension, "
+                            "but could not be decompressed as a valid gzip archive."
+                        ),
+                        (
+                            "Verify that the .gz file is not truncated or corrupted, "
+                            "or upload the uncompressed plain-text file instead."
+                        ),
+                    )
+                    exc = ValueError(
+                        f"Input file decompression failed: {summary['title']}\n"
+                        f"Cause: {summary['explanation']}\n"
+                        f"Suggestion: {summary['suggestion']}\n"
+                        f"Details: {gz_err}"
+                    )
+                    exc.error_summary = summary
+                    raise exc from gz_err
                 return uncompressed
             return local_path
 
@@ -480,7 +923,7 @@ def handle_pubsub_push():
             safe_filename = secure_filename(filename)
             local_path = os.path.join(inputs_dir, safe_filename)
             download_blob(f"{base_gcs_uri}/{filename}", local_path)
-            decompressed_path = _decompress_if_gzipped(local_path)
+            decompressed_path = _decompress_if_gzipped(local_path, display_name=filename)
             if attr == "nuc":
                 local_nuc_input = decompressed_path
             elif attr == "prot":
@@ -518,6 +961,7 @@ def handle_pubsub_push():
             protein_path=local_prot,
             params=params,
             job_name=clean_job_name,
+            filenames={"nuc": nuc_filename, "prot": prot_filename, "gff": gff_filename},
         )
 
         upload_blob(local_output, f"results/{job_id}/results.tsv")
@@ -574,6 +1018,7 @@ def handle_pubsub_push():
             "database_version": versions.get("database_version"),
             "amrrules_version": versions.get("amrrules_version"),
             "error_message": None,
+            "error_summary": None,
             "amrrules_error": amrrules_error_msg,
         }
 
@@ -590,8 +1035,14 @@ def handle_pubsub_push():
             except Exception as upload_err:
                 _log(job_id, f"Failed to upload stderr: {upload_err}")
 
+        error_summary = getattr(e, "error_summary", None)
         try:
-            doc_ref.update({"status": "Failed", "error_message": str(e), "stderr_uri": stderr_uri})
+            doc_ref.update({
+                "status": "Failed",
+                "error_message": str(e),
+                "error_summary": error_summary,
+                "stderr_uri": stderr_uri,
+            })
         except Exception as db_err:
             _log(job_id, f"Failed to update Firestore with error status: {db_err}")
 

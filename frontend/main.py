@@ -729,6 +729,8 @@ def results_page(job_id):
     amrrules_organism = raw_amrrules_org if raw_amrrules_org and raw_amrrules_org not in ("none", "None") else None
 
     annotation_format = parameters.get("annotation_format") or None
+    raw_error_summary = job_data.get("error_summary")
+    error_summary = raw_error_summary if isinstance(raw_error_summary, dict) else None
 
     return render_template(
         'results.html',
@@ -736,6 +738,7 @@ def results_page(job_id):
         job_name=job_data.get("job_name"),
         status=status,
         error_message=error_message,
+        error_summary=error_summary,
         nuc_filename=job_data.get("nuc_filename"),
         prot_filename=job_data.get("prot_filename"),
         gff_filename=job_data.get("gff_filename"),
@@ -773,7 +776,13 @@ def return_results(user_id):
             stderr_available = bool(bucket.blob(f'results/{user_id}/stderr.txt').exists())
             error_msg = job_data.get("error_message", "Unknown error")
             resp_err = error_msg if "failed" in error_msg.lower() else f"Analysis failed: {error_msg}"
-            return jsonify({'error': resp_err, 'stderr_available': stderr_available}), 500
+            raw_error_summary = job_data.get("error_summary")
+            error_summary = raw_error_summary if isinstance(raw_error_summary, dict) else None
+            return jsonify({
+                'error': resp_err,
+                'error_summary': error_summary,
+                'stderr_available': stderr_available,
+            }), 500
         if status in ("Queued", "Processing"):
             return jsonify({'status': status}), 200
 

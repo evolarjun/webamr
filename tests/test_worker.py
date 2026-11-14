@@ -325,6 +325,246 @@ class TestRunAmrfinder:
         assert "--name" not in cmd
 
 
+class TestDiagnoseAmrfinderFailure:
+    def test_detects_fastq_in_nucleotide_slot(self, tmp_path):
+        nuc_file = tmp_path / "reads.fastq"
+        nuc_file.write_text("@SEQ_ID\nACGTACGT\n+\nIIIIIIII\n")
+        summary = worker.diagnose_amrfinder_failure(
+            stdout="",
+            stderr="*** ERROR ***\nFASTA should start with '>'",
+            returncode=1,
+            nuc_input=str(nuc_file),
+            filenames={"nuc": "reads.fastq"},
+        )
+        assert "FASTQ" in summary["title"]
+        assert "reads.fastq" in summary["explanation"]
+        assert "FASTA" in summary["suggestion"]
+
+    def test_detects_genbank_in_fasta_slot(self, tmp_path):
+        nuc_file = tmp_path / "genome.gbk"
+        nuc_file.write_text("LOCUS       NC_000913               4641652 bp    DNA     circular\n")
+        summary = worker.diagnose_amrfinder_failure(
+            stdout="",
+            stderr="*** ERROR ***\nFASTA should start with '>'",
+            returncode=1,
+            nuc_input=str(nuc_file),
+            filenames={"nuc": "genome.gbk"},
+        )
+        assert "GenBank" in summary["title"]
+        assert "genome.gbk" in summary["explanation"]
+
+    def test_detects_html_in_fasta_slot(self, tmp_path):
+        nuc_file = tmp_path / "page.fasta"
+        nuc_file.write_text("<!DOCTYPE html><html><body>Not found</body></html>\n")
+        summary = worker.diagnose_amrfinder_failure(
+            stdout="",
+            stderr="*** ERROR ***\nFASTA should start with '>'",
+            returncode=1,
+            nuc_input=str(nuc_file),
+            filenames={"nuc": "page.fasta"},
+        )
+        assert "HTML" in summary["title"]
+        assert "page.fasta" in summary["explanation"]
+
+    def test_detects_gff_in_fasta_slot(self, tmp_path):
+        nuc_file = tmp_path / "wrong.fasta"
+        nuc_file.write_text("##gff-version 3\nctg1\tProkka\tCDS\t1\t900\t.\t+\t0\tID=cds1\n")
+        summary = worker.diagnose_amrfinder_failure(
+            stdout="",
+            stderr="*** ERROR ***\nFASTA should start with '>'",
+            returncode=1,
+            nuc_input=str(nuc_file),
+            filenames={"nuc": "wrong.fasta"},
+        )
+        assert "GFF" in summary["title"]
+        assert "wrong.fasta" in summary["explanation"]
+
+    def test_detects_empty_file_on_disk_and_from_error(self, tmp_path):
+        empty_file = tmp_path / "empty.fa"
+        empty_file.write_text("")
+        summary = worker.diagnose_amrfinder_failure(
+            stdout="",
+            stderr="*** ERROR ***\nfasta_check.cpp: Empty file",
+            returncode=1,
+            nuc_input=str(empty_file),
+            filenames={"nuc": "empty.fa"},
+        )
+        assert "Empty" in summary["title"]
+        assert "empty.fa" in summary["explanation"]
+
+        summary_no_file = worker.diagnose_amrfinder_failure(
+            stdout="",
+            stderr="*** ERROR ***\nEmpty file",
+            returncode=1,
+        )
+        assert "Empty" in summary_no_file["title"]
+
+    def test_detects_missing_fasta_header_without_disk_file(self):
+        summary = worker.diagnose_amrfinder_failure(
+            stdout="",
+            stderr="*** ERROR ***\nFASTA should start with '>'",
+            returncode=1,
+        )
+        assert "Invalid FASTA format" in summary["title"]
+        assert "'>'" in summary["explanation"]
+
+    def test_detects_protein_in_nucleotide_slot(self, tmp_path):
+        nuc_file = tmp_path / "proteins.faa"
+        nuc_file.write_text(">prot1\nMKKLLIIFFPPQQEE*VLLIIFFPPQQEE\n")
+        summary = worker.diagnose_amrfinder_failure(
+            stdout="",
+            stderr="*** ERROR ***\nfasta_check.cpp: Wrong nucleotide character 'M'",
+            returncode=1,
+            nuc_input=str(nuc_file),
+            filenames={"nuc": "proteins.faa"},
+        )
+        assert "Protein" in summary["title"]
+        assert "proteins.faa" in summary["explanation"]
+        assert "appears to be a protein FASTA rather than a nucleotide FASTA." in summary["explanation"]
+        assert "Protein FASTA" in summary["suggestion"]
+
+    def test_detects_nucleotide_in_protein_slot_from_amrfinder_message(self):
+        summary = worker.diagnose_amrfinder_failure(
+            stdout="",
+            stderr="*** ERROR ***\nfasta_check.cpp: Protein sequences looks like a nucleotide sequences",
+            returncode=1,
+        )
+        assert "Incorrect sequence type" in summary["title"]
+        assert "Assembled nucleotide FASTA" in summary["suggestion"]
+
+    def test_detects_gff_protein_id_mismatch_and_mentions_annotation_format(self):
+        summary = worker.diagnose_amrfinder_failure(
+            stdout="",
+            stderr='*** ERROR ***\ngff_check.cpp: Protein id "gnl|Prokka|ABC_00001" is not in the .gff-file',
+            returncode=1,
+            params={"annotation_format": "standard"},
+        )
+        assert "mismatch" in summary["title"].lower()
+        assert "gnl|Prokka|ABC_00001" in summary["explanation"]
+        assert "standard" in summary["suggestion"]
+        assert "prokka" in summary["suggestion"]
+
+    def test_detects_malformed_gff_and_embedded_fasta_section(self, tmp_path):
+        gff_file = tmp_path / "prokka.gff"
+        gff_file.write_text(
+            "##gff-version 3\n"
+            "ctg1\tProkka\tCDS\t1\t900\t.\t+\t0\tID=cds1\n"
+            "##FASTA\n"
+            ">ctg1\n"
+            "ATGATGATG\n"
+        )
+        summary = worker.diagnose_amrfinder_failure(
+            stdout="",
+            stderr="*** ERROR ***\ngff.cpp: line 4: 9 fields are expected in each line",
+            returncode=1,
+            gff_input=str(gff_file),
+            filenames={"gff": "prokka.gff"},
+        )
+        assert "FASTA" in summary["title"]
+        assert "prokka.gff" in summary["explanation"]
+        assert "##FASTA" in summary["suggestion"]
+
+        summary_no_file = worker.diagnose_amrfinder_failure(
+            stdout="",
+            stderr="*** ERROR ***\nline 10: 9 fields are expected in each line",
+            returncode=1,
+        )
+        assert "GFF3" in summary_no_file["title"]
+        assert "9 tab-separated" in summary_no_file["explanation"]
+        assert "tab-delimited" in summary_no_file["suggestion"]
+
+    def test_detects_nucleotide_in_protein_slot_on_disk(self, tmp_path):
+        prot_file = tmp_path / "contigs.fna"
+        prot_file.write_text(">contig1\n" + ("ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT\n"))
+        summary = worker.diagnose_amrfinder_failure(
+            stdout="",
+            stderr="*** ERROR ***\nWrong amino acid character",
+            returncode=1,
+            prot_input=str(prot_file),
+            filenames={"prot": "contigs.fna"},
+        )
+        assert "Nucleotide" in summary["title"]
+        assert "contigs.fna" in summary["explanation"]
+
+    def test_detects_binary_file_and_header_only_fasta(self, tmp_path):
+        pdf_file = tmp_path / "doc.pdf"
+        pdf_file.write_bytes(b"%PDF-1.4\x00binarycontent")
+        summary_bin = worker.diagnose_amrfinder_failure(
+            stdout="",
+            stderr="*** ERROR ***\nFASTA should start with '>'",
+            returncode=1,
+            nuc_input=str(pdf_file),
+            filenames={"nuc": "doc.pdf"},
+        )
+        assert "Binary" in summary_bin["title"]
+        assert "doc.pdf" in summary_bin["explanation"]
+
+        hdr_only = tmp_path / "hdr_only.fa"
+        hdr_only.write_text(">seq1\n>seq2\n")
+        summary_hdr = worker.diagnose_amrfinder_failure(
+            stdout="",
+            stderr="*** ERROR ***\nEmpty file",
+            returncode=1,
+            nuc_input=str(hdr_only),
+            filenames={"nuc": "hdr_only.fa"},
+        )
+        assert "Empty" in summary_hdr["title"]
+        assert "hdr_only.fa" in summary_hdr["explanation"]
+
+    def test_detects_negative_returncode_signal(self):
+        summary = worker.diagnose_amrfinder_failure(
+            stdout="",
+            stderr="",
+            returncode=-9,
+        )
+        assert "terminated" in summary["title"].lower()
+        assert "-9" in summary["explanation"]
+        assert "memory" in summary["explanation"].lower()
+        expected_suffix = (
+            "If you think there is a problem with the software, please report in a "
+            "[GitHub issue](https://github.com/evolarjun/webamr/issues/). "
+            "Please include the Job ID in your report to make it easier for us to reproduce the bug."
+        )
+        assert expected_suffix in summary["suggestion"]
+
+    def test_general_fallbacks_include_github_issue_bug_report_guidance(self):
+        expected_suffix = (
+            "If you think there is a problem with the software, please report in a "
+            "[GitHub issue](https://github.com/evolarjun/webamr/issues/). "
+            "Please include the Job ID in your report to make it easier for us to reproduce the bug."
+        )
+        other_err = worker.diagnose_amrfinder_failure(
+            stdout="",
+            stderr="*** ERROR ***\nUnexpected internal condition",
+            returncode=1,
+        )
+        assert other_err["title"] == "AMRFinderPlus reported an error"
+        assert expected_suffix in other_err["suggestion"]
+
+        generic_err = worker.diagnose_amrfinder_failure(
+            stdout="",
+            stderr="Segmentation fault",
+            returncode=1,
+        )
+        assert generic_err["title"] == "AMRFinderPlus execution failed"
+        assert expected_suffix in generic_err["suggestion"]
+
+    def test_sanitizes_internal_tmp_paths(self):
+        summary = worker.diagnose_amrfinder_failure(
+            stdout="",
+            stderr=(
+                "*** ERROR ***\n"
+                "Cannot open /tmp/job-123/inputs/my_reads.fastq for /tmp/job-123/outputs/amrfinder.tsv"
+            ),
+            returncode=1,
+            nuc_input="/tmp/job-123/inputs/my_reads.fastq",
+            filenames={"nuc": "original_reads.fastq"},
+        )
+        assert "/tmp/job-123" not in summary["explanation"]
+        assert "original_reads.fastq" in summary["explanation"]
+        assert "amrfinder.tsv" in summary["explanation"]
+
+
 # ---------------------------------------------------------------------------
 # Tests: handle_pubsub_push (the Cloud Run HTTP endpoint)
 # ---------------------------------------------------------------------------
@@ -622,6 +862,63 @@ class TestHandlePubsubPush:
         resp = flask_client.post("/", json=body)
         assert resp.status_code == 200
         assert mock_run_af.call_args[1]["job_name"] is None
+
+    def test_corrupt_gzip_file_updates_failed_with_clear_error_summary(self):
+        mock_doc = MagicMock()
+        worker.get_firestore_client().collection.return_value.document.return_value = mock_doc
+
+        def write_corrupt_gz(gcs_uri, local_path):
+            with open(local_path, "wb") as f:
+                f.write(b"not-a-valid-gzip-stream")
+
+        with patch("worker.download_blob", side_effect=write_corrupt_gz):
+            body = _make_push_body(
+                job_id="job-bad-gz",
+                gcs_uri="gs://bucket/uploads/sample.fasta.gz",
+                nuc_filename="sample.fasta.gz",
+            )
+            resp = flask_client.post("/", json=body)
+
+        assert resp.status_code == 200
+        update_calls = [c[0][0] for c in mock_doc.update.call_args_list if c[0]]
+        failed_call = next(c for c in update_calls if c.get("status") == "Failed")
+        assert "sample.fasta.gz" in failed_call["error_message"]
+        assert failed_call["error_summary"]["title"] == "Corrupt or invalid .gz archive"
+        assert "sample.fasta.gz" in failed_call["error_summary"]["explanation"]
+
+    @patch("worker.upload_blob", return_value="gs://output/results/job-fail-sum/stderr.txt")
+    @patch("worker.download_blob")
+    @patch("worker.subprocess.run")
+    def test_failed_amrfinder_stores_error_summary_and_keeps_raw_stderr_log(self, mock_subproc, mock_dl, mock_ul):
+        mock_doc = MagicMock()
+        worker.get_firestore_client().collection.return_value.document.return_value = mock_doc
+        raw_stderr = "*** ERROR ***\nFASTA should start with '>'\n"
+        mock_subproc.return_value = MagicMock(returncode=1, stdout="Running: amrfinder\n", stderr=raw_stderr)
+
+        captured_stderr_log = {}
+
+        def fake_upload(local_path, dest):
+            if dest.endswith("stderr.txt"):
+                with open(local_path, "r") as f:
+                    captured_stderr_log["content"] = f.read()
+            return f"gs://output/{dest}"
+
+        mock_ul.side_effect = fake_upload
+        body = _make_push_body(
+            job_id="job-fail-sum",
+            gcs_uri="gs://bucket/uploads/bad.fa",
+            nuc_filename="bad.fa",
+        )
+        resp = flask_client.post("/", json=body)
+
+        assert resp.status_code == 200
+        update_calls = [c[0][0] for c in mock_doc.update.call_args_list if c[0]]
+        failed_call = next(c for c in update_calls if c.get("status") == "Failed")
+        assert failed_call["error_summary"]["title"] == "Invalid FASTA format"
+        assert "AMRFinderPlus failed: Invalid FASTA format" in failed_call["error_message"]
+        assert "--- Standard Error ---" in failed_call["error_message"]
+        assert "Cause:" not in captured_stderr_log["content"]
+        assert "FASTA should start with '>'" in captured_stderr_log["content"]
 
 
 
